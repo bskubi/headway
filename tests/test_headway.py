@@ -1,6 +1,7 @@
 """headway's checks catch what they should: a renamed function, an equation that no longer matches the code, an
 array with the wrong dimensions."""
 import importlib
+import json
 import sys
 from pathlib import Path
 
@@ -312,7 +313,8 @@ s = B.symbol("s", "s_i", "score", dims=(), role="input")
 B.dataset("a", "A")
 B.dataset("b", "B")
 B.dataset("h", "held out", heldout=True)
-B.metric("acc", "a", "accuracy", equation="a = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram")
+B.metric("acc", "a", "accuracy", equation="a = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram",
+         interval="95%, bootstrap over items")
 B.metric("err", "e", "error", equation="e = 1 - s", inputs=[s], better="lower", range=(0, 2), code="toy:gram")
 B.figure("samples", "samples", "what the method makes", code="toy:gram")
 B.objective("overall", "overall", metrics={"acc": 3, "err": 1})
@@ -509,3 +511,52 @@ def test_home(tmp_path) -> None:
     finally:
         home.close()
         httpd.shutdown()
+
+
+def test_intervals_and_differences(tmp_path, monkeypatch, capsys) -> None:
+    """Values and differences are points or points with intervals; methods are compared by pairing replicates."""
+    from headway import bench, cli
+    (tmp_path / "toysuite.py").write_text(SUITE)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    pt = lambda v, lo, hi: {"value": v, "lo": lo, "hi": hi}                      # noqa: E731
+    one = headway.read_results({"suite": "toysuite", "replicates": ["s0", "s1", "s2"],
+                                "values": {"a": {"acc": [pt(0.80, 0.70, 0.90), 0.82, {"value": 0.81}],
+                                                 "err": [pt(0.2, 0.1, 0.3), 0.3, 0.25]}}})
+    assert one["values"]["a"] == {"acc": [0.80, 0.82, 0.81], "err": [0.2, 0.3, 0.25]}
+    assert one["intervals"] == {"a": {"acc": [[0.70, 0.90], None, None]}}         # err declares no interval
+    assert any("err: intervals given, but the metric does not say" in w for w in one["warnings"])
+    two = headway.read_results({
+        "suite": "toysuite", "replicates": ["s1", "s2", "s3"],                     # s0 not run, s3 new
+        "values": {"a": {"acc": [0.90, 0.85, pt(0.5, 0.6, 0.7)], "err": [0.1, 0.2, 0.3]}},   # an interval not holding
+        "differences": {"one": {"a": {"acc": [pt(0.08, 0.02, 0.12), pt(0.04, -0.01, 0.09), 0.0],
+                                      "err": [0.1]},                                # 1 for 3 ids
+                                "b": {"acc": pt(0.05, 0.01, 0.09)}}}})              # pooled
+    assert any("does not hold its value" in w for w in two["warnings"])
+    assert any("err: 1 differences but 3 replicate ids" in w for w in two["warnings"])
+    assert two["differences"]["one"]["a"]["acc"]["ids"] == ["s1", "s2", "s3"]
+    assert two["differences"]["one"]["b"]["acc"]["pooled"]
+    # paired by id: s1 and s2 in common; the benchmark's intervals: one of two exclude 0
+    p = bench.paired(two, one, "a", "acc", "two", "one")
+    assert p["paired"] and p["n"] == 2 and p["d"] == pytest.approx((0.90 - 0.82 + 0.85 - 0.81) / 2)
+    assert p["agree"] == 2 and p["marker"] == "◐" and not p["supported"]
+    # turned around: one's difference from two, from two's results
+    q = bench.paired(one, two, "a", "acc", "one", "two")
+    assert q["d"] == pytest.approx(-p["d"]) and q["intervals"][0] == pytest.approx([-0.12, -0.02])
+    # without intervals, every paired replicate agreeing in sign supports it; unpaired never does
+    e = bench.paired(two, one, "a", "err", "two", "one")
+    assert e["marker"] == "" and e["agree"] == 2 and e["supported"]
+    unpaired = {"values": {"a": {"acc": [0.9]}}}
+    u = bench.paired(unpaired, one, "a", "acc", "u", "one")
+    assert not u["paired"] and not u["supported"] and u["d"] == pytest.approx(0.9 - 0.81)
+    # the text table: a block of differences from the method before
+    for name, r in [("one", one), ("two", two)]:
+        (tmp_path / f"{name}.json").write_text(json.dumps(page_data() | {"name": name, "results": [r]}))
+    assert cli.main(["results", str(tmp_path / "one.json"), str(tmp_path / "two.json")]) == 0
+    out = capsys.readouterr().out
+    assert "two - one" in out and "2/2 ◐" in out
+
+
+def page_data() -> dict:
+    from headway import page
+    G = spec()
+    return page.data(G, headway.check(G))

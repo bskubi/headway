@@ -31,7 +31,13 @@ the noisy dataset, and only v1 and v4 on the held-out one. What the results show
 since it shifts every cell's score alike; size factors (v3) help most, above all with uneven depth; weighting (v4)
 helps on the noisy module. The datasets are simulated by the suite's own steps (module on or off, rates, counts);
 each dataset is those steps with its values of their settings, taken from `bench/cellscore_bench/data.py`.
-The replicates are named by seed, so the versions' values pair up. The suite also declares a figure, "score against
+The replicates are named by seed, so the versions' values pair up. Each value has a 95% interval from resampling
+the cells (200 draws per seed), and each version gives its difference from the version before it, with an interval
+from the same draws for both: with **Differences** on, v3's size factors are supported almost everywhere (5/5 ●),
+while v4's weighting is supported only on the noisy module's split agreement; its other differences are within the
+uncertainty (◐, ○, in grey). Click a value to see the per-seed differences and their intervals around 0: each version against the one above
+it, then (in grey) the other pairs the benchmark compared, here each version against v1. Make v1 the baseline
+(its chip in the version bar) and the table's differences become those against v1, with their intervals. The suite also declares a figure, "score against
 depth" (seed 0: each cell's score against its sequencing depth, drawn into `results/figs/`): in the Results view it
 is a column beside the metrics, a thumbnail per version and dataset; click it to see the versions' images side by
 side, large. Each version is labelled with keys

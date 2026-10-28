@@ -227,8 +227,9 @@ table.heat td.cell:hover, table.heat td.cell.sel { outline: 2px solid var(--acce
 table.heat td.obj { font-weight: 650; }
 table.heat td.gap { width: 8px; padding: 0; }
 td.cell .sd { color: var(--muted); font-size: 10.5px; font-weight: 400; }
-td.cell .dl { display: block; font-size: 10.5px; font-weight: 400; }
-.dl.good { color: var(--ok); } .dl.bad { color: var(--bad); } .dl.same { color: var(--muted); }
+td.cell .dl { display: block; font-size: 10.5px; font-weight: 400; white-space: nowrap; }
+.dl.good { color: var(--ok); } .dl.bad { color: var(--bad); } .dl.same, .dl.weak { color: var(--muted); }
+.dl .ag { opacity: .8; margin-left: 3px; }
 td.cell.missing { background: repeating-linear-gradient(45deg, transparent 0 5px, var(--grid) 5px 10px); color: var(--muted); font-weight: 400; }
 #detail .strip { width: 100%; height: auto; display: block; margin: 4px 0 10px; }
 #detail .ev { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 4px 0 14px; }
@@ -249,6 +250,10 @@ table.heat td.fig .more { font-size: 11px; color: var(--muted); }
 #detail .strip circle { fill: var(--accent); fill-opacity: .55; }
 #detail .strip .mean { stroke: var(--fg); stroke-width: 2; }
 #detail .strip .axis { stroke: var(--border); }
+#detail .strip .iv { stroke: var(--accent); stroke-opacity: .55; stroke-width: 1.4; }
+#detail .strip .zero { stroke: var(--muted); stroke-dasharray: 3 3; }
+#detail .strip .pool { fill: var(--accent); fill-opacity: .14; }
+#detail .strip .good { fill: var(--ok); } #detail .strip .bad { fill: var(--bad); }
 #detail table.wts { border-collapse: collapse; font-size: 13px; }
 #detail table.wts td { padding: 2px 10px 2px 0; }
 #detail table.wts tr.varies td { font-weight: 650; }
@@ -957,7 +962,9 @@ function resultLines(lane, ref) {
   const L = [`Benchmark results on "${b.suite.title}" (version ${meta.version}), mean ± s.d. over replicates, "${ref.name}" → "${lane.name}":`];
   for (const m of meta.metrics) for (const d of meta.datasets) {
     const x = a.values[d.key]?.[m.key], y = b.values[d.key]?.[m.key];
-    if (x || y) L.push(`- ${name(m.key)} (${m.better} is better) on ${d.name}${d.heldout ? " (held out)" : ""}: ${x ? `${fmt(mean(x))} ± ${fmt(sd(x))}` : "not run"} → ${y ? `${fmt(mean(y))} ± ${fmt(sd(y))}` : "not run"}`);
+    if (!x && !y) continue;
+    const p = x && y ? pairedDiff(b, a, d.key, m.key, lane.name, ref.name) : null;
+    L.push(`- ${name(m.key)} (${m.better} is better) on ${d.name}${d.heldout ? " (held out)" : ""}: ${x ? `${fmt(mean(x))} ± ${fmt(sd(x))}` : "not run"} → ${y ? `${fmt(mean(y))} ± ${fmt(sd(y))}` : "not run"}${p ? ` (${pairedTitle(p, lane.name, ref.name, m)})` : ""}`);
   }
   return [...L, ""];
 }
@@ -1590,6 +1597,44 @@ function deltaHTML(v, ref, better) {
   const good = better === "higher" ? d > 0 : d < 0;
   return `<span class="dl ${good ? "good" : "bad"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
 }
+// version b's difference from version a on a metric and dataset, paired by replicate id: bench.py's paired (keep
+// the two in step), and each replicate's difference with the benchmark's interval of it, for the plot
+function pairedDiff(b, a, dk, mk, bName, aName) {
+  const vb = b?.values[dk]?.[mk], va = a?.values[dk]?.[mk];
+  if (!vb?.length || !va?.length) return null;
+  const ib = b.replicates?.[dk]?.[mk], ia = a.replicates?.[dk]?.[mk];
+  const pos = new Map((ia ?? []).map((k, n) => [k, n]));
+  const points = (ib ?? []).flatMap((k, n) => pos.has(k) ? [{id: k, d: vb[n] - va[pos.get(k)]}] : []);
+  const diffs = points.map((q) => q.d);
+  const sgn = (x) => Math.abs(x) < 1e-12 ? 0 : Math.sign(x);       // within rounding error of 0 is 0
+  const d = diffs.length ? mean(diffs) : mean(vb) - mean(va), side = sgn(d);
+  const given = b.differences?.[aName]?.[dk]?.[mk], flip = a.differences?.[bName]?.[dk]?.[mk], src = given ?? flip;
+  const turn = (iv) => !iv ? null : given ? iv : [-iv[1], -iv[0]];
+  const ivs = (src?.intervals ?? []).filter(Boolean).map(turn);
+  // each replicate's interval, by id where the benchmark named them
+  if (src && !src.pooled && src.ids) src.ids.forEach((k, n) => { const q = points.find((x) => x.id === k); if (q) q.iv = turn(src.intervals[n]); });
+  const excluding = ivs.filter(([lo, hi]) => side > 0 ? lo > 0 : side < 0 ? hi < 0 : false).length;
+  const marker = !ivs.length ? "" : excluding === ivs.length ? "●" : excluding === 0 ? "○" : "◐";
+  const agree = diffs.filter((x) => sgn(x) === side && side !== 0).length;
+  return {d, paired: diffs.length > 0, n: diffs.length, sd: diffs.length > 1 ? sd(diffs) : null, agree, intervals: ivs,
+    pooled: !!src?.pooled, excluding, marker, supported: marker === "●" || (!ivs.length && diffs.length > 1 && agree === diffs.length), points};
+}
+// small differences need more digits than values do
+const fmtD = (x) => x !== 0 && Math.abs(x) < 0.01 ? x.toPrecision(2) : fmt(x);
+function pairedHTML(p, better) {
+  if (p.paired ? p.points.every((q) => Math.abs(q.d) < 1e-12) : Math.abs(p.d) < 1e-12)
+    return `<span class="dl same">=${p.marker ? ` ${p.marker}` : ""}</span>`;
+  const good = better === "higher" ? p.d > 0 : p.d < 0;
+  return `<span class="dl ${p.supported ? (good ? "good" : "bad") : "weak"}">${p.d > 0 ? "+" : "−"}${fmtD(Math.abs(p.d))}` +
+    ` <span class="ag">${p.paired ? `${p.agree}/${p.n}` : "unpaired"}${p.marker ? " " + p.marker : ""}</span></span>`;
+}
+function pairedTitle(p, bName, aName, m) {
+  const L = [`${bName} − ${aName}: ${p.d >= 0 ? "+" : "−"}${fmtD(Math.abs(p.d))}` + (p.paired ? `, the mean of ${p.n} per-replicate difference${p.n > 1 ? "s" : ""}${p.sd !== null ? ` (s.d. ${fmtD(p.sd)})` : ""}; ${p.agree} of ${p.n} agree in sign` : ", the difference of the means (unpaired: no replicate ids in common)")];
+  if (p.intervals.length) L.push(`the benchmark's interval${p.intervals.length > 1 ? "s" : ""} of the difference${p.pooled ? " (pooled over replicates)" : ""}${m.interval ? ` (${m.interval})` : ""}: ${p.excluding} of ${p.intervals.length} exclude 0`);
+  else if (p.paired) L.push("no interval of the difference for this pair from the benchmark");
+  L.push(p.supported ? "supported" : "not supported: shown in grey");
+  return L.join("; ");
+}
 function renderResults() {
   const el = $("results");
   const sn = suiteNow();
@@ -1624,7 +1669,7 @@ function renderResults() {
   let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions have results on it</span>` +
     `<span class="seg"><label><input type="radio" name="rby" value="metric"${rs.by === "metric" ? " checked" : ""}><span>By metric</span></label><label><input type="radio" name="rby" value="dataset"${rs.by === "dataset" ? " checked" : ""}><span>By dataset</span></label></span>` +
     `<span class="seg" title="the shade of a cell: from the worst to the best of the versions shown, or across the metric's whole range"><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
-    `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline)"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
+    `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline): the mean of the per-replicate differences ± their s.d. and how many replicates agree, paired by replicate id; ● every interval of the difference the benchmark gave excludes 0, ◐ some, ○ none; in color only when the difference is supported"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
     (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="the datasets kept out of development"><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
     `<span>click a column for what it measures and the values' spread; click it again to sort by it</span></div>`;
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
@@ -1654,9 +1699,10 @@ function renderResults() {
       const v = value(row, d.key, m.key);
       if (!v) { h += `<td class="cell missing" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" title="not run">–</td>`; continue; }
       const column = rows.map((x) => { const q = value(x, d.key, m.key); return q ? mean(q) : null; });
-      const rv = rr && value(rr, d.key, m.key), ids = row.r.replicates?.[d.key]?.[m.key];
-      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x)).join(", "))}">` +
-        `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${rs.delta && rv ? deltaHTML(mean(v), mean(rv), m.better) : ""}</td>`;
+      const ids = row.r.replicates?.[d.key]?.[m.key], ivs = row.r.intervals?.[d.key]?.[m.key];
+      const pd = rs.delta && rr?.r ? pairedDiff(row.r, rr.r, d.key, m.key, row.lane.name, rr.lane.name) : null;
+      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x) + (ivs?.[k] ? ` [${fmtD(ivs[k][0])}, ${fmtD(ivs[k][1])}]` : "")).join(", "))}${pd ? "\n" + esc(pairedTitle(pd, row.lane.name, rr.lane.name, m)) : ""}">` +
+        `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${pd ? pairedHTML(pd, m.better) : ""}</td>`;
     }
     h += `</tr>`;
   }
@@ -1700,11 +1746,12 @@ function showResultDetail() {
     const m = meta.metrics.find((x) => x.key === f.key), sym = suite.symbols.find((x) => x.key === m.key), op = suite.ops.find((x) => x.key === m.key);
     h += `<h2>${tex(sym.tex)} &nbsp;${esc(sym.name)}</h2><div class="crumb">metric · ${m.better} is better${m.range ? ` · from ${m.range[0]} to ${m.range[1]}` : ""}${m.unit ? " · " + esc(m.unit) : ""} · ${esc(suite.title)}</div>`;
     if (sym.desc) h += `<p>${rich(sym.desc)}</p>`;
+    if (m.interval) h += `<p class="empty">Intervals: ${esc(m.interval)}.</p>`;
     if (op?.tex) h += `<div class="eq">${tex(op.tex, true)}</div>` + whereHTML(op);
     if (m.source) h += `<p class="empty">Source: ${rich(m.source)}</p>`;
     h += `<h3>Values${f.dataset ? "" : ", by dataset"}</h3>`;
     for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
-      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key]})));
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key], ivs: x.r?.intervals?.[d.key]?.[m.key]}))) + diffsHTML(m, d.key, rows);
     if (op) {
       if (op.verified !== null) h += `<h3>Equation check</h3><div class="status ${op.verified ? "ok" : "bad"}">${op.verified ? "✓ " : "✗ "}${esc(op.verify_msg.split("\n")[0])}</div>`;
       h += `<h3>Code</h3>${codeHTML(op.code) || "<span class='empty'>no reference</span>"}`;
@@ -1712,7 +1759,7 @@ function showResultDetail() {
   } else if (f.kind === "dataset") {
     const d = meta.datasets.find((x) => x.key === f.key);
     const strips = meta.metrics.map((m) => {
-      const sy = suite.symbols.find((x) => x.key === m.key), v = rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key]}));
+      const sy = suite.symbols.find((x) => x.key === m.key), v = rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key], ivs: x.r?.intervals?.[d.key]?.[m.key]}));
       return `<div class="eqlbl">${tex(sy?.tex ?? m.key)} ${esc(sy?.name ?? m.key)}, ${m.better} is better</div>` + (v.some((x) => x.v) ? stripHTML(m, v) : `<p class="empty">no version was run on it</p>`);
     }).join("");
     h += datasetHTML(d, suite, meta, `<h3>Results on it</h3>${strips}` + figuresHTML(d.key, rows, meta));
@@ -1845,7 +1892,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("lightbo
 // the replicates of each version, one row each, on the metric's scale
 function stripHTML(m, rows) {
   const W = 420, left = 74, right = 14, rowH = 18, top = 20;
-  const all = rows.flatMap((x) => x.v ?? []);
+  const all = rows.flatMap((x) => [...(x.v ?? []), ...(x.ivs ?? []).flat().filter((q) => q !== null)]);
   // the values' extent, padded, within the metric's range
   let lo = Math.min(...all), hi = Math.max(...all);
   const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.05 || 0.5;
@@ -1858,7 +1905,10 @@ function stripHTML(m, rows) {
     const y = top + k * rowH + rowH / 2;
     g += `<text x="${left - 8}" y="${y + 4}" text-anchor="end"${row.lane === active ? ' font-weight="700"' : ""}>${esc(row.lane.name)}</text>`;
     if (!row.v) { g += `<text x="${left}" y="${y + 4}" class="mu">not run</text>`; return; }
-    row.v.forEach((v, n) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y}" r="3.4"><title>${row.ids ? esc(row.ids[n]) + ": " : ""}${fmt(v)}</title></circle>`; });
+    // replicates spread a little up and down, so that their intervals do not lie on one another
+    const dy = (n) => row.ivs ? (n - (row.v.length - 1) / 2) * Math.min(3, 12 / row.v.length) : 0;
+    row.ivs?.forEach((iv, n) => { if (iv) g += `<line class="iv" x1="${x(Math.max(lo, iv[0])).toFixed(1)}" x2="${x(Math.min(hi, iv[1])).toFixed(1)}" y1="${y + dy(n)}" y2="${y + dy(n)}"/>`; });
+    row.v.forEach((v, n) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${row.ids ? esc(row.ids[n]) + ": " : ""}${fmt(v)}${row.ivs?.[n] ? ` [${fmtD(row.ivs[n][0])}, ${fmtD(row.ivs[n][1])}]` : ""}</title></circle>`; });
     const mu = x(mean(row.v));
     g += `<line class="mean" x1="${mu}" x2="${mu}" y1="${y - 7}" y2="${y + 7}"><title>mean ${fmt(mean(row.v))}</title></line>`;
   });
@@ -1866,6 +1916,59 @@ function stripHTML(m, rows) {
   g += `<line class="axis" x1="${left}" x2="${W - right}" y1="${yAxis}" y2="${yAxis}"/>` +
     [lo, (lo + hi) / 2, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${fmt(v)}</text>`).join("");
   return `<svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+}
+
+// each version's difference from the one it is compared with, one row per pair, centered on 0: each replicate's
+// difference, with the benchmark's interval of it, and the pooled interval if it gave one
+// the pairs to show on a metric and dataset: each version against the one it is compared with, then every other
+// pair among the open versions whose difference the benchmark gave (in either version's results), once each
+function diffPairs(mk, dk, rows) {
+  const seen = new Set(), pairs = [];
+  const add = (row, refLane, extra) => {
+    const key = [row.lane.id, refLane.id].sort().join("|"), ref = rows.find((x) => x.lane === refLane);
+    const p = !seen.has(key) && ref?.r && row.r ? pairedDiff(row.r, ref.r, dk, mk, row.lane.name, refLane.name) : null;
+    if (p) { seen.add(key); pairs.push({row, ref: refLane, p, extra}); }
+  };
+  for (const row of rows) { const rr = refOf(row.lane); if (rr) add(row, rr, false); }
+  for (const row of rows) for (const [name, by] of Object.entries(row.r?.differences ?? {})) {
+    const other = by?.[dk]?.[mk] && rows.find((x) => x.lane !== row.lane && x.lane.name === name);
+    if (other) add(row, other.lane, true);
+  }
+  return pairs;
+}
+function diffsHTML(m, dk, rows) {
+  const pairs = diffPairs(m.key, dk, rows);
+  if (!pairs.length) return "";
+  const W = 420, left = 74, right = 64, rowH = 20, top = 20;
+  const pts = (p) => p.paired ? p.points : [{d: p.d}];
+  const all = [0, ...pairs.flatMap(({p}) => [...pts(p).flatMap((q) => [q.d, ...(q.iv ?? [])]), ...(p.pooled ? p.intervals.flat() : [])])];
+  let lo = Math.min(...all), hi = Math.max(...all);
+  const pad = (hi - lo) * 0.12 || 0.01;
+  [lo, hi] = [lo - pad, hi + pad];
+  const x = (v) => left + (v - lo) / (hi - lo) * (W - left - right);
+  const H = top + pairs.length * rowH + 22;
+  let g = `<text x="${W - right}" y="12" text-anchor="end" class="mu">${m.better === "higher" ? "better →" : "← better"}</text>` +
+    `<line class="zero" x1="${x(0)}" x2="${x(0)}" y1="${top - 4}" y2="${top + pairs.length * rowH}"/>`;
+  pairs.forEach(({row, ref, p}, k) => {
+    const y = top + k * rowH + rowH / 2, ps = pts(p);
+    if (pairs[k - 1] && !pairs[k - 1].extra && pairs[k].extra) g += `<line class="axis" x1="8" x2="${W - 8}" y1="${y - rowH / 2}" y2="${y - rowH / 2}" stroke-dasharray="2 3"/>`;
+    g += `<text x="${left - 8}" y="${y + 4}" text-anchor="end"${row.lane === active ? ' font-weight="700"' : ""}${pairs[k].extra ? ' class="mu"' : ""}>${esc(row.lane.name)} − ${esc(ref.name)}</text>`;
+    if (p.pooled) for (const [a, b] of p.intervals) g += `<rect class="pool" x="${x(a)}" y="${y - 7}" width="${Math.max(1, x(b) - x(a))}" height="14"><title>pooled interval [${fmtD(a)}, ${fmtD(b)}]</title></rect>`;
+    const dy = (n) => (n - (ps.length - 1) / 2) * Math.min(3, 12 / ps.length);
+    ps.forEach((q, n) => {
+      if (q.iv) g += `<line class="iv" x1="${x(q.iv[0])}" x2="${x(q.iv[1])}" y1="${y + dy(n)}" y2="${y + dy(n)}"/>`;
+      g += `<circle cx="${x(q.d).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${q.id ? esc(q.id) + ": " : ""}${q.d >= 0 ? "+" : ""}${fmtD(q.d)}${q.iv ? ` [${fmtD(q.iv[0])}, ${fmtD(q.iv[1])}]` : ""}</title></circle>`;
+    });
+    const good = m.better === "higher" ? p.d > 0 : p.d < 0;
+    g += `<text x="${W - right + 6}" y="${y + 4}" class="${p.supported ? (good ? "good" : "bad") : "mu"}">${p.paired ? `${p.agree}/${p.n}` : "unpaired"}${p.marker ? " " + p.marker : ""}<title>${esc(pairedTitle(p, row.lane.name, ref.name, m))}</title></text>`;
+  });
+  const yAxis = top + pairs.length * rowH + 4;
+  g += `<line class="axis" x1="${left}" x2="${W - right}" y1="${yAxis}" y2="${yAxis}"/>` +
+    [lo, 0, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${k === 1 ? "0" : fmtD(v)}</text>`).join("");
+  const none = pairs.filter(({p}) => p.paired && !p.intervals.length).map(({row, ref}) => `${row.lane.name} − ${ref.name}`);
+  const extra = pairs.some((x) => x.extra);
+  return `<div class="eqlbl" style="margin-top:2px">Differences from the version each is compared with${extra ? ", then (in grey) the other pairs the benchmark compared" : ""}${m.interval ? `; whiskers: ${esc(m.interval)}` : ""}</div><svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>` +
+    (none.length ? `<p class="empty" style="margin-top:-6px">No interval of the difference from the benchmark for ${esc(none.join(", "))}.</p>` : "");
 }
 
 // prompts from the Results view: why the versions differ on what is selected, and what to try next
@@ -1914,7 +2017,7 @@ function resultsPrompt(question) {
   L.push(`The versions, in order: ${rows.map(({lane}) => `"${lane.name}" (${laneMeta(lane)}${keysText(lane.D.keys) ? `; keys: ${keysText(lane.D.keys)}` : ""})`).join("; ")}.`, "");
   const metricLines = (m) => {
     const s = sym(m.key), o = op(m.key);
-    return [`- ${s?.name} (\`${m.key}\`, $${s?.tex}$), ${m.better} is better${m.range ? `, from ${m.range[0]} to ${m.range[1]}` : ""}: ${s?.desc ?? ""}`,
+    return [`- ${s?.name} (\`${m.key}\`, $${s?.tex}$), ${m.better} is better${m.range ? `, from ${m.range[0]} to ${m.range[1]}` : ""}${m.interval ? `; intervals: ${m.interval}` : ""}: ${s?.desc ?? ""}`,
       ...(o?.tex ? [`  equation: ${o.tex}`] : []), ...(o?.code?.length ? [`  code: ${o.code.map((c) => c.ref).join(", ")}`] : [])];
   };
   const shown = f?.kind === "metric" ? meta.metrics.filter((m) => m.key === f.key) : meta.metrics;
@@ -1924,12 +2027,14 @@ function resultsPrompt(question) {
   const steps = datasets.some((d) => Object.keys(d.values ?? {}).length) ? dataSteps(suite, meta) : [];
   if (steps.length) L.push("How the datasets are made (the suite's steps; the datasets differ in the settings above):", ...steps.map((o) => `- ${o.label}: ${o.tex}${o.where?.length ? `, where ${o.where.map(([t, def]) => `${t}: ${def}`).join("; ")}` : ""}`), "");
   L.push("The results:");
-  for (const m of shown) for (const d of datasets)
+  for (const m of shown) for (const d of datasets) {
     L.push(`- ${sym(m.key)?.name} on ${d.name}: ` + rows.map(({lane, r}) => {
-      const v = r?.values[d.key]?.[m.key], ids = r?.replicates?.[d.key]?.[m.key];
-      return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length}${ids ? `: ${v.map((x, k) => `${ids[k]} ${fmt(x)}`).join(", ")}` : ""})` : "not run"}`;
+      const v = r?.values[d.key]?.[m.key], ids = r?.replicates?.[d.key]?.[m.key], ivs = r?.intervals?.[d.key]?.[m.key];
+      return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length}${ids || ivs ? `: ${v.map((x, k) => `${ids ? ids[k] + " " : ""}${fmt(x)}${ivs?.[k] ? ` [${fmtD(ivs[k][0])}, ${fmtD(ivs[k][1])}]` : ""}`).join(", ")}` : ""})` : "not run"}`;
     }).join("; "));
-  if (rows.some(({r}) => r?.replicates)) L.push("(Values listed by replicate id are paired across versions by that id: the same seed or fold.)");
+    for (const {row, ref, p} of diffPairs(m.key, d.key, rows)) L.push(`  - ${pairedTitle(p, row.lane.name, ref.name, m)}`);
+  }
+  if (rows.some(({r}) => r?.replicates)) L.push("(Values listed by replicate id are paired across versions by that id: the same seed or fold. Each version's difference from the one it is compared with is the mean of its per-replicate differences. Two sources of uncertainty are kept apart: the spread over replicates, and the benchmark's intervals, which are over the sampled units within one replicate; a version's own intervals can overlap another's even when the interval of their difference excludes 0, so judge differences by the latter.)");
   const figs = (meta.figures ?? []).filter((fg) => f?.kind !== "figure" || fg.key === f.key);
   const images = figs.flatMap((fg) => datasets.flatMap((d) => rows.flatMap(({lane, r}) => (r?.figures?.[d.key]?.[fg.key] ?? []).map((e) =>
     `- ${fg.name}, ${lane.name} on ${d.name}: ${e.path ?? e.url}${e.replicate ? `, replicate ${e.replicate}` : ""}${e.caption ? ` (${e.caption})` : ""}${keysText(e.keys) ? `; ${keysText(e.keys)}` : ""}`))));

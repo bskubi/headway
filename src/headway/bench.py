@@ -15,11 +15,24 @@ headway computes no metric. Your benchmark computes them and writes a results fi
     {"suite": "my_bench.suite",                     # the suite module (or "module:attribute")
      "values": {"dataset": {"metric": [0.81, 0.79, ...], ...}, ...},     # one value per replicate (seed, fold)
      "replicates": ["seed0", "seed1", ...],          # what each value is, in the same order (optional)
+     "differences": {"v3": {"dataset": {"metric": [...]}}},     # this method minus another, per replicate (optional)
      "figures": {"dataset": {"figure": {"image": "figs/x.png"}, ...}, ...},     # images to look at (optional)
      "run": {...}}                                  # anything worth keeping: date, settings, seeds (optional)
 
 The replicate ids name the replicates, so that two methods' values can be paired (the same seed, the same fold);
 without them the values are unpaired. They are a list, the same for every dataset, or {dataset: list}.
+
+Every number, in "values" and in "differences", is one of two forms: a point, 0.81, or a point with an interval,
+{"value": 0.81, "lo": 0.78, "hi": 0.84}. What the interval is (95%, a bootstrap over embryos, ...) is declared once,
+on the metric (`B.metric(..., interval=...)`), so every method's intervals on it are of one kind. "differences"
+gives this method's difference from another (named as that method's headway is named), per replicate, in the
+replicates' order, or one pooled over them: the benchmark computes it, on the same samples for both, which is the
+only way to its interval (two methods' own intervals overlap even when their difference is sure).
+
+headway compares two methods on a metric by pairing their values by replicate id (`paired`): the mean of the
+per-replicate differences, their spread, how many agree in sign, and, where the benchmark gave the difference's
+intervals (in either method's results), how many of them exclude 0. A difference is "supported" when every
+interval excludes 0 or, without intervals, when every paired replicate agrees in sign.
 
 A figure is what is looked at rather than measured: an image the benchmark makes (samples, reconstructions, a
 diagnostic plot). The suite declares it like a metric (`B.figure`), and it is a column of the results beside the
@@ -75,6 +88,7 @@ class Metric:
     range: tuple[float, float] | None = None
     unit: str = ""
     source: str = ""                # where the metric comes from: a paper, a package
+    interval: str = ""              # what its intervals are, if results give them: "95%, bootstrap over embryos"
 
 
 @dataclass
@@ -124,14 +138,15 @@ class Suite(Headway):
 
     def metric(self, key: str, tex: str, name: str, desc: str = "", *, equation: str = "",
                inputs: Sequence[SymbolLike] = (), better: str, range: tuple[float, float] | None = None,
-               unit: str = "", source: str = "", code: str | Iterable[str] = (), where: dict[str, str] | None = None,
-               group: str = "metrics", was: str | Iterable[str] = ()) -> Symbol:
-        """A metric: the output symbol `key` and the step `key` that computes it, by `equation`, from `inputs`."""
+               unit: str = "", source: str = "", interval: str = "", code: str | Iterable[str] = (),
+               where: dict[str, str] | None = None, group: str = "metrics", was: str | Iterable[str] = ()) -> Symbol:
+        """A metric: the output symbol `key` and the step `key` that computes it, by `equation`, from `inputs`.
+        `interval` says what the intervals in its results are (results may give them only if it is set)."""
         assert better in ("higher", "lower"), f"metric {key!r}: better={better!r}, not 'higher' or 'lower'"
         s = self.symbol(key, tex, name, desc, role="output", was=was)
         self.op(key, name, equation, desc, inputs=inputs, outputs=[s], code=code, group=group, where=where, was=was)
         self.metrics[key] = Metric(key, better, None if range is None else (float(range[0]), float(range[1])),
-                                   unit, source)
+                                   unit, source, interval)
         return s
 
     def figure(self, key: str, name: str, desc: str = "", *, source: str = "",
@@ -225,6 +240,7 @@ def entry(results: Mapping[str, Any], suite: dict[str, Any], base: Path | None =
     reps = _replicates(results.get("replicates"), datasets, warnings)
     values: dict[str, dict[str, list[float]]] = {}
     ids: dict[str, dict[str, list[str]]] = {}
+    intervals: dict[str, dict[str, list[list[float] | None]]] = {}
     for dk, by_metric in results.get("values", {}).items():
         if dk not in datasets:
             warnings.append(f"dataset {dk!r} is not in the suite; left out")
@@ -233,13 +249,14 @@ def entry(results: Mapping[str, Any], suite: dict[str, Any], base: Path | None =
             if mk not in metrics:
                 warnings.append(f"metric {mk!r} is not in the suite; left out")
                 continue
-            vals = [vals] if isinstance(vals, (int, float)) else list(vals)
+            vals = list(vals) if isinstance(vals, (list, tuple)) else [vals]
             named = reps.get(dk)
             if named is not None and len(named) != len(vals):
                 warnings.append(f"{dk}/{mk}: {len(vals)} values but {len(named)} replicate ids; left unpaired")
                 named = None
-            keep = [n for n, v in enumerate(vals) if isinstance(v, (int, float)) and math.isfinite(v)]
-            clean = [float(vals[n]) for n in keep]
+            points = [_point(v, f"{dk}/{mk}", metrics[mk], warnings) for v in vals]
+            keep = [n for n, pt in enumerate(points) if pt is not None]
+            clean = [points[n][0] for n in keep]          # type: ignore[index]
             if len(clean) < len(vals):
                 warnings.append(f"{dk}/{mk}: {len(vals) - len(clean)} values not finite numbers; left out")
             rng = metrics[mk]["range"]
@@ -249,10 +266,73 @@ def entry(results: Mapping[str, Any], suite: dict[str, Any], base: Path | None =
                 values.setdefault(dk, {})[mk] = clean
                 if named is not None:
                     ids.setdefault(dk, {})[mk] = [named[n] for n in keep]
+                if any(points[n][1] for n in keep):     # type: ignore[index]
+                    intervals.setdefault(dk, {})[mk] = [points[n][1] for n in keep]     # type: ignore[index]
     figures = _figures(results.get("figures", {}), datasets, {f["key"] for f in meta.get("figures", [])}, reps,
                        base or Path.cwd(), warnings)
+    differences = _differences(results.get("differences", {}), datasets, metrics, reps, warnings)
     return {"id": suite_id(suite), "suite": suite, "values": values, "run": results.get("run", {}),
-            "warnings": warnings} | ({"replicates": ids} if ids else {}) | ({"figures": figures} if figures else {})
+            "warnings": warnings} | ({"replicates": ids} if ids else {}) | ({"intervals": intervals} if intervals else {}) | \
+        ({"differences": differences} if differences else {}) | ({"figures": figures} if figures else {})
+
+
+def _finite(y: Any) -> bool:
+    return isinstance(y, (int, float)) and not isinstance(y, bool) and math.isfinite(y)
+
+
+def _point(x: Any, where: str, metric: Mapping[str, Any], warnings: list[str]) -> tuple[float, list[float] | None] | None:
+    """A number as given -> (value, [lo, hi] or None); None if it is not a finite number. An interval is kept only
+    if the metric says what its intervals are and it holds the value."""
+    if not isinstance(x, Mapping):
+        return (float(x), None) if _finite(x) else None
+    if not _finite(x.get("value")):
+        return None
+    v = float(x["value"])
+    if "lo" not in x and "hi" not in x:
+        return v, None
+    if not (_finite(x.get("lo")) and _finite(x.get("hi"))):
+        warnings.append(f"{where}: an interval needs finite value, lo and hi; interval left out")
+        return v, None
+    lo, hi = float(x["lo"]), float(x["hi"])
+    if not metric.get("interval"):
+        warnings.append(f"{where}: intervals given, but the metric does not say what they are "
+                        f"(B.metric(..., interval=...)); intervals left out")
+        return v, None
+    if not lo <= v <= hi:
+        warnings.append(f"{where}: interval [{lo}, {hi}] does not hold its value {v}; interval left out")
+        return v, None
+    return v, [lo, hi]
+
+
+def _differences(given: Mapping[str, Any], datasets: Mapping[str, Any], metrics: Mapping[str, Any],
+                 reps: Mapping[str, list[str]], warnings: list[str]) -> dict[str, Any]:
+    """The differences, as given -> other method -> dataset -> metric -> {values, intervals, ids, pooled}."""
+    out: dict[str, Any] = {}
+    for other, by_dataset in given.items():
+        for dk, by_metric in by_dataset.items():
+            if dk not in datasets:
+                warnings.append(f"differences from {other}: dataset {dk!r} is not in the suite; left out")
+                continue
+            for mk, vals in by_metric.items():
+                where = f"differences from {other}, {dk}/{mk}"
+                if mk not in metrics:
+                    warnings.append(f"{where}: metric {mk!r} is not in the suite; left out")
+                    continue
+                pooled = not isinstance(vals, (list, tuple))
+                vals = [vals] if pooled else list(vals)
+                ids = None if pooled else reps.get(dk)
+                if ids is not None and len(ids) != len(vals):
+                    warnings.append(f"{where}: {len(vals)} differences but {len(ids)} replicate ids; left out")
+                    continue
+                points = [_point(v, where, metrics[mk], warnings) for v in vals]
+                if any(pt is None for pt in points):
+                    warnings.append(f"{where}: not all finite numbers; left out")
+                    continue
+                out.setdefault(str(other), {}).setdefault(dk, {})[mk] = {
+                    "values": [pt[0] for pt in points],                 # type: ignore[index]
+                    "intervals": [pt[1] for pt in points],              # type: ignore[index]
+                    "ids": ids, "pooled": pooled}
+    return out
 
 
 def _replicates(r: Any, datasets: Mapping[str, Any], warnings: list[str]) -> dict[str, list[str]]:
@@ -367,6 +447,52 @@ def scores(entries: Sequence[Mapping[str, Any] | None], objective: Mapping[str, 
     return out
 
 
+def paired(b: Mapping[str, Any], a: Mapping[str, Any], dk: str, mk: str, b_name: str, a_name: str) -> dict[str, Any] | None:
+    """Method b's difference from method a on one metric and dataset (b and a: their results on one suite), as the
+    viewer shows it under b's value (viewer.html, pairedDiff; keep the two in step). Paired by replicate id where
+    both have ids in common, else the difference of the means (unpaired). The intervals are the benchmark's: b's
+    differences from a, or a's from b turned around. None if either has no values."""
+    vb, va = b["values"].get(dk, {}).get(mk), a["values"].get(dk, {}).get(mk)
+    if not vb or not va:
+        return None
+    ib, ia = b.get("replicates", {}).get(dk, {}).get(mk), a.get("replicates", {}).get(dk, {}).get(mk)
+    pos = {k: n for n, k in enumerate(ia or [])}
+    diffs = [vb[n] - va[pos[k]] for n, k in enumerate(ib or []) if k in pos]
+    d = _mean(diffs) if diffs else _mean(vb) - _mean(va)
+    side = _sign(d)
+    out: dict[str, Any] = {"d": d, "paired": bool(diffs), "n": len(diffs),
+                           "sd": _sd(diffs) if len(diffs) > 1 else None,
+                           "agree": sum(_sign(x) == side != 0 for x in diffs)}
+    given = b.get("differences", {}).get(a_name, {}).get(dk, {}).get(mk)
+    flip = a.get("differences", {}).get(b_name, {}).get(dk, {}).get(mk)
+    ivs = [iv for iv in (given or flip or {}).get("intervals", []) if iv]
+    if not given and flip:
+        ivs = [[-hi, -lo] for lo, hi in ivs]
+    out["intervals"] = ivs
+    out["pooled"] = bool((given or flip or {}).get("pooled"))
+    excl = sum(lo > 0 if side > 0 else hi < 0 if side < 0 else False for lo, hi in ivs)
+    out["excluding"] = excl
+    out["marker"] = "" if not ivs else "●" if excl == len(ivs) else "○" if excl == 0 else "◐"
+    out["supported"] = out["marker"] == "●" or (not ivs and out["n"] > 1 and out["agree"] == out["n"])
+    return out
+
+
+def _sign(x: float) -> int:
+    """-1, 0 or 1; a difference within rounding error of 0 is 0."""
+    return 0 if abs(x) < 1e-12 else 1 if x > 0 else -1
+
+
+def _paired_text(p: dict[str, Any] | None) -> str:
+    if p is None:
+        return "-"
+    t = f"{p['d']:+.3f}"
+    if p["paired"]:
+        t += (f"±{p['sd']:.3f}" if p["sd"] is not None else "") + f" {p['agree']}/{p['n']}"
+    else:
+        t += " unpaired"
+    return t + (" " + p["marker"] if p["marker"] else "")
+
+
 def table(headways: Sequence[Mapping[str, Any]], names: Sequence[str], heldout: bool = False) -> str:
     """The methods' results on their (first) common suite, as text: one row per method."""
     ids = [{r["id"] for r in g.get("results", [])} for g in headways]
@@ -389,11 +515,22 @@ def table(headways: Sequence[Mapping[str, Any]], names: Sequence[str], heldout: 
             v = e["values"].get(d["key"], {}).get(m["key"])
             row.append("-" if not v else f"{_mean(v):.3f}" + (f"±{_sd(v):.3f}" if len(v) > 1 else ""))
         rows.append(row)
-    width = [max(len(r[k]) for r in rows) for k in range(len(head))]
-    objectives = "; ".join(f"{o['key']} ({o['how']}): {o['name']}" for o in meta["objectives"])
-    lines = [f"suite {sid}; objectives: {objectives}"]
-    lines += ["  ".join(c.ljust(w) for c, w in zip(r, width)).rstrip() for r in rows]
+    lines = [f"suite {sid}; objectives: " + "; ".join(f"{o['key']} ({o['how']}): {o['name']}" for o in meta["objectives"])]
+    lines += _columns(rows)
+    if len(entries) > 1:
+        diff = [["difference"] + [f"{m['key']}/{d['key']}" for m, d in cols]]
+        for n in range(1, len(entries)):
+            diff.append([f"{names[n]} - {names[n - 1]}"] + [_paired_text(paired(
+                entries[n], entries[n - 1], d["key"], m["key"], names[n], names[n - 1])) for m, d in cols])
+        lines += ["", "differences from the method before: the mean of the per-replicate differences ± their s.d. and "
+                  "how many replicates agree in sign (paired by replicate id); ● every interval of the difference "
+                  "excludes 0, ◐ some do, ○ none (where the benchmark gave them)"] + _columns(diff)
     return "\n".join(lines)
+
+
+def _columns(rows: list[list[str]]) -> list[str]:
+    width = [max(len(r[k]) for r in rows) for k in range(len(rows[0]))]
+    return ["  ".join(c.ljust(w) for c, w in zip(r, width)).rstrip() for r in rows]
 
 
 def _sd(v: Sequence[float]) -> float:

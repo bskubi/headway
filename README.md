@@ -189,6 +189,11 @@ folds) so that versions pair up. `figures` gives the images the benchmark made f
 suite declares (`B.figure`); they are written into the headway and shown as columns beside the metrics, a
 thumbnail per version, compared side by side when clicked: to look at, never ranked (a judgment of them is a
 metric of its own). `--key NAME=VALUE` (or `keys=` in Python) labels a version with a hyperparameter, a variant or an option.
+Any value can carry an interval, `{"value": 0.81, "lo": 0.78, "hi": 0.84}`, of a kind the metric declares
+(`interval=`), and `differences` gives a version's difference from another with its own interval, computed by the
+benchmark on the same samples for both. The viewer pairs versions by replicate: under each value, `+0.026 5/5 ●`
+is the mean per-replicate difference, how many replicates agree, and whether the benchmark's intervals of the
+difference exclude 0 (● all, ◐ some, ○ none); it is colored only when supported.
 
 In the viewer, **Graph | Results** switches between the computation graph and the results of the same open
 versions: a heatmap of versions × metrics × datasets (grouped by metric or by dataset), each value the mean over

@@ -257,11 +257,13 @@ outputs the method's results, `code` pointing to the method's entry function, wi
 the method being benchmarked. The graph then reads data → method → metrics, and no data symbol is left unused.
 
 - **`B.metric(key, tex, name, desc="", *, equation="", inputs=(), better, range=None, unit="", source="",
-  code=(), where=None, group="metrics", was=())`** declares the output symbol `key` and the step `key` that
+  interval="", code=(), where=None, group="metrics", was=())`** declares the output symbol `key` and the step `key` that
   computes it, so a metric has a notation, an equation, code and a check like any step. `better` is `"higher"` or
   `"lower"`; `range` is its possible extent (needed by `how="mean"` objectives). For a metric with no natural
   bound (a mean squared error), either use a bounded version of it (R², or the error relative to a baseline's) or
   leave out `range` and combine it only in `how="rank"` objectives; a guessed range warns when values fall outside.
+  `interval` says what the intervals in its results are, e.g. `"95%, bootstrap over embryos (200 draws) within one
+  seed"`; results may give intervals for a metric only if it is set (see Intervals and differences).
 - **`B.dataset(key, name, desc="", *, source="", heldout=False, values=None, facts=None, code=())`**. If the suite
   makes its data (a simulation, a preprocessing), declare those steps in the suite like any other (with their
   settings, equations and checks) and give each dataset its `values` of those settings: the steps are written
@@ -296,6 +298,7 @@ one per replicate (seed, fold), for each dataset and metric it ran. Missing comb
 {"suite": "mybench.suite",
  "values": {"pbmc": {"auroc": [0.91, 0.90, 0.93], "stability": [0.8, 0.82, 0.79]}},
  "replicates": ["seed0", "seed1", "seed2"],
+ "differences": {"v4": {"pbmc": {"auroc": [{"value": 0.012, "lo": 0.004, "hi": 0.020}, 0.010, 0.015]}}},
  "figures": {"pbmc": {"umap": {"image": "figs/v5_pbmc_umap.png", "replicate": "seed0"}}},
  "run": {"date": "2026-10-27"}}
 ```
@@ -310,6 +313,37 @@ all datasets, or `{dataset: [ids]}` when they differ (different folds per datase
 same id are paired (the same seed, the same split of the data), which is what a paired comparison needs; use the
 same ids for the same seeds in every version's run. Without `replicates` the values are unpaired. A value list
 whose length differs from its ids is kept unpaired, with a warning.
+
+**Intervals and differences.** Every number in `values` and `differences` takes one of two forms: a point,
+`0.81`, or a point with an interval, `{"value": 0.81, "lo": 0.78, "hi": 0.84}`. There are no others: convert a
+standard error to an interval, pick one interval level, report the interval of a difference instead of a p-value.
+What the intervals are is declared once, on the metric (`interval=`), so every version's are of one kind; an
+interval for a metric without `interval`, or one that does not hold its value, is left out with a warning.
+
+`differences` gives this version's difference from another version, named as that version's headway is named
+(`name=` / `--name`): `{other: {dataset: {metric: [one per replicate, in the replicates' order]}}}`, or a single
+number for one difference pooled over the replicates. Give it when the benchmark can compute the difference's own
+interval: on the same samples for both versions (the same cells, embryos, folds), resampling them for both at once.
+That interval is usually much narrower than either version's own, because what moves one version's number moves
+the other's too; two versions' own intervals can overlap while the interval of their difference excludes 0, so
+the difference's is what to judge by. Only the benchmark can compute it (headway never sees the samples), so give
+it for the comparisons that matter: the version before, the baseline.
+
+headway itself pairs two versions' values by replicate id: the difference of each replicate in common, their mean
+and spread, and how many agree in sign. Under each value (the Results view's Differences), the version's
+difference from the one it is compared with reads `+0.026 5/5 ●`: the mean of the per-replicate differences, how
+many replicates agree in sign, and, where the benchmark gave intervals of that difference (in either version's
+results), ● if every one excludes 0, ◐ if some do, ○ if none. It is in color only when supported: every interval
+excludes 0 or, without intervals, every paired replicate agrees in sign; otherwise grey. Without replicate ids in
+common it is the difference of the means, marked "unpaired". Clicking the value plots each version's replicates
+with their intervals, and the per-replicate differences around 0 with the benchmark's intervals: each version
+against the one it is compared with, then every other pair among the open versions that the benchmark gave a
+difference for (so differences from both the version before and the baseline are all seen; making a version the
+baseline puts its pairs in the table's cells too). The
+two kinds of uncertainty stay apart: the spread over replicates, and the intervals within one replicate; headway
+does not combine them (a benchmark that wants one interval over both computes it and gives it pooled). Objectives
+get no intervals. With many metrics and datasets, an interval excludes 0 by chance now and then: take a single
+cell as a hint, and agreement across replicates and datasets as evidence.
 
 **Figures: images to look at.** `figures` gives, for each dataset and declared figure (`B.figure`), the image the
 benchmark made, or a list of them (one per replicate, say; the table shows the first). An image is:
@@ -366,7 +400,8 @@ headway.build("mypkg.graphspec", "headways/v5.html", json="headways/v5.json", na
 
 In the viewer, **Graph | Results** switches to the heatmap of the open versions: objectives first, then the
 figures' columns (a thumbnail in each cell), then metric × dataset columns (group by metric or by dataset), each
-cell the mean ± s.d. of the replicates and its difference from the version it is compared with. Click a column for the
+cell the mean ± s.d. of the replicates and its difference from the version it is compared with, paired by
+replicate (see Intervals and differences). Click a column for the
 metric's definition and every version's replicates, or for the figure's images side by side (click one to enlarge
 it); click a dataset for what it is; click a version for what changed in it, its keys and its figures.
 

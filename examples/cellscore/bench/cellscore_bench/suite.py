@@ -61,22 +61,23 @@ B.dataset("heldout", "mixed", "Different sizes, depths, noise and a weaker effec
           facts={"chosen": "before v1, by someone other than the method's developer",
                  "looked at": "only to check v1 and v4"})
 
+INTERVAL = "95%, percentile bootstrap over the cells (200 draws) within one seed"
 B.metric("auroc", r"\mathrm{AUROC}", "separation",
          "How often a cell with the module on scores above one with it off: 1 is perfect, 0.5 is chance.",
          equation=r"\mathrm{AUROC} = \frac{1}{n_1 n_0} \sum_{i: y_i = 1} \sum_{j: y_j = 0} "
                   r"\left( [S_i > S_j] + \tfrac{1}{2} [S_i = S_j] \right)",
-         inputs=[S, y], better="higher", range=(0, 1), code="cellscore_bench.metrics:auroc",
+         inputs=[S, y], better="higher", range=(0, 1), interval=INTERVAL, code="cellscore_bench.metrics:auroc",
          where={"n_1, n_0": "the numbers of cells with the module on and off"},
          source="the Mann-Whitney U statistic, scaled")
 B.metric("depth_dep", r"\rho_n", "depth dependence",
          "How much the score follows sequencing depth, which it should not: 0 is none.",
          equation=r"\rho_n = \left| \operatorname{corr}\left(\operatorname{rank} S, "
                   r"\operatorname{rank} n\right) \right|",
-         inputs=[S, n], better="lower", range=(0, 1), code="cellscore_bench.metrics:depth_dependence",
+         inputs=[S, n], better="lower", range=(0, 1), interval=INTERVAL, code="cellscore_bench.metrics:depth_dependence",
          source="Spearman's rank correlation")
 B.metric("split", r"r_{AB}", "split agreement",
          "Whether the score depends on which of the module's genes are used: 1 is not at all.",
-         equation=r"r_{AB} = \operatorname{corr}(S^A, S^B)", inputs=[SA, SB], better="higher", range=(-1, 1),
+         equation=r"r_{AB} = \operatorname{corr}(S^A, S^B)", inputs=[SA, SB], better="higher", range=(-1, 1), interval=INTERVAL,
          code="cellscore_bench.metrics:split_agreement")
 B.figure("score_depth", "score against depth",
          "Each cell's score against its sequencing depth, for one replicate (seed 0), the module's cells in red. A good "
