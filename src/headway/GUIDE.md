@@ -108,7 +108,8 @@ def as_written() -> None:
     assert np.allclose(mypkg.core.score(X), expected)  # the code
 ```
 
-A step whose check passes is marked ✓ in the viewer; one that fails, ✗ (and `headway check` fails).
+A step whose check fails is marked ✗ in the viewer (and `headway check` fails); a passing check shows only in the
+step's side panel.
 
 **Shape trace**, in your tests: run the method on small data with the bound functions wrapped; every call's
 bound values must have as many axes as their symbols have `dims`, and each index one size (within a call, and

@@ -50,6 +50,10 @@ header .desc.clip, header .desc.full { cursor: pointer; }
 #gbar .grp:empty { display: none; }
 #gbar button, #gbar .seg label, #gbar label.seg, #gbar details.menu > summary { font-size: 12px; padding: 3px 8px; }
 #gbar details.menu > div { left: 0; right: auto; }
+#gbar .zoom { display: inline-flex; }
+#gbar .zoom button { min-width: 26px; padding: 3px 0; font-weight: 600; }
+#gbar .zoom button:first-child { border-radius: 6px 0 0 6px; }
+#gbar .zoom button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 .mbtns { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
 .mbtns [hidden] { display: none; }
 button, .seg label, details.menu > summary {
@@ -402,7 +406,7 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
       <span class="grp" title="layout"><span class="seg" id="dir">
         <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
-      </span><button id="fit">Fit</button></span>
+      </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
@@ -736,8 +740,8 @@ function nodeHTML(n, fill = null) {
   }
   if (n.type === "op") {
     const o = OP[n.key];
-    const mark = o.verified === true ? `<span class="ok" title="equation verified against the code">✓</span>`
-      : o.verified === false ? `<span class="bad" title="verification failed">✗</span>` : "";
+    // only a problem is marked: a step whose equation check fails (a passing one shows in its side panel)
+    const mark = o.verified === false ? `<span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
     const per = o.per ? `<span class="per">per ${tex(IDX[o.per]?.tex ?? o.per)}</span>` : "";
     return box(`op${o.per ? " stack" : ""}`, esc(o.label) + per + mark);
   }
@@ -975,6 +979,16 @@ function gone(id, lane, lin) {
 /* ---------- pan and zoom ---------- */
 let T = {x: 20, y: 20, k: 1};
 const applyT = () => $("vp").setAttribute("transform", `translate(${T.x},${T.y}) scale(${T.k})`);
+// zoom by `factor` about a point of the graph pane (the wheel: the pointer; the buttons: the middle of the view)
+function zoomAt(mx, my, factor) {
+  const k = Math.min(4, Math.max(0.15, T.k * factor));
+  T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k;
+  applyT();
+}
+function zoomStep(factor) {
+  const g = $("graph"), top = $("gbar").offsetHeight + 8;
+  zoomAt(g.clientWidth / 2, top + (g.clientHeight - top) / 2, factor);
+}
 function fitView(readable = false) {
   if (!current) return;
   const g = $("graph").getBoundingClientRect(), w = current.w || 1, h = current.h || 1;
@@ -991,10 +1005,8 @@ function fitView(readable = false) {
   g.addEventListener("wheel", (e) => {
     if (e.target.closest("#results, #gbar")) return;
     e.preventDefault();
-    const r = g.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    const k = Math.min(4, Math.max(0.15, T.k * Math.exp(-e.deltaY * 0.0015)));
-    T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k;
-    applyT();
+    const r = g.getBoundingClientRect();
+    zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015));
   }, {passive: false});
   let drag = null, panned = false;
   g.addEventListener("pointerdown", (e) => {
@@ -1105,6 +1117,9 @@ function codeHTML(refs) {
 const whereHTML = (o, edit = "") => !o.where?.length ? "" : `<div class="whr">${o.where.map(([t, def], n) =>
   `<span class="wl">${n ? "" : "where" + edit}</span><span class="wt">${tex(t)}</span><span>${rich(def)}</span>`).join("")}</div>`;
 const declHTML = (d) => d && D.snapshot ? `<div class="decl">declared at ${esc(d.relpath)}:${d.line}, in this version</div>` : d ? `<div class="decl"><a href="${editorURL(d.file, d.line, d.col)}" title="open the spec at this declaration">✎ declared at ${esc(d.relpath)}:${d.line}</a>${d.function !== "<module>" ? ` · in <code>${esc(d.function)}()</code>, which may declare more than this` : ""}</div>` : "";
+// a step's equation check (@G.verify), at the bottom of its side panel
+const checkHTML = (o) => o?.verified === null || o?.verified === undefined ? ""
+  : `<h3>Equation check</h3><div class="status ${o.verified ? "ok" : "bad"}">${o.verified ? "✓ " : "✗ "}${esc(o.verify_msg.split("\n")[0])}${o.verified ? "" : `<pre>${esc(o.verify_msg.split("\n").slice(1).join("\n"))}</pre>`}</div>`;
 function showDetail(sel) {
   const el = $("detail");
   document.querySelectorAll("#datasets tr.sel, #figures tr.sel").forEach((tr) => tr.classList.remove("sel"));
@@ -1124,7 +1139,6 @@ function showDetail(sel) {
     if (o.desc) h += `<p>${rich(o.desc)}${pen(o.decl, "desc", "the description")}</p>`;
     h += `<h3>Inputs${pen(o.decl, "inputs", "the inputs")}</h3><div class="chips">${o.inputs.map(symChip).join("") || "<span class='empty'>none</span>"}</div>`;
     h += `<h3>Outputs${pen(o.decl, "outputs", "the outputs")}</h3><div class="chips">${o.outputs.map(symChip).join("")}</div>`;
-    if (o.verified !== null) h += `<h3>Equation check</h3><div class="status ${o.verified ? "ok" : "bad"}">${o.verified ? "✓ " : "✗ "}${esc(o.verify_msg.split("\n")[0])}${o.verified ? "" : `<pre>${esc(o.verify_msg.split("\n").slice(1).join("\n"))}</pre>`}</div>`;
     h += `<h3>Code${pen(o.decl, "code", "the code references")}</h3>${codeHTML(o.code) || "<span class='empty'>no reference</span>"}`;
   } else if (sel.type === "sym") {
     const s = SYM[sel.key];
@@ -1147,6 +1161,7 @@ function showDetail(sel) {
     h += `<h3>Steps</h3><div class="chips">${ORDER.filter((k) => within(OP[k].group, sel.key)).map(opChip).join("")}</div>`;
   }
   h += askHTML(sel);
+  if (sel.type === "op") h += checkHTML(OP[sel.key]);
   el.innerHTML = h;
   el.scrollTop = 0;
   const crumb = el.querySelector(".decl") ?? el.querySelector(".crumb");
@@ -1297,7 +1312,16 @@ const PRESETS = [
   ["Reconcile with the code", "bring the spec up to date with code that has changed", (S) =>
     `The method's code may have changed since the spec of ${S} was written. Read the code it points to as it is now (and the code that calls or is called by it, where that matters for an equation) and bring the spec up to date: equations, inputs and outputs, code references and their anchors, descriptions, \`where=\` definitions, and the @G.verify functions that cover them. If a step was added, removed or moved to another function, change the graph to match. The version history (e.g. \`git log -p\` on the referenced files) may show what changed. Summarize what changed in the code and what you changed in the spec.`],
   ["Standardize notation", "write the same kind of operation the same way, and fixed numbers as constants", (S) =>
-    `Make the notation ${S === scopeOf(SPEC) ? "of the spec consistent" : `of ${S} consistent with the rest of the spec`}: write the same kind of operation the same way everywhere (for example clipping as \\operatorname{clip} with its bounds in the subscript, logit and \\sigma, sums and means over the learning cells, conditions under sums), following the form most steps already use or the project's own documentation (e.g. its README). Where an equation or a description states a number that is fixed in the code (a clip bound, a tolerance, an iteration limit, a pseudocount), declare it with \`G.constant\` (with a code reference to the line that sets it), use its symbol in the equation and list it among the step's inputs; a number the user can change is a \`G.setting\` instead. Do not change what any equation means. List what you changed.`],
+    `Make the notation ${S === scopeOf(SPEC) ? "of the spec consistent" : `of ${S} consistent with the rest of the spec`}: write the same kind of operation the same way everywhere (for example clipping as \\operatorname{clip} with its bounds in the subscript, logit and \\sigma, sums and means over the learning cells, conditions under sums), following the form most steps already use or the project's own documentation (e.g. its README). A symbol declared \`per=\` an index (one copy per fold, per seed, …) carries that index in its notation, the same way everywhere (for example a superscript, $A^{(\\varphi)}_{jg}$), and a step that combines the copies writes which copy each term is (e.g. $A^{(0)}$ and $A^{(1)}$, or the other fold's $\\beta^{(1-\\varphi_i)}_j$) rather than a prime or a separate name; keep one meaning per notation, so that a superscript used for the copies is not also used for something else (rename the other use). Where an equation or a description states a number that is fixed in the code (a clip bound, a tolerance, an iteration limit, a pseudocount), declare it with \`G.constant\` (with a code reference to the line that sets it), use its symbol in the equation and list it among the step's inputs; a number the user can change is a \`G.setting\` instead. Do not change what any equation means. List what you changed.`],
+  ["Regroup steps", "regroup the steps into groups that are each easy to take in, without changing any step", (S) =>
+    `Regroup ${S === scopeOf(SPEC) ? "the spec's steps" : S} (\`G.group\` and each step's \`group=\`). Change only how the steps are grouped: keep every step, symbol, equation, input, output and code reference as it is, and do not change the method's code. Aim for groups that a reader can take in one at a time:
+- Each group holds steps that go together: they serve one purpose, and they are a connected stretch of the data flow, not steps scattered through it.
+- Groups are of a comprehensible and roughly even size, a handful of steps each (about 3 to 7); split a group that is much larger, and merge a lone step into its neighbors unless it deserves to stand out (below).
+- A standard, well-known sequence (e.g. normalizing by library size and then log-transforming) can share one group, labeled by what it achieves.
+- Routine operations (centering, z-scoring, clipping, reshaping, bookkeeping) go together in groups of their own, which can be collapsed by default (\`collapsed=True\`) so they recede.
+- Steps that do the actual modeling, or that carry an important link to the system being studied (an assumption about it, a quantity with a physical or biological meaning), get groups of their own so they stand out, labeled by what they model.
+- Nest groups (\`"phase/subphase"\`) only where a large phase has clear parts, and no more than two levels deep.
+Give each group a short label saying what it does and a one-sentence description. Where a group keeps the role of an existing one under a new path, add \`was="old/path"\` so versions of the spec still match it. Run \`headway check\` afterwards. Then list the groups with their steps and a phrase on why each step is where it is, and say which steps moved.`],
   ["Disambiguate symbols", "make each symbol mean one thing across the spec", (S) =>
     `Make sure every symbol in the equations of ${S} means one thing across the whole spec. Search the spec for the same TeX, and the same letter with other subscripts or accents, used for something else: in equations, \`where=\` definitions, symbol declarations and descriptions. Where one symbol has two meanings, rename one of them, keeping the notation the project's own documentation (e.g. its README) uses and choosing a replacement no other symbol uses. Update every place the renamed symbol appears, and list the renames.`],
 ];
@@ -1343,12 +1367,13 @@ const MODES = [["change", "Change the spec", "a prompt for an assistant that edi
 function askHTML(sel) {
   const about = {sym: "symbol", op: "step", group: "group"}[sel.type];
   const explain = ask.mode === "explain";
-  const hint = explain
-    ? (about ? `the question, with this ${about}'s declaration, code and context` : "the question, with the method's outline and where its spec is")
-    : (about ? `the request, with this ${about}'s declaration, code and context` : "the request, with where the spec is and what its checks report");
+  const hint = (explain
+    ? (about ? `a question you typed, with this ${about}'s declaration, code and context` : "a question you typed, with the method's outline and where its spec is")
+    : (about ? `a request you typed, with this ${about}'s declaration, code and context` : "a request you typed, with where the spec is and what its checks report"))
+    + "; a whole prompt in the box (from a button), as it is";
   return `<div class="ask" id="askbox"><h3>Ask an AI</h3>
     <div class="askmode">${MODES.map(([m, label, tip]) => `<button data-mode="${m}" class="${ask.mode === m ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>
-    <div class="presets">${(explain ? explainPresets() : PRESETS).map(([label, tip], n) => `<button data-preset="${n}" title="${esc(tip)}: fills in the ${explain ? "question" : "request"}">${esc(label)}</button>`).join("")}</div>
+    <div class="presets">${(explain ? explainPresets() : PRESETS).map(([label, tip], n) => `<button data-preset="${n}" title="${esc(tip)}: adds the whole prompt to the box, below what is there">${esc(label)}</button>`).join("")}</div>
     <textarea id="ask" placeholder="${explain ? "What do you want to understand? e.g. “why are the residuals shrunk?”, “what does this give the next step?”" : "What should change? e.g. “define the symbols in the equation that are not explained”, “split this into two steps”"}">${esc(drafts[draftKey(sel)] ?? "")}</textarea>
     ${explain ? `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` : ""}
     <div class="row"><button id="askcopy">Copy prompt</button><span>${hint}</span></div>
@@ -1357,7 +1382,12 @@ function askHTML(sel) {
 function wireAsk(sel) {
   const box = $("ask"), preview = $("askpreview");
   if (!box) return;
-  const refresh = () => { drafts[draftKey(sel)] = box.value; preview.textContent = askPrompt(sel, box.value.trim()); };
+  const copyText = () => wholePrompt(box.value) ? box.value.trim() : askPrompt(sel, box.value.trim());
+  const refresh = () => {
+    drafts[draftKey(sel)] = box.value;
+    preview.textContent = copyText();
+    preview.closest("details").hidden = wholePrompt(box.value);       // the box is the prompt: nothing to preview
+  };
   box.addEventListener("input", refresh);
   refresh();
   document.querySelectorAll("#askbox [data-mode]").forEach((b) => b.addEventListener("click", () => {
@@ -1373,21 +1403,16 @@ function wireAsk(sel) {
     document.querySelectorAll("#askbox [data-format]").forEach((o) => o.classList.toggle("on", o === b));
     refresh();
   }));
-  const filled = new Set();                             // preset texts put in, untouched since
+  // a button adds the whole prompt (the request with its context) below what is in the box, so the box can be
+  // copied as it is, by Copy prompt or by hand
   document.querySelectorAll("#askbox [data-preset]").forEach((b) => b.addEventListener("click", () => {
     const explain = ask.mode === "explain";
     const text = explain ? explainPresets()[+b.dataset.preset][2](explainScope(sel)) : PRESETS[+b.dataset.preset][2](scopeOf(sel));
-    const now = box.value.trim();
-    box.value = !now || filled.has(now) ? text : now + "\n\n" + text;
-    filled.add(box.value.trim());
-    box.style.height = "auto";
-    box.style.height = Math.min(box.scrollHeight + 2, 320) + "px";
+    appendPrompt(box, askPrompt(sel, text));
     refresh();
-    box.focus();
-    box.setSelectionRange(box.value.length, box.value.length);
   }));
   $("askcopy").addEventListener("click", async () => {
-    const text = askPrompt(sel, box.value.trim());
+    const text = copyText();
     try { await navigator.clipboard.writeText(text); }
     catch {                                                         // no clipboard API (some file:// pages)
       const t = document.createElement("textarea");
@@ -1395,6 +1420,17 @@ function wireAsk(sel) {
     }
     note(`Copied the prompt (${text.split("\n").length} lines)${box.value.trim() ? "" : `; it has no ${ask.mode === "explain" ? "question" : "request"} yet`}`);
   });
+}
+// the context sentence each kind of prompt carries: a box holding one has a whole prompt in it, copied as it is
+const wholePrompt = (text) => [BACKGROUND, EXPLAIN_BACKGROUND, RESULTS_CONTEXT].some((c) => text.includes(c.slice(0, 64)));
+function appendPrompt(box, prompt) {
+  const now = box.value.replace(/\s+$/, "");
+  box.value = now ? now + "\n\n" + prompt : prompt;
+  box.style.height = "auto";
+  box.style.height = Math.min(box.scrollHeight + 2, 320) + "px";
+  box.focus();
+  box.setSelectionRange(box.value.length, box.value.length);
+  box.scrollTop = box.scrollHeight;
 }
 const BACKGROUND = "Background: headway describes a method's computation as a graph, declared in a Python spec module next to the code: indices (`G.index`), symbols (`G.symbol`, with their dimensions), settings the user can change (`G.setting`), numbers fixed in the code (`G.constant`), steps (`G.op`, each with a TeX equation, inputs, outputs, references into the code such as \"module:function\" or \"module:function#anchor text\", and `where={TeX: definition}` for symbols its equation uses that are not values of the graph) and groups (`G.group`, paths like \"round 1/model\"). Functions decorated with `@G.verify(...)` check numerically that the code computes a step's equation as written. `headway check` checks the spec against the code.";
 const PLEASE = () => ["Please:",
@@ -1519,7 +1555,7 @@ function buildLegend() {
   for (const k of ORDER) {
     const o = OP[k];
     if (o.group !== last) { h += `<div class="eqgroup" data-ref="G:${esc(o.group)}">${esc(o.group ? o.group.split("/").map((p, n, a) => GRP[a.slice(0, n + 1).join("/")]?.label ?? p).join(" › ") : "top level")}</div>`; last = o.group; }
-    const mark = o.verified === true ? ` <span class="ok" title="verified against the code">✓</span>` : o.verified === false ? ` <span class="bad">✗</span>` : "";
+    const mark = o.verified === false ? ` <span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
     h += `<div class="eqrow" data-ref="o:${esc(k)}" data-go="op:${esc(k)}"><div class="lbl">${esc(o.label)}${mark}${o.per ? `<div class="d">per ${tex(IDX[o.per]?.tex ?? o.per)}</div>` : ""}</div><div>${o.tex ? `<div class="math">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}${o.desc ? `<div class="d">${rich(o.desc)}</div>` : ""}</div><div class="act">${pen(o.decl, "tex", "the equation")}</div></div>`;
   }
   $("equations").innerHTML = h;
@@ -2049,7 +2085,7 @@ function showResultDetail() {
   const {meta, suite} = sn;
   const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
-  let h = "";
+  let h = "", last = "";                                // last: what goes below everything (the equation check)
   if (f.kind === "metric") {
     const m = meta.metrics.find((x) => x.key === f.key), sym = suite.symbols.find((x) => x.key === m.key), op = suite.ops.find((x) => x.key === m.key);
     h += `<h2>${tex(sym.tex)} &nbsp;${esc(sym.name)}</h2><div class="crumb">metric · ${m.better} is better${m.range ? ` · from ${m.range[0]} to ${m.range[1]}` : ""}${m.unit ? " · " + esc(m.unit) : ""} · ${esc(suite.title)}</div>`;
@@ -2061,7 +2097,7 @@ function showResultDetail() {
     for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
       h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key], ivs: x.r?.intervals?.[d.key]?.[m.key]}))) + diffsHTML(m, d.key, rows);
     if (op) {
-      if (op.verified !== null) h += `<h3>Equation check</h3><div class="status ${op.verified ? "ok" : "bad"}">${op.verified ? "✓ " : "✗ "}${esc(op.verify_msg.split("\n")[0])}</div>`;
+      last = checkHTML(op);
       h += `<h3>Code</h3>${codeHTML(op.code) || "<span class='empty'>no reference</span>"}`;
     }
   } else if (f.kind === "dataset") {
@@ -2102,7 +2138,7 @@ function showResultDetail() {
       h += `<h3>What changed from ${esc(ref.name)}</h3>` + (lines.length ? `<ul>${lines.map((l) => `<li>${esc(l.slice(2))}</li>`).join("")}</ul>` : `<p class="empty">nothing in the spec</p>`);
     }
   }
-  h += resultsAskHTML();
+  h += resultsAskHTML() + last;
   el.innerHTML = h;
   el.scrollTop = 0;
   $("togarph")?.addEventListener("click", () => setView("graph"));
@@ -2285,31 +2321,36 @@ const RESULT_ASKS = [
   ["What to try next?", "propose the next changes to try, and what each should do to the results", "Propose two or three changes to the method to try next, to do better on this without doing worse elsewhere. For each: what to change (in the spec's terms: which step, which equation), why, the effect you expect on each metric, and the experiment that would show it. Do not make any change yet."],
 ];
 function resultsAskHTML() {
-  return `<div class="ask" id="askbox"><h3>Ask an AI</h3><div class="presets">${RESULT_ASKS.map(([label, tip], n) => `<button data-rask="${n}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` +
+  return `<div class="ask" id="askbox"><h3>Ask an AI</h3><div class="presets">${RESULT_ASKS.map(([label, tip], n) => `<button data-rask="${n}" title="${esc(tip)}: adds the whole prompt to the box, below what is there">${esc(label)}</button>`).join("")}</div>` +
     `<textarea id="ask" placeholder="Or ask your own question about these results"></textarea>` +
     `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` +
-    `<div class="row"><button id="askcopy">Copy prompt</button><span>the question, with the results, the metric's definition and what changed between the versions</span></div>` +
+    `<div class="row"><button id="askcopy">Copy prompt</button><span>a question you typed, with the results, the metric's definition and what changed between the versions; a whole prompt in the box (from a button), as it is</span></div>` +
     `<details><summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-top:6px">preview</summary><pre id="askpreview"></pre></details></div>`;
 }
 function wireResultsAsk() {
   const box = $("ask"), preview = $("askpreview");
   if (!box) return;
-  const refresh = () => { preview.textContent = resultsPrompt(box.value.trim()); };
+  const copyText = () => wholePrompt(box.value) ? box.value.trim() : resultsPrompt(box.value.trim());
+  const refresh = () => { preview.textContent = copyText(); preview.closest("details").hidden = wholePrompt(box.value); };
   box.addEventListener("input", refresh);
   refresh();
-  document.querySelectorAll("#askbox [data-rask]").forEach((b) => b.addEventListener("click", () => { box.value = RESULT_ASKS[+b.dataset.rask][2]; refresh(); box.focus(); }));
+  document.querySelectorAll("#askbox [data-rask]").forEach((b) => b.addEventListener("click", () => {
+    appendPrompt(box, resultsPrompt(RESULT_ASKS[+b.dataset.rask][2]));
+    refresh();
+  }));
   document.querySelectorAll("#askbox [data-format]").forEach((b) => b.addEventListener("click", () => {
     ask.format = b.dataset.format; saveAsk();
     document.querySelectorAll("#askbox [data-format]").forEach((o) => o.classList.toggle("on", o === b));
     refresh();
   }));
   $("askcopy").addEventListener("click", async () => {
-    const text = resultsPrompt(box.value.trim());
+    const text = copyText();
     try { await navigator.clipboard.writeText(text); }
     catch { const t = document.createElement("textarea"); t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); }
     note(`Copied the prompt (${text.split("\n").length} lines)${box.value.trim() ? "" : "; it has no question yet"}`);
   });
 }
+const RESULTS_CONTEXT = "Context: each version's computation is described by a headway spec (a Python module of steps with equations, inputs, outputs and references into the code); the benchmark is a headway suite, whose metrics are declared the same way. The results were computed by the benchmark, outside headway; each value below is the mean over replicates ± their standard deviation (n).";
 function resultsPrompt(question) {
   const sn = suiteNow(), f = rs.focus;
   if (!sn) return "";
@@ -2321,7 +2362,7 @@ function resultsPrompt(question) {
     : `the metric "${sym(f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`;
   const L = [`I am comparing versions of the method "${own.D.title}" on the benchmark "${suite.title}" (version ${meta.version}), and want to understand ${about}.`, "",
     "My question:", question || "<your question here>", "", "How to answer: " + formatText(), "",
-    "Context: each version's computation is described by a headway spec (a Python module of steps with equations, inputs, outputs and references into the code); the benchmark is a headway suite, whose metrics are declared the same way. The results were computed by the benchmark, outside headway; each value below is the mean over replicates ± their standard deviation (n).", ""];
+    RESULTS_CONTEXT, ""];
   L.push(`The versions, in order: ${rows.map(({lane}) => `"${lane.name}" (${laneMeta(lane)}${keysText(lane.D.keys) ? `; keys: ${keysText(lane.D.keys)}` : ""})`).join("; ")}.`, "");
   const metricLines = (m) => {
     const s = sym(m.key), o = op(m.key);
@@ -2434,6 +2475,8 @@ function note(text) {
 document.querySelectorAll("input[name=focus]").forEach((r) => r.onchange = () => { state.focus = r.value; render(true); });
 document.querySelectorAll("input[name=dir]").forEach((r) => r.onchange = () => { state.dir = r.value; render(true); });
 $("fit").onclick = () => fitView();
+$("zoomin").onclick = () => zoomStep(1.25);
+$("zoomout").onclick = () => zoomStep(1 / 1.25);
 
 /* ---------- layout: the side panel and the legend resize and collapse; kept per browser ---------- */
 const layout = {detail: 460, legend: Math.round(innerHeight * 0.36), detailOpen: true, legendOpen: true};

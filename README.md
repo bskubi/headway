@@ -100,7 +100,7 @@ the legend below. Drag a divider to resize; drag it nearly shut, double-click it
 pane. The sizes are remembered per browser. Click a step or a value for its equation, inputs, outputs and
 code (with a link that opens your editor at the line); double-click a group to collapse or expand it; show only what is
 upstream or downstream of the selection; hide groups; show the settings as nodes. Steps done once per fold or per
-cell are drawn as stacked cards; ✓ marks an equation checked against the code.
+cell are drawn as stacked cards; ✗ marks a step whose equation check failed.
 
 ## A spec
 
@@ -230,7 +230,7 @@ viewer computes them the same way).
 |---|---|---|
 | references | a renamed, moved or deleted function (in any language tree-sitter parses); an anchor that is gone | `headway check` |
 | structure | undeclared symbols or indices, two producers of one value, cycles, unused values | `headway check` |
-| equations (`@G.verify`) | code that no longer computes the equation as written | `headway check`, marked ✓/✗ in the viewer |
+| equations (`@G.verify`) | code that no longer computes the equation as written | `headway check`; a failure is marked ✗ in the viewer |
 | shapes (`headway.trace`) | arrays whose axes do not match the declared indices, an index with two sizes | your test suite |
 
 ```python
