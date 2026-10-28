@@ -10,6 +10,7 @@ from __future__ import annotations
 import traceback
 from dataclasses import dataclass, field
 
+from headway.files import bases
 from headway.resolve import Location, RefError, resolve
 from headway.spec import Headway
 
@@ -102,12 +103,14 @@ def references(g: Headway, report: Report) -> None:
              [(f"symbol {s.key}", s.code) for s in g.symbols.values()] + \
              [(f"dataset {d.key}", d.code) for d in getattr(g, "datasets", {}).values()] + \
              [(f"figure {f.key}", f.code) for f in getattr(g, "figures", {}).values()]       # a Suite's
+    files_ = [d.file for d in g.declared.values() if d.function == "<module>"] or [d.file for d in g.declared.values()]
+    where = bases(max(set(files_), key=files_.count) if files_ else None)      # for references to files by path
     for owner, refs in owners:
         for ref in refs:
             if ref in report.locations:
                 continue
             try:
-                report.locations[ref] = resolve(ref)
+                report.locations[ref] = resolve(ref, where)
             except RefError as err:
                 report.errors.append(f"{owner}: {err}")
     for o in g.ops.values():

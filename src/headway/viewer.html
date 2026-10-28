@@ -222,7 +222,7 @@ table.heat tr.on th.row { color: var(--accent); box-shadow: inset 3px 0 0 var(--
 table.heat tr.off th.row, table.heat tr.off td { opacity: .45; }
 table.heat th .dir { color: var(--muted); font-weight: 400; margin-left: 3px; }
 table.heat th.sorted::after { content: " ▾"; color: var(--accent); }
-table.heat td.cell { min-width: 78px; height: 36px; padding: 2px 6px; text-align: center; border-radius: 4px; cursor: pointer; font-variant-numeric: tabular-nums; line-height: 1.2; }
+table.heat td.cell { min-width: 78px; height: 36px; padding: 2px 6px; text-align: center; border-radius: 4px; cursor: pointer; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
 table.heat td.cell:hover, table.heat td.cell.sel { outline: 2px solid var(--accent); }
 table.heat td.obj { font-weight: 650; }
 table.heat td.gap { width: 8px; padding: 0; }
@@ -820,10 +820,14 @@ const pen = (decl, field, what) => {
 };
 const symChip = (k) => `<span class="chip" data-go="sym:${esc(k)}">${tex(SYM[k]?.tex ?? k)}</span>`;
 const opChip = (k) => `<span class="chip op" data-go="op:${esc(k)}">${esc(OP[k].label)}</span>`;
+// tree-sitter's name for a language -> highlight.js's (null: shown plain)
+const HL = {snakemake: "python", nextflow: "groovy", tsx: "typescript", c_sharp: "csharp", commonlisp: "lisp"};
+const hlLang = (lang) => { const l = HL[lang ?? "python"] ?? lang ?? "python"; return window.hljs?.getLanguage(l) ? l : null; };
 function codeHTML(refs) {
   return refs.map((c) => {
     if (!c.ok) return `<div class="code"><div class="where"><span class="missing">${esc(c.ref)} — does not resolve</span></div></div>`;
-    const lines = hljs.highlight(c.source.replace(/\n$/, ""), {language: "python", ignoreIllegals: true}).value.split("\n");
+    const lang = hlLang(c.lang);
+    const lines = (lang ? hljs.highlight(c.source.replace(/\n$/, ""), {language: lang, ignoreIllegals: true}).value : esc(c.source.replace(/\n$/, ""))).split("\n");
     const body = lines.map((l, n) => `<span class="ln">${c.start + n}</span>${l}`).join("\n");
     const range = c.end > c.start ? `${c.start}–${c.end}` : `${c.start}`;
     const link = D.snapshot ? `<span title="as it was in this version; the file may have changed since">as of ${esc(D.built)}</span>` : `<a href="${editorURL(c.file, c.start)}" title="${esc(c.ref)}">open in ${esc(D.editor.name)} ↗</a>`;
@@ -1175,7 +1179,7 @@ function askPrompt(sel, request) {
   const code = (refs) => refs.forEach((c) => {
     if (!c.ok) { L.push(`- \`${c.ref}\`: does not resolve`); return; }
     const lines = c.source.replace(/\n$/, "").split("\n");
-    L.push(`- \`${c.ref}\`, ${c.relpath} lines ${c.start}–${c.end}:`, "```python", ...lines.slice(0, 80), ...(lines.length > 80 ? [`# … ${lines.length - 80} more lines`] : []), "```");
+    L.push(`- \`${c.ref}\`, ${c.relpath} lines ${c.start}–${c.end}:`, "```" + (c.lang ?? "python"), ...lines.slice(0, 80), ...(lines.length > 80 ? [`… ${lines.length - 80} more lines`] : []), "```");
   });
   let what, obj;
   if (sel.type === "op") { obj = OP[sel.key]; what = `the step "${obj.label}" (op key \`${obj.key}\`)`; }
@@ -1553,7 +1557,20 @@ function suiteNow() {
 }
 const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
 const sd = (v) => v.length > 1 ? Math.sqrt(v.reduce((a, x) => a + (x - mean(v)) ** 2, 0) / (v.length - 1)) : 0;
-const fmt = (x) => x === null || x === undefined || Number.isNaN(x) ? "–" : Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(3);
+// numbers to 3 significant figures (bench.num does the same); scientific notation below 0.001 and from 10000 up
+const SIG = 3;
+function fmt(x) {
+  if (x === null || x === undefined || Number.isNaN(x)) return "–";
+  if (!Number.isFinite(x)) return x > 0 ? "∞" : "−∞";
+  const a = Math.abs(x);
+  if (a === 0) return "0";
+  if (a >= 1e-3 && a < 1e4) {
+    const s = x.toPrecision(SIG);
+    return s.includes("e") ? String(Math.round(x)) : s;           // 1000–9999: the whole number
+  }
+  const [m, e] = x.toExponential(SIG - 1).split("e");
+  return `${m}e${Number(e)}`;
+}
 const objDatasets = (o, meta) => o.datasets ?? meta.datasets.filter((d) => !d.heldout).map((d) => d.key);
 // an objective for each row (null: incomplete), and what each incomplete row lacks
 function objScores(rows, o, meta) {
@@ -1619,17 +1636,15 @@ function pairedDiff(b, a, dk, mk, bName, aName) {
   return {d, paired: diffs.length > 0, n: diffs.length, sd: diffs.length > 1 ? sd(diffs) : null, agree, intervals: ivs,
     pooled: !!src?.pooled, excluding, marker, supported: marker === "●" || (!ivs.length && diffs.length > 1 && agree === diffs.length), points};
 }
-// small differences need more digits than values do
-const fmtD = (x) => x !== 0 && Math.abs(x) < 0.01 ? x.toPrecision(2) : fmt(x);
 function pairedHTML(p, better) {
   if (p.paired ? p.points.every((q) => Math.abs(q.d) < 1e-12) : Math.abs(p.d) < 1e-12)
     return `<span class="dl same">=${p.marker ? ` ${p.marker}` : ""}</span>`;
   const good = better === "higher" ? p.d > 0 : p.d < 0;
-  return `<span class="dl ${p.supported ? (good ? "good" : "bad") : "weak"}">${p.d > 0 ? "+" : "−"}${fmtD(Math.abs(p.d))}` +
+  return `<span class="dl ${p.supported ? (good ? "good" : "bad") : "weak"}">${p.d > 0 ? "+" : "−"}${fmt(Math.abs(p.d))}` +
     ` <span class="ag">${p.paired ? `${p.agree}/${p.n}` : "unpaired"}${p.marker ? " " + p.marker : ""}</span></span>`;
 }
 function pairedTitle(p, bName, aName, m) {
-  const L = [`${bName} − ${aName}: ${p.d >= 0 ? "+" : "−"}${fmtD(Math.abs(p.d))}` + (p.paired ? `, the mean of ${p.n} per-replicate difference${p.n > 1 ? "s" : ""}${p.sd !== null ? ` (s.d. ${fmtD(p.sd)})` : ""}; ${p.agree} of ${p.n} agree in sign` : ", the difference of the means (unpaired: no replicate ids in common)")];
+  const L = [`${bName} − ${aName}: ${p.d >= 0 ? "+" : "−"}${fmt(Math.abs(p.d))}` + (p.paired ? `, the mean of ${p.n} per-replicate difference${p.n > 1 ? "s" : ""}${p.sd !== null ? ` (s.d. ${fmt(p.sd)})` : ""}; ${p.agree} of ${p.n} agree in sign` : ", the difference of the means (unpaired: no replicate ids in common)")];
   if (p.intervals.length) L.push(`the benchmark's interval${p.intervals.length > 1 ? "s" : ""} of the difference${p.pooled ? " (pooled over replicates)" : ""}${m.interval ? ` (${m.interval})` : ""}: ${p.excluding} of ${p.intervals.length} exclude 0`);
   else if (p.paired) L.push("no interval of the difference for this pair from the benchmark");
   L.push(p.supported ? "supported" : "not supported: shown in grey");
@@ -1701,7 +1716,7 @@ function renderResults() {
       const column = rows.map((x) => { const q = value(x, d.key, m.key); return q ? mean(q) : null; });
       const ids = row.r.replicates?.[d.key]?.[m.key], ivs = row.r.intervals?.[d.key]?.[m.key];
       const pd = rs.delta && rr?.r ? pairedDiff(row.r, rr.r, d.key, m.key, row.lane.name, rr.lane.name) : null;
-      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x) + (ivs?.[k] ? ` [${fmtD(ivs[k][0])}, ${fmtD(ivs[k][1])}]` : "")).join(", "))}${pd ? "\n" + esc(pairedTitle(pd, row.lane.name, rr.lane.name, m)) : ""}">` +
+      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x) + (ivs?.[k] ? ` [${fmt(ivs[k][0])}, ${fmt(ivs[k][1])}]` : "")).join(", "))}${pd ? "\n" + esc(pairedTitle(pd, row.lane.name, rr.lane.name, m)) : ""}">` +
         `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${pd ? pairedHTML(pd, m.better) : ""}</td>`;
     }
     h += `</tr>`;
@@ -1908,7 +1923,7 @@ function stripHTML(m, rows) {
     // replicates spread a little up and down, so that their intervals do not lie on one another
     const dy = (n) => row.ivs ? (n - (row.v.length - 1) / 2) * Math.min(3, 12 / row.v.length) : 0;
     row.ivs?.forEach((iv, n) => { if (iv) g += `<line class="iv" x1="${x(Math.max(lo, iv[0])).toFixed(1)}" x2="${x(Math.min(hi, iv[1])).toFixed(1)}" y1="${y + dy(n)}" y2="${y + dy(n)}"/>`; });
-    row.v.forEach((v, n) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${row.ids ? esc(row.ids[n]) + ": " : ""}${fmt(v)}${row.ivs?.[n] ? ` [${fmtD(row.ivs[n][0])}, ${fmtD(row.ivs[n][1])}]` : ""}</title></circle>`; });
+    row.v.forEach((v, n) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${row.ids ? esc(row.ids[n]) + ": " : ""}${fmt(v)}${row.ivs?.[n] ? ` [${fmt(row.ivs[n][0])}, ${fmt(row.ivs[n][1])}]` : ""}</title></circle>`; });
     const mu = x(mean(row.v));
     g += `<line class="mean" x1="${mu}" x2="${mu}" y1="${y - 7}" y2="${y + 7}"><title>mean ${fmt(mean(row.v))}</title></line>`;
   });
@@ -1953,18 +1968,18 @@ function diffsHTML(m, dk, rows) {
     const y = top + k * rowH + rowH / 2, ps = pts(p);
     if (pairs[k - 1] && !pairs[k - 1].extra && pairs[k].extra) g += `<line class="axis" x1="8" x2="${W - 8}" y1="${y - rowH / 2}" y2="${y - rowH / 2}" stroke-dasharray="2 3"/>`;
     g += `<text x="${left - 8}" y="${y + 4}" text-anchor="end"${row.lane === active ? ' font-weight="700"' : ""}${pairs[k].extra ? ' class="mu"' : ""}>${esc(row.lane.name)} − ${esc(ref.name)}</text>`;
-    if (p.pooled) for (const [a, b] of p.intervals) g += `<rect class="pool" x="${x(a)}" y="${y - 7}" width="${Math.max(1, x(b) - x(a))}" height="14"><title>pooled interval [${fmtD(a)}, ${fmtD(b)}]</title></rect>`;
+    if (p.pooled) for (const [a, b] of p.intervals) g += `<rect class="pool" x="${x(a)}" y="${y - 7}" width="${Math.max(1, x(b) - x(a))}" height="14"><title>pooled interval [${fmt(a)}, ${fmt(b)}]</title></rect>`;
     const dy = (n) => (n - (ps.length - 1) / 2) * Math.min(3, 12 / ps.length);
     ps.forEach((q, n) => {
       if (q.iv) g += `<line class="iv" x1="${x(q.iv[0])}" x2="${x(q.iv[1])}" y1="${y + dy(n)}" y2="${y + dy(n)}"/>`;
-      g += `<circle cx="${x(q.d).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${q.id ? esc(q.id) + ": " : ""}${q.d >= 0 ? "+" : ""}${fmtD(q.d)}${q.iv ? ` [${fmtD(q.iv[0])}, ${fmtD(q.iv[1])}]` : ""}</title></circle>`;
+      g += `<circle cx="${x(q.d).toFixed(1)}" cy="${y + dy(n)}" r="3.4"><title>${q.id ? esc(q.id) + ": " : ""}${q.d >= 0 ? "+" : ""}${fmt(q.d)}${q.iv ? ` [${fmt(q.iv[0])}, ${fmt(q.iv[1])}]` : ""}</title></circle>`;
     });
     const good = m.better === "higher" ? p.d > 0 : p.d < 0;
     g += `<text x="${W - right + 6}" y="${y + 4}" class="${p.supported ? (good ? "good" : "bad") : "mu"}">${p.paired ? `${p.agree}/${p.n}` : "unpaired"}${p.marker ? " " + p.marker : ""}<title>${esc(pairedTitle(p, row.lane.name, ref.name, m))}</title></text>`;
   });
   const yAxis = top + pairs.length * rowH + 4;
   g += `<line class="axis" x1="${left}" x2="${W - right}" y1="${yAxis}" y2="${yAxis}"/>` +
-    [lo, 0, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${k === 1 ? "0" : fmtD(v)}</text>`).join("");
+    [lo, 0, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${k === 1 ? "0" : fmt(v)}</text>`).join("");
   const none = pairs.filter(({p}) => p.paired && !p.intervals.length).map(({row, ref}) => `${row.lane.name} − ${ref.name}`);
   const extra = pairs.some((x) => x.extra);
   return `<div class="eqlbl" style="margin-top:2px">Differences from the version each is compared with${extra ? ", then (in grey) the other pairs the benchmark compared" : ""}${m.interval ? `; whiskers: ${esc(m.interval)}` : ""}</div><svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>` +
@@ -2030,7 +2045,7 @@ function resultsPrompt(question) {
   for (const m of shown) for (const d of datasets) {
     L.push(`- ${sym(m.key)?.name} on ${d.name}: ` + rows.map(({lane, r}) => {
       const v = r?.values[d.key]?.[m.key], ids = r?.replicates?.[d.key]?.[m.key], ivs = r?.intervals?.[d.key]?.[m.key];
-      return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length}${ids || ivs ? `: ${v.map((x, k) => `${ids ? ids[k] + " " : ""}${fmt(x)}${ivs?.[k] ? ` [${fmtD(ivs[k][0])}, ${fmtD(ivs[k][1])}]` : ""}`).join(", ")}` : ""})` : "not run"}`;
+      return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length}${ids || ivs ? `: ${v.map((x, k) => `${ids ? ids[k] + " " : ""}${fmt(x)}${ivs?.[k] ? ` [${fmt(ivs[k][0])}, ${fmt(ivs[k][1])}]` : ""}`).join(", ")}` : ""})` : "not run"}`;
     }).join("; "));
     for (const {row, ref, p} of diffPairs(m.key, d.key, rows)) L.push(`  - ${pairedTitle(p, row.lane.name, ref.name, m)}`);
   }

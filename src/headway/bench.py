@@ -482,12 +482,34 @@ def _sign(x: float) -> int:
     return 0 if abs(x) < 1e-12 else 1 if x > 0 else -1
 
 
+SIG = 3
+
+
+def num(x: float) -> str:
+    """A number to SIG significant figures, as the viewer shows it: scientific notation below 0.001 and from
+    10000 up; 1000-9999 as the whole number."""
+    if x != x:
+        return "–"
+    if x in (float("inf"), float("-inf")):
+        return "∞" if x > 0 else "−∞"
+    a = abs(x)
+    if a == 0:
+        return "0"
+    if 1e-3 <= a < 1e4:
+        s = f"{x:#.{SIG}g}"
+        return str(math.floor(x + 0.5)) if "e" in s else s.rstrip(".")      # rounds half up, as JS does
+    m, e = f"{x:.{SIG - 1}e}".split("e")
+    return f"{m}e{int(e)}"
+
+
 def _paired_text(p: dict[str, Any] | None) -> str:
     if p is None:
         return "-"
-    t = f"{p['d']:+.3f}"
+    if abs(p["d"]) < 1e-12 and (p["sd"] or 0) < 1e-12:          # the same, up to rounding error
+        return "=" + (" " + p["marker"] if p["marker"] else "")
+    t = ("+" if p["d"] >= 0 else "") + num(p["d"])
     if p["paired"]:
-        t += (f"±{p['sd']:.3f}" if p["sd"] is not None else "") + f" {p['agree']}/{p['n']}"
+        t += (f"±{num(p['sd'])}" if p["sd"] is not None else "") + f" {p['agree']}/{p['n']}"
     else:
         t += " unpaired"
     return t + (" " + p["marker"] if p["marker"] else "")
@@ -510,10 +532,10 @@ def table(headways: Sequence[Mapping[str, Any]], names: Sequence[str], heldout: 
     rows = [head]
     objs = [scores(entries, o, suite) for o in meta["objectives"]]
     for n, (e, name) in enumerate(zip(entries, names)):
-        row = [name] + ["incomplete" if s[n] is None else f"{s[n]:.3f}" for s in objs]
+        row = [name] + ["incomplete" if (x := s[n]) is None else num(x) for s in objs]
         for m, d in cols:
             v = e["values"].get(d["key"], {}).get(m["key"])
-            row.append("-" if not v else f"{_mean(v):.3f}" + (f"±{_sd(v):.3f}" if len(v) > 1 else ""))
+            row.append("-" if not v else num(_mean(v)) + (f"±{num(_sd(v))}" if len(v) > 1 else ""))
         rows.append(row)
     lines = [f"suite {sid}; objectives: " + "; ".join(f"{o['key']} ({o['how']}): {o['name']}" for o in meta["objectives"])]
     lines += _columns(rows)

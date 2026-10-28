@@ -1,4 +1,4 @@
-"""Code references -> source locations.
+"""Code references -> source locations. Python, by module (below); a file in any language, by path (files.py).
 
   "pkg.mod:func"                  the whole function (or class, method, property: "pkg.mod:Class.method")
   "pkg.mod:Class.field"           a line of a class body (a dataclass field), or "pkg.mod:CONSTANT" of the module
@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,14 +29,23 @@ class Location:
     start: int          # 1-based, inclusive
     end: int
     source: str
+    lang: str = "python"    # tree-sitter's name for the language
 
 
-def resolve(ref: str) -> Location:
+def resolve(ref: str, where: list[Path] | None = None) -> Location:
+    """A reference -> its location: a Python module's ("pkg.mod:func"), or a file's in any language
+    ("R/score.R:func", files.py), looked for under `where` (files.bases)."""
+    from headway import files
+    found = files.find(ref, where or [Path.cwd()])
+    if found:
+        return files.resolve(ref, *found)
     module_name, _, rest = ref.partition(":")
     qualname, _, anchor = rest.partition("#")
     try:
         module = importlib.import_module(module_name)
     except ImportError as e:
+        if files.looks_like_file(ref):
+            raise RefError(f"{ref}: no file {files._split(ref)[0]} under {', '.join(map(str, where or [Path.cwd()]))}") from e
         raise RefError(f"{ref}: cannot import {module_name} ({e})") from e
     file = inspect.getsourcefile(module)
     assert file
@@ -103,7 +113,11 @@ def _indent(line: str) -> int:
     return len(line) - len(line.lstrip())
 
 
-def _anchored(ref: str, lines: list[str], start: int, anchor: str) -> tuple[list[str], int]:
+def _anchored(ref: str, lines: list[str], start: int, anchor: str,
+              comment: Callable[[int], bool] | None = None) -> tuple[list[str], int]:
+    """The lines an anchor picks out of `lines` (which start at line `start`). comment(n): is lines[n] a comment."""
+    if comment is None:
+        comment = lambda n: lines[n].strip().startswith("#")     # noqa: E731
     first_text, sep, last_text = anchor.partition("..")
     hits = [n for n, line in enumerate(lines) if first_text in line]
     if not hits:
@@ -123,7 +137,7 @@ def _anchored(ref: str, lines: list[str], start: int, anchor: str) -> tuple[list
             s = lines[n].strip()
             if s and _indent(lines[n]) < depth:
                 break
-            if s.startswith("#") and _indent(lines[n]) <= depth:
+            if comment(n) and _indent(lines[n]) <= depth:
                 break
             b = n
         while b > a and not lines[b].strip():

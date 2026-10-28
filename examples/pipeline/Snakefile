@@ -1,0 +1,21 @@
+# Reads to a count matrix: align each sample, then count the reads on each gene.
+configfile: "config.yaml"
+
+rule align:
+    input:
+        reads="trimmed/{sample}.fq.gz",
+        index=config["index"]
+    output:
+        "aligned/{sample}.bam"
+    threads: 8
+    shell:
+        "hisat2 -p {threads} -x {input.index} -U {input.reads} | samtools sort -o {output}"
+
+rule count:
+    input:
+        bams=expand("aligned/{sample}.bam", sample=config["samples"]),
+        genes=config["annotation"]
+    output:
+        "counts.tsv"
+    shell:
+        "featureCounts -a {input.genes} -o {output} {input.bams}"

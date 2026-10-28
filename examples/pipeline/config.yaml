@@ -1,0 +1,4 @@
+samples: [ctrl_1, ctrl_2, ctrl_3, treat_1, treat_2, treat_3]
+min_reads: 1000000
+index: ref/grch38
+annotation: ref/genes.gtf

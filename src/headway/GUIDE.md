@@ -8,7 +8,8 @@ file. `headway guide` prints it.
 
 A **headway** describes a method (a computational or statistical procedure in some codebase) as a computation
 graph: the values it works with, the steps that turn some values into others, each step's equation, and a
-reference into the code that computes it. You write it as a Python module, the **spec**, kept next to the code.
+reference into the code that computes it, in Python or another language. You write it as a Python module, the
+**spec**, kept next to the code.
 headway then:
 
 - **checks the spec against the code**: every code reference resolves; the graph is well formed; each equation you
@@ -155,6 +156,34 @@ def test_shapes():
 The anchor text must occur on exactly one line. Anchor on something that would change if the step changed: for a
 constant, the literal value (`"pkg.mod:fit#np.clip(p, 1e-3..np.clip(p, 1e-3"`), so changing it in the code
 fails the check until the spec is updated.
+
+### Code in other languages
+
+The spec is always Python, but the code it points to can be in any language: a reference that starts with a file
+path points into that file.
+
+```
+"R/score.R"                         the whole file
+"R/score.R:score_cells"             a definition: a function, class, method, struct, rule, ... ("Model.score" for
+                                    one inside another: a method of a class, a function in a Rust impl)
+"R/score.R:score_cells#text"        anchors as above, within the definition (or "R/score.R#text", within the file)
+"main.nf#process ALIGN"             on a line of code (not a comment), "#text" takes the whole construct that
+                                    starts on that line: the process, rule, function or block
+"config.yaml:12-14", "...:12"       lines
+```
+
+Definitions are found with tree-sitter (the `tree-sitter-language-pack` dependency), which knows R, Rust, C, C++,
+bash, Julia, Go, Java, JavaScript, Snakemake, Fortran, MATLAB and a few hundred others; each language's parser
+downloads on first use into a cache (`~/.cache/tree-sitter-language-pack`). For a language it lacks (Nextflow, for
+one), names do not resolve; text anchors and lines still do. For such a construct, the end is the last line
+indented under the anchored one, plus a closing line ("}", "end", ...). Prefer names, then anchors, and lines only
+when nothing else works: the check catches a renamed definition or a vanished anchor, while lines go stale
+silently as the file changes (`headway diff` still shows the code they now point to).
+
+A path is relative to the working directory, else to the git work tree holding the spec, else to the folder
+above the spec's outermost package, else to the spec's own folder; or absolute. The viewer shows each reference's
+code with its language's highlighting. The equation checks (`@G.verify`) and the shape trace are for Python code
+only.
 
 ## What `headway check` reports
 

@@ -7,6 +7,11 @@ graph, with a legend of indices, symbols and equations and the code behind every
 (commits, experiments, competing methods) open side by side, and their benchmark results show as a heatmap, so
 you can see what each change gained.
 
+The code can be in any language: the spec is Python, and a reference like `"R/score.R:score_cells"`,
+`"src/lib.rs:Model.score"` or `"Snakefile:align"` finds the definition with tree-sitter (`"main.nf#process TRIM"`
+anchors on text, and `"config.yaml:2"` names lines, for files it cannot parse). `examples/pipeline` is a headway
+of a pipeline in Nextflow, Snakemake, bash, R and Rust.
+
 **[GUIDE.md](https://github.com/bskubi/headway/blob/main/src/headway/GUIDE.md)** (also `headway guide`) is the full description: how headway works and how
 to write a headway for a codebase. It is written to be handed to a coding agent working in another repository.
 
@@ -213,7 +218,7 @@ viewer computes them the same way).
 
 | check | catches | where |
 |---|---|---|
-| references | a renamed, moved or deleted function; an anchor comment that is gone | `headway check` |
+| references | a renamed, moved or deleted function (in any language tree-sitter parses); an anchor that is gone | `headway check` |
 | structure | undeclared symbols or indices, two producers of one value, cycles, unused values | `headway check` |
 | equations (`@G.verify`) | code that no longer computes the equation as written | `headway check`, marked ✓/✗ in the viewer |
 | shapes (`headway.trace`) | arrays whose axes do not match the declared indices, an index with two sizes | your test suite |

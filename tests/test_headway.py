@@ -360,7 +360,7 @@ def test_results(tmp_path, monkeypatch, capsys) -> None:
     assert bench.scores(r, rank, suite)[:2] == [2.0, 1.0]                  # two is better on everything
     assert cli.main(["results", *(str(tmp_path / f"{n}.json") for n in ("one", "two", "three"))]) == 0
     out = capsys.readouterr().out
-    assert "suite toy bench@2" in out and "incomplete" in out and "0.850±0.071" in out
+    assert "suite toy bench@2" in out and "incomplete" in out and "0.850±0.0707" in out
 
 
 def test_example_suite(monkeypatch) -> None:
@@ -560,3 +560,52 @@ def page_data() -> dict:
     from headway import page
     G = spec()
     return page.data(G, headway.check(G))
+
+
+def test_file_references(tmp_path, monkeypatch) -> None:
+    from headway import files
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "R").mkdir()
+    (tmp_path / "R" / "score.R").write_text("# scoring\nSCALE <- 2\n\nnormalize <- function(x, f) {\n  x / f\n}\n\n"
+                                            "score <- function(x) {\n  y <- normalize(x, SCALE)\n  # the mean\n"
+                                            "  mean(y)\n}\n")
+    (tmp_path / "lib.rs").write_text("pub struct Model { w: f64 }\nimpl Model {\n    pub fn score(&self) -> f64 {\n"
+                                     "        self.w\n    }\n}\n")
+    (tmp_path / "main.nf").write_text("process ALIGN {\n    script:\n    \"\"\"\n    bwa mem\n    \"\"\"\n}\n\n"
+                                      "workflow {\n    ALIGN()\n}\n")
+    (tmp_path / "Snakefile").write_text("rule align:\n    input: \"a.fq\"\n    shell: \"bwa\"\n\nrule sort:\n"
+                                        "    shell: \"samtools\"\n")
+    span = lambda ref: (lambda loc: (loc.start, loc.end))(resolve(ref, [tmp_path]))      # noqa: E731
+    # lines and text anchors: any file, no parser needed; on a line of code, the construct that starts there
+    assert span("main.nf:2-4") == (2, 4) and span("main.nf:9") == (9, 9)
+    assert span("main.nf#process ALIGN") == (1, 6) and span("main.nf#workflow") == (8, 10)
+    assert span("main.nf#script..bwa") == (2, 4)
+    loc = resolve("main.nf#workflow", [tmp_path])
+    assert loc.lang == "nextflow" and loc.relpath == "main.nf" and loc.source.startswith("workflow {")
+    with pytest.raises(RefError, match="no parser"):
+        resolve("main.nf:ALIGN", [tmp_path])
+    with pytest.raises(RefError, match="has 10"):
+        resolve("main.nf:30", [tmp_path])
+    with pytest.raises(RefError, match="no file"):
+        resolve("R/gone.R:score", [tmp_path])
+    if files._parser("r") is None or files._parser("rust") is None or files._parser("snakemake") is None:
+        pytest.skip("tree-sitter parsers not available (they download on first use)")
+    # names, found with tree-sitter
+    assert span("R/score.R:normalize") == (4, 6) and span("R/score.R:score") == (8, 12)
+    assert span("R/score.R:score#the mean") == (10, 11) and span("R/score.R#SCALE <-") == (2, 2)
+    assert resolve("R/score.R:score", [tmp_path]).lang == "r"
+    assert span("lib.rs:Model.score") == (3, 5) and span("lib.rs:Model") == (1, 1)
+    assert span("Snakefile:sort") == (5, 6) and span("Snakefile#rule align") == (1, 3)
+    with pytest.raises(RefError, match="defines normalize, score"):
+        resolve("R/score.R:scores", [tmp_path])
+    # in a spec: checked, and in the built page with the language
+    G = headway.Headway("polyglot")
+    x = G.symbol("x", "x", "x", role="input")
+    y = G.symbol("y", "y", "y", role="output")
+    G.op("score", "score", "y = x", inputs=[x], outputs=[y], code=["R/score.R:score", "main.nf#process ALIGN"])
+    report = headway.check(G)
+    assert report.ok, report.text()
+    code = headway.build(G, None)["ops"][0]["code"]
+    assert [c["lang"] for c in code] == ["r", "nextflow"] and code[0]["relpath"] == "R/score.R"
+    G.op("gone", "gone", "y = x", inputs=[x], outputs=[y], code="R/score.R:gone")
+    assert any("no definition 'gone'" in e for e in headway.check(G).errors)

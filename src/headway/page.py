@@ -48,7 +48,7 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
             loc = report.locations.get(ref)
             out.append({"ref": ref, "ok": loc is not None} | ({} if loc is None else
                        {"file": loc.file, "relpath": loc.relpath, "start": loc.start, "end": loc.end,
-                        "source": loc.source}))
+                        "source": loc.source, "lang": loc.lang}))
         return out
 
     def decl(name: str) -> dict[str, Any] | None:
