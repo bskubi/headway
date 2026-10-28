@@ -136,7 +136,7 @@ class Home:
         except (OSError, ValueError) as e:
             h.send(str(e), "text/plain", 400)
             return
-        h.send(page.html(d | ({"lanes": lanes} if lanes else {})), "text/html")
+        h.send(page.html(d | {"home": True} | ({"lanes": lanes} if lanes else {})), "text/html")
 
     def server(self, rel: str) -> Server | None:
         """The live server of the spec in the file `rel`, started on the first visit."""
@@ -146,7 +146,7 @@ class Home:
                 info = f and self.what(f)
                 if not info or info["kind"] != "spec":
                     return None
-                server = Server(info["module"], self.build_args, cwd=info["cwd"])
+                server = Server(info["module"], self.build_args, cwd=info["cwd"], home=True)
                 server.start()
                 self.live[rel] = server
             return self.live[rel]

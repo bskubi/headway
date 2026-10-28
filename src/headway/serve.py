@@ -32,8 +32,9 @@ QUIET = 0.3         # seconds of no further change before rebuilding
 
 class Server:
     def __init__(self, spec: str, build_args: Sequence[str] = (), cwd: str | None = None,
-                 compare: Sequence[dict[str, Any]] = ()):
+                 compare: Sequence[dict[str, Any]] = (), home: bool = False):
         self.spec, self.build_args = spec, list(build_args)
+        self.home = home                                    # served under the home page (home.py): link back
         self.compare = list(compare)                        # other versions, shown in lanes of their own
         self.cwd = cwd or os.getcwd()
         self.data: dict[str, Any] | None = None             # the last good build
@@ -87,7 +88,7 @@ class Server:
         report = run.stderr.strip()
         with self.changed:
             if data is not None:
-                self.data, self.error = data | {"live": True, "version": self.version + 1}, ""
+                self.data, self.error = data | {"live": True, "version": self.version + 1, "home": self.home}, ""
                 if self.compare:
                     self.data["lanes"] = self.compare
             else:

@@ -33,6 +33,10 @@ body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 syste
   height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 header, #checks { flex: none; }
 header { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: end; }
+#home { display: inline-block; font-size: 12px; color: var(--accent); text-decoration: none; margin-bottom: 2px; }
+#home:hover { text-decoration: underline; }
+.noresults { max-width: 640px; padding: 24px 20px; line-height: 1.5; }
+.noresults p { margin: 0 0 10px; }
 header h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
 header .desc { color: var(--muted); max-width: 70ch; font-size: 13px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
@@ -306,11 +310,12 @@ table.heat th[data-ds] { cursor: pointer; }
 <body>
 <header>
   <div>
+    <a id="home" href="/" hidden title="back to headway serve's page of the specs and built headways in this directory">← all headways</a>
     <h1 id="title"></h1>
     <div class="desc" id="desc"></div>
   </div>
   <div class="toolbar">
-    <span class="seg" id="viewseg" hidden title="the methods' computation graph, or their benchmark results">
+    <span class="seg" id="viewseg" title="the methods' computation graph, or their benchmark results">
       <label><input type="radio" name="view" value="graph" checked><span>Graph</span></label>
       <label><input type="radio" name="view" value="results"><span>Results</span></label>
     </span>
@@ -1653,7 +1658,13 @@ function pairedTitle(p, bName, aName, m) {
 function renderResults() {
   const el = $("results");
   const sn = suiteNow();
-  if (!sn) { el.innerHTML = `<p class="empty">None of the open versions has benchmark results. Results are put into a headway with <code>headway build --results</code> or <code>headway attach</code>.</p>`; return; }
+  if (!sn) {
+    el.innerHTML = `<div class="noresults"><p><b>No benchmark results in ${LANES.length > 1 ? "any of the open versions" : "this headway"}.</b></p>` +
+      `<p>Results are put into a built headway by the benchmark: <code>headway build SPEC --results results.json</code>, <code>headway attach HEADWAY results.json</code>, or <code>headway.build(..., results=[...])</code> from Python (<code>headway guide</code>, “Benchmarks”).${D.live ? " A spec served live has none of its own: it is the code as it is now, not yet benchmarked." : ""}</p>` +
+      `<p><button id="noresultsopen">Compare…</button> opens built versions that have results beside this one.</p></div>`;
+    $("noresultsopen").onclick = () => $("lanefile").click();
+    return;
+  }
   const {meta} = sn;
   const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
@@ -1752,7 +1763,8 @@ function renderResults() {
 // the side panel in the Results view: what a metric or objective is, and the values' spread
 function showResultDetail() {
   const el = $("detail"), sn = suiteNow(), f = rs.focus;
-  if (!sn || !f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
+  if (!sn) { el.innerHTML = `<p class="empty">Nothing to compare yet: no open version has benchmark results.</p>`; return; }
+  if (!f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
   const {meta, suite} = sn;
   const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
@@ -2073,7 +2085,7 @@ function resultsPrompt(question) {
 }
 
 function setView(v) {
-  rs.view = v === "results" && hasResults() ? "results" : "graph";
+  rs.view = v === "results" ? "results" : "graph";
   saveRs();
   document.body.classList.toggle("resultsview", rs.view === "results");
   $("results").hidden = rs.view !== "results";
@@ -2082,8 +2094,7 @@ function setView(v) {
   else showDetail(state.sel);
 }
 function viewSwitch() {
-  $("viewseg").hidden = !hasResults();
-  if (!hasResults() && rs.view === "results") setView("graph");
+  $("viewseg").hidden = false;           // with no results, the Results view says how to get them
 }
 document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => setView(r.value));
 
@@ -2091,6 +2102,7 @@ document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => 
 document.addEventListener("click", (e) => { if (e.target.closest(".pen")) e.stopPropagation(); }, true);
 function header(buildError = "") {
   $("title").textContent = D.title;
+  $("home").hidden = !D.home;
   document.title = D.title;
   $("desc").innerHTML = rich(D.desc) + ` <span style="opacity:.7">· built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}</span>` + (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span>` : "");
   $("checks").innerHTML = buildError
