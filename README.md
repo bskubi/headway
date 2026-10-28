@@ -21,9 +21,9 @@ headway check my_pkg.graphspec                  # exit 1 if the spec and the cod
 headway build my_pkg.graphspec -o headway.html  # one HTML file; open it in a browser
     [--collapse "round 0"] [--hide setup] [--json headway.json] [--no-verify] [--offline]
     [--name v3] [--compare v1.json --compare v2.html] [--results results.json]
-headway serve my_pkg.graphspec [--open]         # the viewer at http://127.0.0.1:8765/, rebuilt live
+headway serve [--open]                          # the library at http://127.0.0.1:8765/: open, compare, serve
+headway serve my_pkg.graphspec [--open]         # the same, opened on the spec, rebuilt live
     [--compare old.json]
-headway serve [--open]                          # no spec: a home page for the current directory
 headway diff v1.json v2.json my_pkg.graphspec   # what changed from each version to the next
 headway attach v3.json results.json             # put benchmark results into a built headway (or build --results)
 headway results v1.json v2.json v3.json         # the versions' results on their common benchmark suite
@@ -45,12 +45,20 @@ losing its view: the selection, the zoom, the open groups. Steps that changed pu
 changed. A spec that fails to build leaves the last good graph up, with the error over it. Each step, value and
 group in the side panel links to its declaration in the spec ("✎ declared at …").
 
-`headway serve` with no spec serves a home page for the current directory. It lists the specs it finds (modules
+`headway serve` serves the **library**: one place to open headways from. It lists the headways opened recently
+(in any directory, kept in `~/.local/state/headway/recent.json`) and what is in a folder: the specs (modules
 that make a `Headway` or `Suite` at their top level; test files are skipped) and the built headways (pages and
-`--json` files), grouped by method, with when each was built, its results and its keys. Click a spec to serve it
-live, as `headway serve SPEC` would; click a headway to open it; or tick several to compare them, the most
-recently built opening with the others in lanes beside it. Built files open in the current viewer. Hidden
-directories, virtual environments, `node_modules`, `build` and `dist` are not looked in.
+`--json` files), with when each was built, its results and its keys, sortable by any column. It starts in the
+directory the server was started in; browse to any other (the path bar, a folder's subfolders, **launch** (the folder it was
+launched in), **home**, or type a path). **Open** a headway, tick several to open them side by side (the most recently built in
+the page, the others in lanes beside it), or **Serve live** a spec, as `headway serve SPEC` does. Built files
+open in the current viewer. Hidden directories, virtual environments, `node_modules`, `build` and `dist` are not
+looked in.
+
+With something open, **Open…** shows the same library over the page, to **Add beside** what is open (a lane of
+its own) or **Open** something instead; **←** closes everything and goes back to the library. The address says
+what is open (`/?open=v4.json&open=v3.json`), so a reload, a bookmark or the browser's Back button returns to it.
+The server answers only requests to 127.0.0.1 or localhost.
 
 ## Editing from the page
 
@@ -127,8 +135,9 @@ A version is a built headway: the JSON from `build --json`, or a page from `buil
 spec as it is now. headway does not manage the versions or need git; it records the spec's file and, if it is in
 a git repository, the commit, branch and whether the work tree had changes, and shows them with the version.
 
-- **In the viewer**, `--compare` (on `build` and `serve`) or the **Compare…** button opens other versions, each in a
-  lane of its own. The lanes share one layout, so a step sits in the same place in every lane: stacked one above
+- **In the viewer**, `--compare` (on `build` and `serve`) or **Open…** → **Add beside** opens other versions, each
+  in a lane of its own (served by `headway serve`, from the library; a page opened as a file uses the browser's
+  file picker). The lanes share one layout, so a step sits in the same place in every lane: stacked one above
   another when the graph flows right, side by side when it flows down. A marker on each node says what changed
   against the lane before it (or against a lane pinned as the baseline): **+** added, **Δ** changed, **−** gone
   (drawn dashed where it was), **⋔** split or merged. The lanes start in the order the versions were built (a
@@ -138,7 +147,8 @@ a git repository, the commit, branch and whether the work tree had changes, and 
   switch. Click a lane to read that version in the side panel and the legend. Selecting an object selects it in every
   lane; the panel lists it version by version and shows what changed, with the equations one above the other
   and a diff of the code. Ask-AI prompts say which version they are about and what changed in it; Explain has
-  **What changed?**. **Collapse unchanged** leaves open only the groups where something changed.
+  **What changed?**. **Collapse unchanged** (in the **Groups** menu) leaves open only the groups where something
+  changed.
 - **`headway diff`** prints the same comparison as text, version after version (`--wording` for labels and
   descriptions too). A spec module is built as it is now.
 

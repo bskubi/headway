@@ -32,14 +32,26 @@
 body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
   height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 header, #checks { flex: none; }
-header { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: end; }
-#home { display: inline-block; font-size: 12px; color: var(--accent); text-decoration: none; margin-bottom: 2px; }
-#home:hover { text-decoration: underline; }
+header { padding: 8px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 6px 24px; align-items: center; }
+header .hl { flex: 1; min-width: 0; }
+header .tline { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+#meta { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#home { font-size: 16px; color: var(--accent); text-decoration: none; padding: 0 2px; }
+#home:hover { color: var(--fg); }
 .noresults { max-width: 640px; padding: 24px 20px; line-height: 1.5; }
 .noresults p { margin: 0 0 10px; }
-header h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
-header .desc { color: var(--muted); max-width: 70ch; font-size: 13px; }
-.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+header h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
+header .desc { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+header .desc.full { white-space: normal; max-width: 110ch; }
+header .desc.clip, header .desc.full { cursor: pointer; }
+.toolbar { display: flex; gap: 6px; align-items: center; flex: none; }
+#gbar { position: absolute; left: 10px; right: 10px; top: 8px; z-index: 3; display: flex; flex-wrap: wrap; gap: 6px 14px; pointer-events: none; }
+#gbar .grp { display: inline-flex; gap: 4px; align-items: center; pointer-events: auto; }
+#gbar .grp:empty { display: none; }
+#gbar button, #gbar .seg label, #gbar label.seg, #gbar details.menu > summary { font-size: 12px; padding: 3px 8px; }
+#gbar details.menu > div { left: 0; right: auto; }
+.mbtns { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.mbtns [hidden] { display: none; }
 button, .seg label, details.menu > summary {
   font: inherit; font-size: 12.5px; color: var(--fg); background: var(--panel); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 9px; cursor: pointer; user-select: none;
@@ -70,13 +82,13 @@ details.menu label { display: block; padding: 2px 0; white-space: nowrap; font-s
 #graph { flex: 1; position: relative; overflow: hidden; background-image: radial-gradient(var(--grid) 1px, transparent 1px); background-size: 18px 18px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 #graph.panning { cursor: grabbing; }
 #graph svg { width: 100%; height: 100%; display: block; }
-#note { position: absolute; left: 12px; top: 10px; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; background: var(--panel);
+#note { position: absolute; left: 12px; bottom: 30px; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; background: var(--panel);
   border: 1px solid var(--accent); pointer-events: none; opacity: 0; transition: opacity .4s; }
 #note.on { opacity: 1; transition: none; }
 #note { z-index: 4; }
 .node.new .n { animation: flash 1.6s ease-out 2; }
 @keyframes flash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 30% { box-shadow: 0 0 0 5px var(--accent); } }
-#hint { position: absolute; left: 12px; bottom: 8px; color: var(--muted); font-size: 12px; pointer-events: none; }
+#hint { position: absolute; left: 12px; right: 12px; bottom: 8px; color: var(--muted); font-size: 12px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #detail { flex: none; width: min(var(--detail-w, 460px), calc(100vw - 200px)); background: var(--panel); overflow: auto; padding: 16px 18px; }
 /* dividers: drag to resize, drag (almost) shut or double-click or ‹ › to collapse, as in an editor */
 .split { flex: none; position: relative; z-index: 3; background: var(--border); touch-action: none; }
@@ -94,7 +106,7 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 #detail .decl { font-size: 12px; margin: -2px 0 8px; }
 #detail .decl a { color: var(--muted); text-decoration: none; }
 #detail .decl a:hover { color: var(--accent); text-decoration: underline; }
-#live { font-size: 12px; color: var(--muted); margin-left: 6px; }
+#live { font-size: 12px; color: var(--muted); }
 #live.on::before { content: "●"; color: var(--ok); margin-right: 4px; }
 #live.off::before { content: "●"; color: var(--bad); margin-right: 4px; }
 @media (max-width: 760px) {
@@ -211,7 +223,7 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 .eqrow .whr { margin: 2px 0 4px; font-size: 12.5px; color: var(--muted); }
 
 /* results: the methods' benchmark results */
-body.resultsview .toolbar > :not(#viewseg):not(#addlane):not(#lanefile), body.resultsview .gonly, body.resultsview #hint { display: none; }
+body.resultsview #gbar, body.resultsview .gonly, body.resultsview #lanes .gonly, body.resultsview #hint { display: none; }
 #results { position: absolute; inset: 0; overflow: auto; background: var(--bg); padding: 14px 20px 40px; cursor: default; user-select: text; -webkit-user-select: text; z-index: 2; }
 #results .rbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
 #results .rbar b { color: var(--fg); }
@@ -266,8 +278,56 @@ table.heat td.fig .more { font-size: 11px; color: var(--muted); }
 table.heat th[data-ds] { cursor: pointer; }
 
 /* lanes: other versions, one lane each, registered on one layout */
+/* the library (home.py): over the page, or the whole page when nothing is open */
+#library { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.35); display: flex; align-items: flex-start; justify-content: center; padding: 5vh 16px; }
+.libbox { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; width: min(1100px, 100%); max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+body.libfull { overflow: auto; height: auto; min-height: 100vh; }
+body.libfull > :not(#library):not(script) { display: none !important; }
+body.libfull #library { position: static; background: var(--bg); padding: 24px 16px 60px; }
+body.libfull .libbox { box-shadow: none; max-height: none; border: none; background: transparent; }
+body.libfull #libbody { overflow: visible; }
+.libhead { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px 4px; }
+.libhead h2 { font-size: 17px; margin: 0; }
+body.libfull .libhead h2 { font-size: 22px; }
+#libbody { overflow: auto; padding: 0 16px 12px; }
+#libbody h3 { font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+.libbox .mu { color: var(--muted); font-size: 12px; }
+.libpath { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-bottom: 8px; }
+.libpath .crumbs { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0; min-width: 0; }
+.libpath .crumb { border: none; background: none; padding: 2px 4px; color: var(--accent); }
+.libpath .crumb:hover { text-decoration: underline; }
+.libpath .sep { color: var(--muted); }
+.libpath input { font: inherit; font-size: 12.5px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); width: 16em; }
+table.libtab tr.dir td { cursor: pointer; }
+table.libtab tr.dir b { color: var(--accent); font-weight: 560; }
+table.libtab tr.dir b::before { content: ""; display: inline-block; width: 13px; height: 10px; margin-right: 7px; vertical-align: -1px;
+  border: 1.5px solid currentColor; border-radius: 1px 3px 2px 2px; box-shadow: inset 0 2px 0 -0.5px currentColor; }
+table.libtab tr.dir.empty td { color: var(--muted); }
+table.libtab tr.dir.empty b { color: var(--muted); font-weight: 400; }
+table.libtab tr.more td { color: var(--muted); font-size: 12px; cursor: pointer; }
+table.libtab tr.more:hover td { color: var(--accent); }
+.liberr { color: var(--bad); font-size: 12.5px; }
+.libwait { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 8px; }
+.spin { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+button.linkish { border: none; background: none; color: var(--accent); padding: 2px 4px; font-size: 12px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+table.libtab { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.libtab th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.libtab th.sortable { cursor: pointer; }
+table.libtab th.on, table.libtab th.sortable:hover { color: var(--accent); }
+table.libtab th:first-child { width: 22px; }
+table.libtab td { padding: 5px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+table.libtab td.path { overflow-wrap: anywhere; }
+table.libtab td.acts { white-space: nowrap; text-align: right; }
+table.libtab td.acts button { margin-left: 4px; }
+table.libtab tr.isopen td { opacity: .6; }
+table.libtab tr:not(.isopen):hover td { background: var(--accent-soft); }
+.libfoot { display: flex; gap: 8px; align-items: center; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 13px; }
+body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; }
 #lanes { flex: none; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 20px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
 #lanes:empty { display: none; }
+#lanes .lanectl { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
 #lanes .lbl, #lanes .cmpnote { color: var(--muted); }
 #lanes .cmpnote { margin-left: 4px; }
 .lanechip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px 2px 6px; background: var(--panel); cursor: pointer; user-select: none; }
@@ -309,9 +369,8 @@ table.heat th[data-ds] { cursor: pointer; }
 </head>
 <body>
 <header>
-  <div>
-    <a id="home" href="/" hidden title="back to headway serve's page of the specs and built headways in this directory">← all headways</a>
-    <h1 id="title"></h1>
+  <div class="hl">
+    <div class="tline"><a id="home" href="/" hidden title="close everything and go to the library">←</a><h1 id="title"></h1><span id="meta"></span></div>
     <div class="desc" id="desc"></div>
   </div>
   <div class="toolbar">
@@ -319,30 +378,32 @@ table.heat th[data-ds] { cursor: pointer; }
       <label><input type="radio" name="view" value="graph" checked><span>Graph</span></label>
       <label><input type="radio" name="view" value="results"><span>Results</span></label>
     </span>
-    <button id="expand">Expand all</button>
-    <button id="collapse">Collapse all</button>
-    <details class="menu" id="groupsmenu"><summary>Groups ▾</summary><div id="groupslist"></div></details>
-    <label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Show settings &amp; constants</span></label>
-    <label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label>
-    <span class="seg" id="focus">
-      <label><input type="radio" name="focus" value="" checked><span>All</span></label>
-      <label><input type="radio" name="focus" value="up"><span>Upstream</span></label>
-      <label><input type="radio" name="focus" value="down"><span>Downstream</span></label>
-    </span>
-    <span class="seg" id="dir">
-      <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
-      <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
-    </span>
-    <button id="fit">Fit</button>
-    <button id="addlane" title="open another version of this headway (or another method's) in a lane of its own, aligned with this one: a page built by headway, or the JSON from build --json">Compare…</button>
+    <button id="addlane" title="open other headways: beside this one, each in a lane of its own, or instead of it">Open…</button>
     <input type="file" id="lanefile" accept=".json,.html,.htm" multiple hidden>
   </div>
 </header>
+<div id="library" hidden><div class="libbox">
+  <div class="libhead"><h2 id="libtitle">Open</h2><span class="mu" id="libsub"></span><span style="flex:1"></span><button id="libclose" title="close (Esc)">×</button></div>
+  <div id="libbody"></div>
+  <div class="libfoot" id="libfoot" hidden><span id="libsel"></span><button class="linkish" id="libnone">clear</button><span style="flex:1"></span><button id="libaddall"></button><button id="libopenall" class="primary"></button></div>
+</div></div>
 <div id="lanes"></div>
 <div id="checks"></div>
 <div id="work">
 <div class="top">
-  <div id="graph"><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
+  <div id="graph"><div id="gbar">
+      <span class="grp"><details class="menu" id="groupsmenu"><summary title="expand, collapse, show or hide the groups">Groups ▾</summary><div><div class="mbtns"><button id="expand">Expand all</button><button id="collapse">Collapse all</button><button id="unchanged" hidden title="collapse the groups in which nothing changed, in every lane">Collapse unchanged</button></div><div id="groupslist"></div></div></details></span>
+      <span class="grp" title="what is drawn"><label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Settings &amp; constants</span></label><label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label></span>
+      <span class="grp seg" id="focus" title="the selection's upstream or downstream only">
+        <label><input type="radio" name="focus" value="" checked><span>All</span></label>
+        <label><input type="radio" name="focus" value="up"><span>Upstream</span></label>
+        <label><input type="radio" name="focus" value="down"><span>Downstream</span></label>
+      </span>
+      <span class="grp" title="layout"><span class="seg" id="dir">
+        <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
+        <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
+      </span><button id="fit">Fit</button></span>
+    </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
     <div id="hint">click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom</div>
@@ -360,9 +421,208 @@ table.heat th[data-ds] { cursor: pointer; }
 
 <script>
 let D = /*HEADWAY_DATA*/null;
-const NS = "http://www.w3.org/2000/svg";
+const LIB = /*HEADWAY_LIBRARY*/null;      // served by `headway serve`: the library's launch directory (home.py)
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+</script>
+<script>
+/* ---------- the library: what can be opened (served by `headway serve`, home.py) ----------
+   One list for opening headways: the recently opened ones, and the specs and built headways in a folder (any
+   folder can be browsed). With nothing open it is the whole page; with something open, it opens over it (Open…),
+   to open more beside it or something else instead. Opened as a file, a page has no library: Open… is the
+   browser's file picker. */
+const lib = {showEmpty: false, full: false, dir: null, list: null, recent: [], allRecent: false, sort: "built_at", desc: true, error: ""};
+const libPath = (abs) => LIB && abs.startsWith(LIB.root + "/") ? abs.slice(LIB.root.length + 1) : abs;
+const libDate = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
+const libType = (x) => x.kind === "spec" ? "spec · served live" : (x.suite ? "benchmark suite" : "headway") + (x.page ? " · page" : " · JSON");
+function libStoredDir() { try { return localStorage.getItem("headway.dir"); } catch { return null; } }
+function libStoreDir(d) { try { localStorage.setItem("headway.dir", d); } catch {} }
+
+async function openLibrary(full) {
+  lib.full = full;
+  document.body.classList.toggle("libfull", full);
+  $("library").hidden = false;
+  if (full) document.title = "headway";
+  libDraw();
+  const asked = new URLSearchParams(location.search).get("dir");
+  await Promise.all([libLoad(asked || lib.dir || libStoredDir() || LIB?.root || ""), libRecent()]);
+}
+function closeLibrary() {
+  if (lib.full) return;
+  $("library").hidden = true;
+}
+async function libRecent() {
+  try { lib.recent = (await (await fetch("/api/recent", {cache: "no-store"})).json()).recent; } catch { lib.recent = []; }
+  libDraw();
+}
+async function libLoad(dir, push = false) {
+  const asked = lib.asked = (lib.asked ?? 0) + 1;     // a slow folder must not replace one asked for after it
+  lib.error = "";
+  lib.loading = dir;
+  libDraw();
+  try {
+    const r = await fetch("/api/list?dir=" + encodeURIComponent(dir), {cache: "no-store"});
+    if (!r.ok) throw new Error(await r.text());
+    const list = await r.json();
+    if (asked !== lib.asked) return;
+    lib.loading = null;
+    lib.list = list;
+    if (lib.list.dir !== lib.dir) lib.showEmpty = false;
+    lib.dir = lib.list.dir;
+    libStoreDir(lib.dir);
+    if (lib.full && push) history.pushState({dir: lib.dir}, "", "/?dir=" + encodeURIComponent(lib.dir));
+  } catch (e) {
+    if (asked !== lib.asked) return;
+    lib.loading = null;
+    lib.error = String(e.message || e);
+    if (!lib.list && dir !== LIB?.root) return libLoad(LIB?.root ?? "");
+  }
+  libDraw();
+}
+window.addEventListener("popstate", () => {
+  if (!lib.full) return;
+  const d = new URLSearchParams(location.search).get("dir");
+  libLoad(d || LIB?.root || "");
+});
+
+// what is open in the page, to mark it and to add beside it
+const libOpen = () => window.HW ? window.HW.open() : [];
+const libIsOpen = (x) => libOpen().some((o) => o.src === x.abs || (o.title === x.title && o.name === x.name && o.built_at === x.built_at));
+
+// a folder's subfolders, as rows above its headways: those with something in them (and how much), then the rest
+function libFolderRows(L) {
+  const count = {};
+  for (const x of L.items) {
+    const top = x.path.includes("/") ? x.path.split("/")[0] : null;
+    if (!top) continue;
+    count[top] ??= {built: 0, spec: 0};
+    count[top][x.kind === "spec" ? "spec" : "built"]++;
+  }
+  const what = (c) => [c.built && `${c.built} built headway${c.built > 1 ? "s" : ""}`, c.spec && `${c.spec} spec${c.spec > 1 ? "s" : ""}`].filter(Boolean).join(" · ");
+  const row = (f, empty) => `<tr class="dir${empty ? " empty" : ""}" data-sub="${esc(f)}" title="open this folder"><td></td><td colspan="7"><b>${esc(f)}</b>` +
+    `${empty ? "" : ` <span class="mu">${esc(what(count[f]))}</span>`}</td></tr>`;
+  const full = L.folders.filter((f) => count[f]), empty = L.folders.filter((f) => !count[f]);
+  return full.map((f) => row(f, false)).join("") +
+    (empty.length ? `<tr class="more" id="libempty"><td></td><td colspan="7">${lib.showEmpty ? "▾" : "▸"} ${empty.length} ${full.length ? "other " : ""}folder${empty.length > 1 ? "s" : ""}${L.short ? "" : " with no headways or specs found"}</td></tr>` +
+      (lib.showEmpty ? empty.map((f) => row(f, true)).join("") : "") : "");
+}
+function libTable(items, {sortable, when, folders = ""}) {
+  const open = libOpen(), title = window.HW?.title();
+  const key = (x) => lib.sort === "type" ? libType(x) : lib.sort === "results" ? (x.results ?? []).join(", ")
+    : String(x[lib.sort] ?? "").toLowerCase();
+  let rows = items;
+  if (sortable) {
+    rows = [...items].sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0) * (lib.desc ? -1 : 1));
+    if (title) rows.sort((a, b) => (b.title === title) - (a.title === title));   // the open method's first
+  }
+  const cols = [["name", "name"], ["title", "method"], ["type", "type"], [when, when === "opened_at" ? "opened" : "built"],
+    ["results", "results"], ["path", "file"]];
+  const head = `<tr><th></th>${cols.map(([k, label]) => sortable
+    ? `<th data-sort="${k}" class="sortable${lib.sort === k ? " on" : ""}">${label}${lib.sort === k ? (lib.desc ? " ↓" : " ↑") : ""}</th>`
+    : `<th>${label}</th>`).join("")}<th></th></tr>`;
+  const body = rows.map((x) => {
+    const isOpen = x.kind === "built" && libIsOpen(x);
+    const acts = x.kind === "spec"
+      ? `<button data-live="${esc(x.abs)}" title="serve this spec live: rebuilt as it and its code change">Serve live</button>`
+      : isOpen ? `<span class="mu">open</span>`
+      : `<button data-open="${esc(x.abs)}" title="open it instead of what is open">Open</button>` +
+        (open.length ? `<button data-add="${esc(x.abs)}" title="open it in a lane of its own, beside what is open">Add beside</button>` : "");
+    return `<tr class="${isOpen ? "isopen" : ""}${title && x.title === title ? " mine" : ""}">` +
+      `<td>${x.kind === "built" && !isOpen ? `<input type="checkbox" data-pick="${esc(x.abs)}" data-at="${esc(x.built_at)}">` : ""}</td>` +
+      `<td><b>${esc(x.name)}</b>${Object.keys(x.keys ?? {}).length ? `<div class="mu">${esc(Object.entries(x.keys).map(([k, v]) => `${k}=${v}`).join(" "))}</div>` : ""}</td>` +
+      `<td>${esc(x.title)}</td><td class="mu">${esc(libType(x))}</td>` +
+      `<td class="mu">${esc(libDate(x[when]))}${x.git?.describe ? `<div>${esc(x.git.describe)}</div>` : ""}</td>` +
+      `<td class="mu">${esc((x.results ?? []).join(", ")) || "–"}</td><td class="mu path">${esc(x.path)}</td>` +
+      `<td class="acts">${acts}</td></tr>`;
+  }).join("");
+  return `<table class="libtab">${head}${folders}${body}</table>`;
+}
+
+function libDraw() {
+  const L = lib.list;
+  const crumbs = (() => {
+    const shown = lib.loading?.startsWith("/") ? lib.loading : L?.dir;     // the folder asked for, while it loads
+    if (!shown) return "";
+    const parts = shown.split("/").filter(Boolean);
+    return parts.map((p, n) => `<button class="crumb" data-dir="${esc("/" + parts.slice(0, n + 1).join("/"))}">${esc(p)}</button>`).join(`<span class="sep">/</span>`);
+  })();
+  const recent = lib.recent.slice(0, lib.allRecent ? lib.recent.length : 8);
+  const title = window.HW?.title();
+  $("libtitle").textContent = lib.full ? "headway" : "Open";
+  $("libsub").textContent = lib.full ? "open a built headway, several side by side, or serve a spec live" : `beside ${title}, or instead of it`;
+  $("libclose").hidden = lib.full;
+  $("libbody").innerHTML =
+    (lib.recent.length ? `<h3>Recent</h3>${libTable(recent, {sortable: false, when: "opened_at"})}` +
+      (lib.recent.length > 8 ? `<button class="linkish" id="libmore">${lib.allRecent ? "fewer" : `all ${lib.recent.length}`}</button>` : "") : "") +
+    `<h3>Folder</h3><div class="libpath"><button id="libup" title="the folder above"${L?.parent ? "" : " disabled"}>↑</button>` +
+    `<span class="crumbs"><button class="crumb" data-dir="/">/</button>${crumbs}</span>` +
+    `<span style="flex:1"></span><button data-dir="${esc(LIB?.root ?? "")}" title="the folder headway serve was launched in">launch</button>` +
+    `<button data-dir="${esc(L?.home ?? "~")}" title="your home folder">home</button>` +
+    `<input id="libgo" placeholder="go to a folder…" spellcheck="false"></div>` +
+    (lib.error ? `<p class="liberr">${esc(lib.error)}</p>` : "") +
+    (lib.loading ? `<p class="libwait"><span class="spin"></span>Looking for specs and built headways in ${esc(lib.loading)} and the folders below it…</p>` : "") +
+    (!L || lib.loading ? "" : L.items.length || L.folders.length ? libTable(L.items, {sortable: true, when: "built_at", folders: libFolderRows(L)}) +
+      (L.short ? `<p class="mu">Not everything below this folder was looked through (too many files, or too deep); open a subfolder for the rest.</p>` : "") : "") +
+    (L && !lib.loading && !L.items.length ? `<p class="mu">No specs or built headways in this folder or below it${L.short ? " (as far as was looked)" : ""}. <code>headway build SPEC -o FILE.html</code> (or <code>--json</code>) makes one.</p>` : "");
+  const body = $("libbody");
+  body.querySelectorAll("[data-dir]").forEach((b) => b.onclick = () => libLoad(b.dataset.dir, true));
+  body.querySelectorAll("[data-sub]").forEach((b) => b.onclick = () => libLoad(L.dir.replace(/\/$/, "") + "/" + b.dataset.sub, true));
+  if ($("libempty")) $("libempty").onclick = () => { lib.showEmpty = !lib.showEmpty; libDraw(); };
+  if ($("libup")) $("libup").onclick = () => L?.parent && libLoad(L.parent, true);
+  $("libgo").onkeydown = (e) => { if (e.key === "Enter" && e.target.value.trim()) libLoad(e.target.value.trim(), true); };
+  if ($("libmore")) $("libmore").onclick = () => { lib.allRecent = !lib.allRecent; libDraw(); };
+  body.querySelectorAll("th[data-sort]").forEach((th) => th.onclick = () => {
+    const k = th.dataset.sort;
+    lib.desc = lib.sort === k ? !lib.desc : k === "built_at";
+    lib.sort = k; libDraw();
+  });
+  body.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => libOpenFiles([b.dataset.open]));
+  body.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => libAdd([b.dataset.add]));
+  body.querySelectorAll("[data-live]").forEach((b) => b.onclick = () => { location.href = "/live/" + libPath(b.dataset.live).split("/").map(encodeURIComponent).join("/") + "/"; });
+  body.querySelectorAll("table.libtab tr").forEach((tr) => tr.addEventListener("click", (e) => {
+    const box = tr.querySelector("input[data-pick]");
+    if (box && e.target !== box && !e.target.closest("button")) box.checked = !box.checked;
+    libCount();
+  }));
+  libCount();
+}
+const libPicked = () => [...new Map([...$("libbody").querySelectorAll("input[data-pick]:checked")].map((b) => [b.dataset.pick, b.dataset.at])).entries()];
+function libCount() {
+  const n = libPicked().length, open = libOpen().length;
+  $("libfoot").hidden = !n;
+  $("libsel").textContent = `${n} selected`;
+  $("libopenall").textContent = n > 1 ? `Open ${n} side by side` : "Open";
+  $("libaddall").hidden = !open;
+  $("libaddall").textContent = `Add ${n === 1 ? "it" : n} beside`;
+}
+// open built headways instead of what is open: the most recently built in the page, the others in lanes
+function libOpenFiles(paths) {
+  location.href = "/?" + paths.map((p) => "open=" + encodeURIComponent(libPath(p))).join("&");
+}
+async function libAdd(paths) {
+  const files = [];
+  for (const p of paths) {
+    const r = await fetch("/api/file?path=" + encodeURIComponent(p), {cache: "no-store"});
+    if (!r.ok) { lib.error = `Could not open ${p}: ${await r.text()}`; libDraw(); return; }
+    const text = await r.text();
+    files.push({name: p.split("/").pop(), src: p, text: async () => text});
+  }
+  closeLibrary();
+  await window.HW.add(files);
+}
+function libWire() {
+  $("libclose").onclick = closeLibrary;
+  $("library").addEventListener("click", (e) => { if (e.target === $("library")) closeLibrary(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("library").hidden) closeLibrary(); });
+  $("libnone").onclick = () => { $("libbody").querySelectorAll("input[data-pick]").forEach((b) => b.checked = false); libCount(); };
+  $("libopenall").onclick = () => libOpenFiles(libPicked().sort((a, b) => b[1].localeCompare(a[1])).map(([p]) => p));
+  $("libaddall").onclick = () => libAdd(libPicked().map(([p]) => p));
+}
+
+</script>
+<!-- the viewer proper: run when there is a headway to show (the bottom script); with none, the library fills the page -->
+<script type="text/plain" id="viewer-main">
+const NS = "http://www.w3.org/2000/svg";
 const tex = (t, display = false) => { try { return katex.renderToString(t, {displayMode: display, throwOnError: false}); } catch (e) { return esc(t); } };
 // text with inline $math$
 const rich = (s) => esc(s).split(/\$([^$]+)\$/).map((part, n) => n % 2 ? tex(part.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")) : part).join("");
@@ -717,17 +977,19 @@ let T = {x: 20, y: 20, k: 1};
 const applyT = () => $("vp").setAttribute("transform", `translate(${T.x},${T.y}) scale(${T.k})`);
 function fitView(readable = false) {
   if (!current) return;
-  const r = $("graph").getBoundingClientRect(), w = current.w || 1, h = current.h || 1;
+  const g = $("graph").getBoundingClientRect(), w = current.w || 1, h = current.h || 1;
+  const top = $("gbar").offsetHeight + 8;                // below the graph's own bar
+  const r = {width: g.width, height: g.height - top};
   const fit = Math.min(1.4, (r.width - 40) / w, (r.height - 40) / h);
   T.k = readable ? Math.max(fit, Math.min(0.85, (r.height - 40) / h)) : fit;
   T.x = w * T.k > r.width - 40 ? 20 : (r.width - w * T.k) / 2;
-  T.y = h * T.k > r.height - 40 ? 20 : (r.height - h * T.k) / 2;
+  T.y = top + (h * T.k > r.height - 40 ? 20 : (r.height - h * T.k) / 2);
   applyT();
 }
 (() => {
   const g = $("graph");
   g.addEventListener("wheel", (e) => {
-    if (e.target.closest("#results")) return;
+    if (e.target.closest("#results, #gbar")) return;
     e.preventDefault();
     const r = g.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
     const k = Math.min(4, Math.max(0.15, T.k * Math.exp(-e.deltaY * 0.0015)));
@@ -736,7 +998,7 @@ function fitView(readable = false) {
   }, {passive: false});
   let drag = null, panned = false;
   g.addEventListener("pointerdown", (e) => {
-    if (e.button !== 0 || e.target.closest("#results")) return;
+    if (e.button !== 0 || e.target.closest("#results, #gbar")) return;
     window.getSelection()?.removeAllRanges();       // a selection left over from elsewhere would be dragged
     drag = {x: e.clientX, y: e.clientY, tx: T.x, ty: T.y, moved: false};
     panned = false;                                 // a pan that ended off where it began made no click to swallow
@@ -1277,10 +1539,10 @@ function buildGroupsMenu() {
 /* ---------- lanes: versions side by side ----------
    Each lane holds one built headway: this page's own, ones given with build --compare, ones opened with Compare….
    The panels and the legend show the active lane; D is its data. Lineages and changes follow diff.py. */
-const own = {id: 0, name: D.name ?? (D.live ? "live" : "this build"), D, own: true};
+const own = {id: 0, name: D.name ?? (D.live ? "live" : D.opened ? D.opened.split(/[\\/]/).pop().replace(/\.(json|html?)$/i, "") : "this build"), D, own: true, src: D.opened ?? null};
 // when a version was built (builds from before built_at have only the minute); lanes start in that order
 const madeAt = (d) => d.built_at ?? String(d.built ?? "").replace(" ", "T");
-const LANES = [...(D.lanes ?? []).map((l, n) => ({id: n + 1, name: l.name, from: l.from, D: snapshot(l.data)})), own]
+const LANES = [...(D.lanes ?? []).map((l, n) => ({id: n + 1, name: l.name, from: l.from, src: l.from, D: snapshot(l.data)})), own]
   .sort((a, b) => madeAt(a.D) < madeAt(b.D) ? -1 : madeAt(a.D) > madeAt(b.D) ? 1 : 0);
 delete D.lanes;
 let active = own, laneSeq = LANES.length;
@@ -1422,32 +1684,51 @@ function setActive(lane) {
   state.sel = there;
   const p = current?.per.find((q) => q.lane === lane);
   if (p) current.v = p.v;
-  header(); buildLegend(); buildGroupsMenu(); laneBar();
+  header(); buildLegend(); buildGroupsMenu(); laneBar(); syncURL();
   if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel);
   document.querySelectorAll("#vp .lane").forEach((el) => el.classList.toggle("on", +el.dataset.lane === lane.id));
   if (state.focus || cmp.solo) render(); else highlight();
 }
+// served from the library, the URL says what is open, so a reload or a link opens the same (home.py)
+function syncURL() {
+  if (!LIB || !history.replaceState) return;
+  const order = [active, ...LANES.filter((l) => l !== active)];
+  const liveOwn = own.D.live && LANES.includes(own);
+  const srcs = order.filter((l) => !(liveOwn && l === own)).map((l) => l.src).filter(Boolean);
+  const base = liveOwn ? location.pathname : "/";
+  if (!liveOwn && !srcs.length) return;
+  history.replaceState(null, "", base + (srcs.length ? "?" + srcs.map((x) => "open=" + encodeURIComponent(libPath(x))).join("&") : ""));
+}
+window.HW = {                                       // what the library (above) needs of the open page
+  open: () => LANES.map((l) => ({src: l.src, title: l.D.title, name: l.D.name ?? "", built_at: l.D.built_at ?? ""})),
+  title: () => D.title,
+  add: (files) => addLanes(files),
+};
 function lanesChanged(fit = true) {
   if (!LANES.includes(active)) { active = LANES.includes(own) ? own : LANES.at(-1); use(active); state.sel = null; header(); buildLegend(); buildGroupsMenu(); }
   if (cmp.base !== null && !LANES.some((l) => l.id === cmp.base)) cmp.base = null;
   laneBar();
   viewSwitch();
+  syncURL();
   render(fit).then(() => { if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel); });
 }
+const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom";
 function laneBar() {
   const el = $("lanes");
+  $("hint").textContent = HINT; $("hint").title = "";
+  $("unchanged").hidden = LANES.length < 2;
   if (LANES.length < 2) { el.innerHTML = ""; return; }
   const base = LANES.find((l) => l.id === cmp.base);
-  el.innerHTML = `<span class="seg gonly" title="draw every open version, or only the one you are reading (the others stay open; click one to switch)">` +
-    `<label><input type="radio" name="solo" value=""${cmp.solo ? "" : " checked"}><span>Side by side</span></label>` +
-    `<label><input type="radio" name="solo" value="1"${cmp.solo ? " checked" : ""}><span>One at a time</span></label></span>` +
-    `<span class="lbl">Versions</span>` + LANES.map((l) =>
+  el.innerHTML = `<span class="lbl">Versions</span>` + LANES.map((l) =>
     `<span class="lanechip${l === active ? " on" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;click: read this version in the panels · drag: reorder"><span class="grip">⠿</span>${esc(l.name)}` +
     `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="compare every other version with this one">baseline</button>` +
     `<button data-close="${l.id}" title="close this lane">×</button></span>`).join("") +
-    `<span class="cmpnote gonly">markers: ${base ? `each version against ${esc(base.name)}` : `each version against the one ${lanesDown() ? "above" : "to its left"}`} (<span style="color:var(--ok)">+</span> added, <span style="color:var(--setting)">Δ</span> changed, <span style="color:var(--bad)">−</span> gone, <span style="color:var(--output)">⋔</span> split or merged)</span>` +
-    `<label class="seg gonly" title="also mark changes to labels, names and descriptions"><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label>` +
-    `<button id="unchanged" class="gonly" title="collapse the groups in which nothing changed, in every lane">Collapse unchanged</button>`;
+    `<span class="lanectl gonly"><span class="seg" title="draw every open version, or only the one you are reading (the others stay open; click one to switch)">` +
+    `<label><input type="radio" name="solo" value=""${cmp.solo ? "" : " checked"}><span>Side by side</span></label>` +
+    `<label><input type="radio" name="solo" value="1"${cmp.solo ? " checked" : ""}><span>One at a time</span></label></span>` +
+    `<label class="seg" title="also mark changes to labels, names and descriptions"><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label></span>`;
+  $("hint").innerHTML = `marked against ${base ? esc(base.name) : `the version ${lanesDown() ? "above" : "to the left"}`}: <span style="color:var(--ok)">+</span> added · <span style="color:var(--setting)">Δ</span> changed · <span style="color:var(--bad)">−</span> gone · <span style="color:var(--output)">⋔</span> split or merged`;
+  $("hint").title = HINT;
   let dragged = null;
   el.querySelectorAll(".lanechip").forEach((chip) => {
     const lane = LANES.find((l) => l.id === +chip.dataset.lane);
@@ -1479,7 +1760,7 @@ function laneBar() {
     lanesChanged();
   }));
   $("wording").onchange = (e) => { cmp.wording = e.target.checked; render(); showDetail(state.sel); };
-  el.querySelectorAll("input[name=solo]").forEach((r) => r.onchange = () => {
+  document.querySelectorAll("input[name=solo]").forEach((r) => r.onchange = () => {
     cmp.solo = !!r.value;
     render(true);
     note(cmp.solo ? `Showing ${active.name} only, marked against ${refOf(active)?.name ?? "nothing"}; click another version to switch` : "Showing every open version");
@@ -1525,12 +1806,12 @@ async function addLanes(files) {
       const open = LANES.find((l) => sameBuild(l.D, d));
       if (open?.own) { reloaded.push(`${name} (this page's own version, kept as built)`); continue; }
       if (open) {                                       // open already: take the file as it is now, in the same place
-        Object.assign(open, {name, from: f.name, D: snapshot(d)});
+        Object.assign(open, {name, from: f.src ?? f.name, src: f.src ?? open.src, D: snapshot(d)});
         if (open === active) { D = open.D; index(); }
         reloaded.push(name);
         continue;
       }
-      const lane = {id: ++laneSeq, name, from: f.name, D: snapshot(d)};
+      const lane = {id: ++laneSeq, name, from: f.src ?? f.name, src: f.src ?? null, D: snapshot(d)};
       const later = LANES.findIndex((l) => madeAt(l.D) > madeAt(d));      // in order of building, among the others
       LANES.splice(later < 0 ? LANES.length : later, 0, lane);
       added.push(lane.name);
@@ -1544,7 +1825,7 @@ async function addLanes(files) {
           reloaded.length && `Open already: ${reloaded.join(", ")}; reloaded from the file`].filter(Boolean).join("; "));
   }
 }
-$("addlane").onclick = () => $("lanefile").click();
+$("addlane").onclick = () => LIB ? openLibrary(false) : $("lanefile").click();
 $("lanefile").onchange = (e) => { addLanes([...e.target.files]); e.target.value = ""; };
 
 /* ---------- results: the open versions' benchmark results on one suite (bench.py) ----------
@@ -1661,8 +1942,8 @@ function renderResults() {
   if (!sn) {
     el.innerHTML = `<div class="noresults"><p><b>No benchmark results in ${LANES.length > 1 ? "any of the open versions" : "this headway"}.</b></p>` +
       `<p>Results are put into a built headway by the benchmark: <code>headway build SPEC --results results.json</code>, <code>headway attach HEADWAY results.json</code>, or <code>headway.build(..., results=[...])</code> from Python (<code>headway guide</code>, “Benchmarks”).${D.live ? " A spec served live has none of its own: it is the code as it is now, not yet benchmarked." : ""}</p>` +
-      `<p><button id="noresultsopen">Compare…</button> opens built versions that have results beside this one.</p></div>`;
-    $("noresultsopen").onclick = () => $("lanefile").click();
+      `<p><button id="noresultsopen">Open…</button> opens built versions that have results beside this one.</p></div>`;
+    $("noresultsopen").onclick = () => $("addlane").click();
     return;
   }
   const {meta} = sn;
@@ -2102,9 +2383,13 @@ document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => 
 document.addEventListener("click", (e) => { if (e.target.closest(".pen")) e.stopPropagation(); }, true);
 function header(buildError = "") {
   $("title").textContent = D.title;
-  $("home").hidden = !D.home;
+  $("home").hidden = !LIB;
   document.title = D.title;
-  $("desc").innerHTML = rich(D.desc) + ` <span style="opacity:.7">· built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}</span>` + (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span>` : "");
+  $("desc").innerHTML = rich(D.desc);
+  $("desc").hidden = !D.desc;
+  requestAnimationFrame(descFit);
+  $("meta").innerHTML = (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span> · ` : "") +
+    `built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}`;
   $("checks").innerHTML = buildError
     ? `<div class="checks"><b>The rebuild failed</b> (this is the last good build): ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
     : D.check.errors.length ? `<div class="checks"><b>${D.check.errors.length} check error${D.check.errors.length > 1 ? "s" : ""}:</b> the graph may not match the code.<pre>${esc(D.check.errors.join("\n"))}</pre></div>` : "";
@@ -2112,6 +2397,19 @@ function header(buildError = "") {
   $("settingslabel").title = "Add to the graph, with edges to the steps that use them, the settings (configurable; amber, dashed): "
     + names("setting") + " — and the constants (fixed in the code; grey, dotted): " + names("constant");
 }
+// the description takes one line; when it does not fit, a click shows all of it, and another click one line again
+function descFit() {
+  const el = $("desc"), full = el.classList.contains("full");
+  el.classList.toggle("clip", !full && el.scrollWidth > el.clientWidth + 1);
+  el.title = full ? "click to show one line" : el.classList.contains("clip") ? "click to show all of it" : "";
+}
+$("desc").onclick = (e) => {
+  const el = e.currentTarget;
+  if (!el.classList.contains("clip") && !el.classList.contains("full")) return;
+  el.classList.toggle("full");
+  descFit();
+};
+window.addEventListener("resize", descFit);
 $("expand").onclick = () => { state.collapsed.clear(); render(true); };
 $("collapse").onclick = () => { LANES.forEach((l) => l.D.groups.forEach((g) => state.collapsed.add(g.path))); render(true); };
 $("settings").onchange = (e) => {
@@ -2223,6 +2521,11 @@ viewSwitch();
 showDetail(null);
 if (D.live && location.protocol.startsWith("http")) live();
 render(true).then(() => { if (rs.view === "results" && hasResults()) setView("results"); else if (LANES.length > 1) showDetail(state.sel); }).catch((e) => { console.error(e); $("vp").innerHTML = `<text x="10" y="20" fill="red">${esc(e)}</text>`; });
+</script>
+<script>
+libWire();
+if (D) { const main = document.createElement("script"); main.textContent = $("viewer-main").textContent; document.body.append(main); }
+else openLibrary(true);
 </script>
 </body>
 </html>

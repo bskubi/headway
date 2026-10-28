@@ -232,7 +232,8 @@ headway build pkg.graphspec --name v5 -o headways/v5.html --json headways/v5.jso
 headway diff headways/v4.json headways/v5.json                   # the same comparison, as text
 ```
 
-In the viewer, **Compare…** opens more versions. A version built without `--name` is called by its file name; lanes are ordered by build time and can be dragged, closed or
+In the viewer, **Open…** opens more versions beside the page: under `headway serve`, from the library (recent
+headways, and any folder's); from a page opened as a file, with the file picker. A version built without `--name` is called by its file name; lanes are ordered by build time and can be dragged, closed or
 pinned as the baseline. Markers: **+** added, **Δ** changed, **−** gone, **⋔** split or merged. **One at a time**
 shows one version, keeping the others open.
 
@@ -440,8 +441,9 @@ it); click a dataset for what it is; click a version for what changed in it, its
 headway check SPEC [--no-verify]                  exit 1 if the spec and the code disagree
 headway build SPEC [-o headway.html] [--json FILE] [--name NAME] [--results FILE ...] [--compare [NAME=]FILE ...]
               [--key NAME=VALUE ...] [--collapse GROUP ...] [--hide GROUP ...] [--no-verify] [--offline] [--editor EDITOR]
-headway serve SPEC [--port 8765] [--open] [--compare ...] [--collapse ...] [--hide ...] [--editor EDITOR]
-headway serve [--port 8765] [--open]              no spec: a home page listing the specs and built headways here
+headway serve [SPEC] [--port 8765] [--open] [--compare ...] [--collapse ...] [--hide ...] [--editor EDITOR]
+                                                  the library (recent headways; specs and built headways in any
+                                                  folder), opened on SPEC served live if given
 headway diff VERSION VERSION ... [--wording]      a VERSION is a built file, or a spec module (built as it is now)
 headway attach VERSION RESULTS.json [-o OUT]
 headway results VERSION VERSION ... [--heldout]

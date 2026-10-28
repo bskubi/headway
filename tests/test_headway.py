@@ -468,7 +468,7 @@ def test_replicates_figures_keys(tmp_path, monkeypatch, capsys) -> None:
     assert json.loads((tmp_path / "p.json").read_text())["keys"] == {"lr": 0.5, "warm": True, "arch": "resnet"}
 
 
-def test_home(tmp_path) -> None:
+def test_home(tmp_path, monkeypatch) -> None:
     """`headway serve` with no spec: a home page listing specs and built headways, opening and comparing them."""
     import json
     import threading
@@ -476,7 +476,11 @@ def test_home(tmp_path) -> None:
     import urllib.request
     from http.server import ThreadingHTTPServer
 
+    import urllib.parse
+
     from headway.home import Home, module_of
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / ".state"))                # recents, kept apart
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     (tmp_path / "pkg").mkdir()
     (tmp_path / "pkg" / "__init__.py").write_text("")
     (tmp_path / "pkg" / "graphspec.py").write_text(LIVE.replace("TEX", "2 x_n"))
@@ -489,25 +493,46 @@ def test_home(tmp_path) -> None:
                       keys={"warm": name == "v2"})
     (tmp_path / "other.json").write_text('{"not": "a headway"}')
     home = Home(tmp_path)
-    found = [x for x in map(home.what, home.files()) if x]
-    assert sorted(x["path"] for x in found) == ["pkg/graphspec.py", "v1.html", "v1.json", "v2.html", "v2.json"]
+    found = [x for x in map(home.what, home.files()[0]) if x]
+    assert sorted(Path(x["abs"]).relative_to(tmp_path).as_posix() for x in found) == \
+        ["pkg/graphspec.py", "v1.html", "v1.json", "v2.html", "v2.json"]
 
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), home.handler())
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
 
-    def get(path: str) -> str:
-        return urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}{path}").read().decode()
+    def get(path: str, host: str | None = None) -> str:
+        req = urllib.request.Request(f"http://127.0.0.1:{httpd.server_port}{path}",
+                                     headers={"Host": host} if host else {})
+        return urllib.request.urlopen(req).read().decode()
     try:
-        page = get("/")
-        assert "pkg.graphspec" in page and "warm=true" in page and "/view?file=v1.html" in page
-        both = get("/view?file=v2.json&compare=v1.json")
-        assert '"lanes": [{"name": "v1"' in both and '"name": "v2"' in both
+        assert "let D = null;" in get("/") and str(tmp_path) in get("/")      # nothing open: the library
+        listed = json.loads(get("/api/list"))
+        assert sorted(x["path"] for x in listed["items"]) == ["pkg/graphspec.py", "v1.html", "v1.json", "v2.html",
+                                                            "v2.json"]
+        assert listed["folders"] == ["pkg"] and listed["dir"] == str(tmp_path)
+        inner = json.loads(get("/api/list?dir=" + urllib.parse.quote(str(tmp_path / "pkg"))))
+        assert [x["path"] for x in inner["items"]] == ["graphspec.py"] and inner["parent"] == str(tmp_path)
+        assert next(x for x in listed["items"] if x["path"] == "v2.json")["keys"] == {"warm": True}
+        assert json.loads(get("/api/recent"))["recent"] == []
+        cached = json.loads((tmp_path / ".cache" / "headway" / "library.json").read_text())
+        assert cached[str(tmp_path / "v1.json")][1]["name"] == "v1" and cached[str(tmp_path / "other.json")][1] is None
+        assert Home(tmp_path).seen[tmp_path / "v1.json"][1]["name"] == "v1"           # a new server starts with it
+        both = get("/?open=v2.json&open=" + urllib.parse.quote(str(tmp_path / "v1.json")))
+        assert '"lanes": [{"name": "v1"' in both and '"name": "v2"' in both and f'"opened": "{tmp_path / "v2.json"}"' in both
+        assert [r["path"].rsplit("/", 1)[-1] for r in json.loads(get("/api/recent"))["recent"]] == ["v2.json", "v1.json"]
+        assert get("/view?file=v2.json&compare=v1.json") == both                  # the old form, redirected
+        assert json.loads(get("/api/file?path=v1.json"))["name"] == "v1"
         live = get("/live/pkg/graphspec.py/")
-        assert '"live": true' in live and "y_n = 2 x_n" in live and "pkg/graphspec.py" in home.live
+        assert '"live": true' in live and "y_n = 2 x_n" in live and str(tmp_path / "pkg" / "graphspec.py") in home.live
         assert json.loads(get("/live/pkg/graphspec.py/state.json"))["ok"]
-        for bad in ("/view?file=../x.json", "/view?file=other.json", "/live/test_x.py/"):
+        assert '"lanes": [{"name": "v1"' in get("/live/pkg/graphspec.py/?open=v1.json")
+        assert '"root": "' in live and '"root": "' in both                          # the page links to the library
+        for bad in ("/?open=other.json", "/live/test_x.py/", "/api/file?path=other.json",
+                    "/api/file?path=pkg/graphspec.py", "/api/list?dir=nowhere"):
             with pytest.raises(urllib.error.HTTPError):
                 get(bad)
+        with pytest.raises(urllib.error.HTTPError, match="403"):                   # another site's name for it
+            get("/api/list", host="evil.example:80")
     finally:
         home.close()
         httpd.shutdown()

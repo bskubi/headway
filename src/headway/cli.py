@@ -2,12 +2,11 @@
 headway build <spec module> -o out.html [--collapse GROUP] [--hide GROUP] [--json out.json] [--no-verify]
                                    [--offline] [--compare [NAME=]VERSION ...] [--results RESULTS.json ...]
                                    [--name NAME] [--key NAME=VALUE ...]
-headway serve <spec module> [--port 8765] [--open] [--collapse GROUP] [--hide GROUP] [--no-verify]
+headway serve [<spec module>] [--port 8765] [--open] [--collapse GROUP] [--hide GROUP] [--no-verify]
                                    [--compare [NAME=]VERSION ...]
-                                   the viewer, rebuilt live as the spec and the code change
-headway serve [--port 8765] [--open]
-                                   with no spec: a home page listing the specs and built headways under the
-                                   current directory, to serve a spec live, open a headway, or compare several
+                                   the library (recent headways, and the specs and built headways in any folder,
+                                   starting at this one), and with a spec, that spec served live: rebuilt as the
+                                   spec and the code change
 headway diff VERSION VERSION [VERSION ...] [--wording]
                                    what changed from each version to the next
 headway attach VERSION RESULTS.json [-o OUT]
@@ -76,7 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                    help="a label of this version to group or pair versions by: a hyperparameter, a variant "
                         "(repeatable; numbers and true/false are read as such)")
     s = sub.add_parser("serve", help="serve the viewer and rebuild it when the spec or the code changes")
-    s.add_argument("spec", nargs="?", help="the spec to serve live; without it, a home page for the current directory")
+    s.add_argument("spec", nargs="?", help="a spec to serve live (the library is served either way)")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open it in the browser")
     s.add_argument("--collapse", action="append", default=[], help="a group to show collapsed (repeatable)")
@@ -124,17 +123,12 @@ def main(argv: list[str] | None = None) -> int:
             p.error(str(e))
 
     if a.command == "serve":
-        from headway.serve import Server
-        if a.spec is None:
-            from headway.home import Home
-            if a.compare:
-                p.error("serve: --compare needs a spec (from the home page, tick the versions to compare instead)")
-            Home(os.getcwd(), [*(["--no-verify"] if a.no_verify else []), *([f"--editor={a.editor}"] if a.editor else [])]
-                 ).run(a.port, a.open)
-            return 0
+        from headway.home import Home
         build_args = [*(f"--collapse={c}" for c in a.collapse), *(f"--hide={h}" for h in a.hide),
-                      *([f"--editor={a.editor}"] if a.editor else [])]
-        Server(a.spec, build_args + (["--no-verify"] if a.no_verify else []), compare=compared).run(a.port, a.open)
+                      *([f"--editor={a.editor}"] if a.editor else []), *(["--no-verify"] if a.no_verify else [])]
+        if a.spec is None and a.compare:
+            p.error("serve: --compare needs a spec (in the library, open versions side by side instead)")
+        Home(os.getcwd(), build_args).run(a.port, a.open, spec=a.spec, compare=compared)
         return 0
 
     if a.command == "check":

@@ -157,12 +157,16 @@ def _fields(d: Decl) -> dict[str, list[int]]:
     return {name: [a.lineno, _column(d.file, a.lineno, a.col_offset)] for name, a in args.items()}
 
 
-def html(d: dict[str, Any], offline: bool = False) -> str:
+def html(d: dict[str, Any] | None, offline: bool = False, library: dict[str, Any] | None = None) -> str:
+    """The viewer with a built headway in it; with d None, the library (served by home.py, which passes
+    `library`: what the viewer needs to list and open headways)."""
     template = resources.files("headway").joinpath("viewer.html").read_text()
     if offline:
         template = inline_assets(template)
     payload = json.dumps(d).replace("</", "<\\/")
-    return template.replace("/*HEADWAY_DATA*/null", payload).replace("<!--TITLE-->", _escape(d["title"]))
+    return (template.replace("/*HEADWAY_DATA*/null", payload, 1)
+            .replace("/*HEADWAY_LIBRARY*/null", json.dumps(library).replace("</", "<\\/"), 1)
+            .replace("<!--TITLE-->", _escape(d["title"] if d else "headway")))
 
 
 def inline_assets(page: str) -> str:

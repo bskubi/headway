@@ -32,9 +32,8 @@ QUIET = 0.3         # seconds of no further change before rebuilding
 
 class Server:
     def __init__(self, spec: str, build_args: Sequence[str] = (), cwd: str | None = None,
-                 compare: Sequence[dict[str, Any]] = (), home: bool = False):
+                 compare: Sequence[dict[str, Any]] = ()):
         self.spec, self.build_args = spec, list(build_args)
-        self.home = home                                    # served under the home page (home.py): link back
         self.compare = list(compare)                        # other versions, shown in lanes of their own
         self.cwd = cwd or os.getcwd()
         self.data: dict[str, Any] | None = None             # the last good build
@@ -88,7 +87,7 @@ class Server:
         report = run.stderr.strip()
         with self.changed:
             if data is not None:
-                self.data, self.error = data | {"live": True, "version": self.version + 1, "home": self.home}, ""
+                self.data, self.error = data | {"live": True, "version": self.version + 1}, ""
                 if self.compare:
                     self.data["lanes"] = self.compare
             else:
@@ -136,7 +135,7 @@ class Server:
     def get(self, h: Handler, path: str) -> None:
         """Answer a GET of `path` (the page, its data, the build state, the stream of rebuilds)."""
         if path == "/":
-            h.send(_waiting(self.error) if self.data is None else page.html(self.data), "text/html")
+            h.send(self.page(), "text/html")
         elif path == "/data.json":
             h.send(json.dumps(self.data), "application/json")
         elif path == "/state.json":
@@ -145,6 +144,14 @@ class Server:
             self.events(h)
         else:
             h.send("not found", "text/plain", 404)
+
+    def page(self, lanes: Sequence[dict[str, Any]] = (), library: dict[str, Any] | None = None) -> str:
+        """The live page: the last good build, with more versions in lanes (and, served from the library, what
+        the viewer needs to show it); before a first good build, the error."""
+        if self.data is None:
+            return _waiting(self.error)
+        d = self.data | ({"lanes": [*self.data.get("lanes", []), *lanes]} if lanes else {})
+        return page.html(d, library=library)
 
     def events(self, h: Handler) -> None:
         # server-sent events: the build state now, then on every rebuild (and a heartbeat)
@@ -173,7 +180,8 @@ class Server:
 
         class One(Handler):
             def do_GET(self) -> None:
-                server.get(self, self.path.split("?")[0])
+                if self.local():
+                    server.get(self, self.path.split("?")[0])
         return One
 
     def start(self) -> None:
@@ -197,6 +205,20 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args: Any) -> None:
         pass
 
+    def local(self) -> bool:
+        """Is the request addressed to this machine by name (127.0.0.1, localhost)? Another web page could
+        reach the server through a name of its own that resolves here (DNS rebinding); it is refused."""
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        if host in ("127.0.0.1", "localhost", "::1"):
+            return True
+        self.send("only requests to 127.0.0.1 or localhost are answered", "text/plain", 403)
+        return False
+
+    def redirect(self, to: str) -> None:
+        self.send_response(302)
+        self.send_header("Location", to)
+        self.end_headers()
+
     def send(self, body: str | bytes, kind: str, status: int = 200) -> None:
         raw = body.encode() if isinstance(body, str) else body
         self.send_response(status)
@@ -207,14 +229,15 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
 
-def run(handler: type[Handler], port: int, open_browser: bool, message: str, close: Callable[[], None]) -> None:
-    """Serve on 127.0.0.1 until ctrl-c; `message` is printed with {url} filled in."""
+def run(handler: type[Handler], port: int, open_browser: bool, message: str, close: Callable[[], None],
+        start: str = "") -> None:
+    """Serve on 127.0.0.1 until ctrl-c; `message` is printed with {url} filled in. The browser opens at `start`."""
     httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
     httpd.daemon_threads = True
     url = f"http://127.0.0.1:{httpd.server_port}/"
     print(message.format(url=url), file=sys.stderr)
     if open_browser:
-        webbrowser.open(url)
+        webbrowser.open(url + start)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
