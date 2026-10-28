@@ -1,0 +1,264 @@
+"""Benchmark suites, and the results of methods on them.
+
+A suite is a Headway: its steps are the metrics' computations (an equation, references into the metric code, @verify
+checks), its outputs the metrics, so a metric is annotated and checked like any step of a method. On top of that
+a suite declares the datasets, each metric's direction (is higher better?) and range, and objectives: named ways
+to combine metrics into one number to rank by, kept apart from the metrics.
+
+A dataset is annotated the same way. If the suite makes its data (a simulation, a preprocessing), those steps are
+steps of the suite, with their equations, code and checks, and each dataset gives its values of their settings:
+the steps are written once and the datasets differ in their values. A dataset can also say where it comes from
+(`source`), anything else worth knowing (`facts`: size, platform, accession) and where it is made or loaded (`code`).
+
+headway computes no metric. Your benchmark computes them and writes a results file:
+
+    {"suite": "my_bench.suite",                     # the suite module (or "module:attribute")
+     "values": {"dataset": {"metric": [0.81, 0.79, ...], ...}, ...},     # one value per replicate (seed, fold)
+     "run": {...}}                                  # anything worth keeping: date, settings, seeds (optional)
+
+which `headway build --results` or `headway attach` puts into the method's built headway, together with the
+built suite. Methods whose results are on the same suite (title and version) are compared: in the viewer's
+Results view, or with `headway results`. The objectives are the one computation done here, from the stored
+values; the viewer computes them the same way (viewer.html, "results"), so keep the two in step.
+
+  how="mean"   the weighted mean, over the objective's metrics and datasets, of each metric's mean scaled to 0..1
+               by its range and turned so that 1 is best; absolute (needs every metric's range)
+  how="rank"   the weighted mean rank among the methods compared (1 is best); relative: it depends on which
+               methods are compared
+A method missing any value an objective needs gets no score for it ("incomplete").
+"""
+from __future__ import annotations
+
+import math
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any
+
+from headway.spec import Headway, Symbol, SymbolLike, _caller, _refs
+
+
+@dataclass
+class Dataset:
+    key: str
+    name: str
+    desc: str = ""
+    source: str = ""                # where it comes from: a paper, an accession, a URL
+    heldout: bool = False           # kept out of development: hidden in the viewer unless asked for
+    values: dict[str, Any] = field(default_factory=dict)       # setting -> its value for this dataset
+    facts: dict[str, str] = field(default_factory=dict)        # anything else worth knowing: size, platform, ...
+    code: list[str] = field(default_factory=list)              # where it is made or loaded
+
+
+@dataclass
+class Metric:
+    key: str
+    better: str                     # "higher" or "lower"
+    range: tuple[float, float] | None = None
+    unit: str = ""
+    source: str = ""                # where the metric comes from: a paper, a package
+
+
+@dataclass
+class Objective:
+    key: str
+    name: str
+    desc: str = ""
+    weights: dict[str, float] = field(default_factory=dict)     # metric -> weight
+    how: str = "mean"
+    datasets: list[str] | None = None                           # default: every dataset not held out
+    tex: str = ""
+
+
+class Suite(Headway):
+    """A benchmark: datasets, metrics (each a step of the headway, with its equation and code) and objectives."""
+
+    def __init__(self, title: str, desc: str = "", *, version: str = "1"):
+        super().__init__(title, desc)
+        self.version = version
+        self.datasets: dict[str, Dataset] = {}
+        self.metrics: dict[str, Metric] = {}
+        self.objectives: dict[str, Objective] = {}
+
+    def dataset(self, key: str, name: str, desc: str = "", *, source: str = "", heldout: bool = False,
+                values: Mapping[str, Any] | None = None, facts: Mapping[str, Any] | None = None,
+                code: str | Iterable[str] = ()) -> Dataset:
+        """A dataset the metrics are computed on. If the suite's steps make the data (a simulation, a
+        preprocessing), `values` gives this dataset's value of each of their settings, so the datasets are
+        annotated by the steps' equations once and differ in their values; `facts` is for the rest
+        ({"cells": "12,000", "platform": "10x v3"}); `code` points to where the dataset is made or loaded."""
+        assert key not in self.datasets, f"dataset {key!r} declared twice"
+        self.datasets[key] = d = Dataset(key, name, desc, source, heldout, dict(values or {}),
+                                         {k: str(v) for k, v in (facts or {}).items()}, _refs(code))
+        self.declared["dataset:" + key] = _caller()
+        return d
+
+    def metric(self, key: str, tex: str, name: str, desc: str = "", *, equation: str = "",
+               inputs: Sequence[SymbolLike] = (), better: str, range: tuple[float, float] | None = None,
+               unit: str = "", source: str = "", code: str | Iterable[str] = (), where: dict[str, str] | None = None,
+               group: str = "metrics", was: str | Iterable[str] = ()) -> Symbol:
+        """A metric: the output symbol `key` and the step `key` that computes it, by `equation`, from `inputs`."""
+        assert better in ("higher", "lower"), f"metric {key!r}: better={better!r}, not 'higher' or 'lower'"
+        s = self.symbol(key, tex, name, desc, role="output", was=was)
+        self.op(key, name, equation, desc, inputs=inputs, outputs=[s], code=code, group=group, where=where, was=was)
+        self.metrics[key] = Metric(key, better, None if range is None else (float(range[0]), float(range[1])),
+                                   unit, source)
+        return s
+
+    def objective(self, key: str, name: str, desc: str = "", *, metrics: Mapping[str, float] | Sequence[str],
+                  how: str = "mean", datasets: Sequence[str] | None = None, tex: str = "") -> Objective:
+        weights = dict(metrics) if isinstance(metrics, Mapping) else {m: 1.0 for m in metrics}
+        self.objectives[key] = o = Objective(key, name, desc, weights, how,
+                                             None if datasets is None else list(datasets), tex)
+        return o
+
+
+def check_suite(s: Suite, errors: list[str], warnings: list[str]) -> None:
+    for m in s.metrics.values():
+        if m.range and not m.range[0] < m.range[1]:
+            errors.append(f"metric {m.key}: range {m.range} is empty")
+    if not s.datasets:
+        warnings.append("suite: no datasets declared")
+    for d in s.datasets.values():
+        for k in d.values:
+            if k not in s.symbols:
+                errors.append(f"dataset {d.key}: a value for {k!r}, which is not declared")
+            elif s.symbols[k].role != "setting":
+                errors.append(f"dataset {d.key}: a value for {k}, a {s.symbols[k].role}, not a setting")
+    for k in {k for d in s.datasets.values() for k in d.values if k in s.symbols}:
+        lacking = [d.key for d in s.datasets.values() if k not in d.values]
+        if lacking and s.symbols[k].value is None:
+            warnings.append(f"setting {k}: no value for dataset{'s' if len(lacking) > 1 else ''} "
+                            f"{', '.join(lacking)}, and no default")
+    for o in s.objectives.values():
+        if o.how not in ("mean", "rank"):
+            errors.append(f"objective {o.key}: how={o.how!r}, not 'mean' or 'rank'")
+        for k, w in o.weights.items():
+            if k not in s.metrics:
+                errors.append(f"objective {o.key}: undeclared metric {k!r}")
+            elif o.how == "mean" and s.metrics[k].range is None:
+                errors.append(f"objective {o.key}: metric {k} has no range, which how='mean' needs to scale it")
+            if w <= 0:
+                errors.append(f"objective {o.key}: weight of {k} is {w}; weights are positive")
+        for dk in o.datasets or []:
+            if dk not in s.datasets:
+                errors.append(f"objective {o.key}: undeclared dataset {dk!r}")
+
+
+def suite_data(s: Suite, code: Callable[[list[str]], list[dict[str, Any]]],
+               decl: Callable[[str], dict[str, Any] | None]) -> dict[str, Any]:
+    """What a built suite adds to a built headway (`code` and `decl` as page.data resolves them)."""
+    return {"version": s.version,
+            "datasets": [vars(d) | {"values": {k: str(v) for k, v in d.values.items()}, "code": code(d.code),
+                                    "decl": decl("dataset:" + d.key)} for d in s.datasets.values()],
+            "metrics": [vars(m) | {"range": None if m.range is None else list(m.range)} for m in s.metrics.values()],
+            "objectives": [vars(o) for o in s.objectives.values()]}
+
+
+def suite_id(suite: Mapping[str, Any]) -> str:
+    """Results are comparable when their suites have the same title and version."""
+    return f"{suite['title']}@{suite['suite']['version']}"
+
+
+def entry(results: Mapping[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
+    """A results file, with its built suite, as kept in a method's headway; values that do not fit are reported."""
+    meta = suite["suite"]
+    datasets = {d["key"]: d for d in meta["datasets"]}
+    metrics = {m["key"]: m for m in meta["metrics"]}
+    warnings = []
+    values: dict[str, dict[str, list[float]]] = {}
+    for dk, by_metric in results.get("values", {}).items():
+        if dk not in datasets:
+            warnings.append(f"dataset {dk!r} is not in the suite; left out")
+            continue
+        for mk, vals in by_metric.items():
+            if mk not in metrics:
+                warnings.append(f"metric {mk!r} is not in the suite; left out")
+                continue
+            vals = [vals] if isinstance(vals, (int, float)) else list(vals)
+            clean = [float(v) for v in vals if isinstance(v, (int, float)) and math.isfinite(v)]
+            if len(clean) < len(vals):
+                warnings.append(f"{dk}/{mk}: {len(vals) - len(clean)} values not finite numbers; left out")
+            rng = metrics[mk]["range"]
+            if rng and any(not rng[0] <= v <= rng[1] for v in clean):
+                warnings.append(f"{dk}/{mk}: values outside the metric's range {rng}")
+            if clean:
+                values.setdefault(dk, {})[mk] = clean
+    return {"id": suite_id(suite), "suite": suite, "values": values, "run": results.get("run", {}),
+            "warnings": warnings}
+
+
+def attach(d: dict[str, Any], results: dict[str, Any]) -> dict[str, Any]:
+    """The headway with these results in it, replacing any earlier results on the same suite."""
+    d["results"] = [r for r in d.get("results", []) if r["id"] != results["id"]] + [results]
+    return d
+
+
+# ---------- objectives, for `headway results` (the viewer computes them the same way) ----------
+def _mean(v: Sequence[float]) -> float:
+    return sum(v) / len(v)
+
+
+def scores(entries: Sequence[Mapping[str, Any] | None], objective: Mapping[str, Any],
+           suite: Mapping[str, Any]) -> list[float | None]:
+    """One objective for each method (None: incomplete); entries are the methods' results on one suite."""
+    meta = suite["suite"]
+    metrics = {m["key"]: m for m in meta["metrics"]}
+    datasets = objective["datasets"] or [d["key"] for d in meta["datasets"] if not d["heldout"]]
+    cells = [(dk, mk, w) for mk, w in objective["weights"].items() for dk in datasets]
+    means = [{(dk, mk): _mean(e["values"][dk][mk]) for dk, mk, _ in cells
+              if e and mk in e["values"].get(dk, {})} for e in entries]
+    complete = [len(m) == len(cells) for m in means]
+    out: list[float | None] = []
+    for n, m in enumerate(means):
+        if not complete[n]:
+            out.append(None)
+            continue
+        total = 0.0
+        for dk, mk, w in cells:
+            spec = metrics[mk]
+            if objective["how"] == "mean":
+                lo, hi = spec["range"]
+                s = (m[(dk, mk)] - lo) / (hi - lo)
+                total += w * (s if spec["better"] == "higher" else 1 - s)
+            else:                                           # rank among the complete methods, ties shared
+                others = [means[j][(dk, mk)] for j in range(len(means)) if complete[j]]
+                v = m[(dk, mk)]
+                better = sum(o > v if spec["better"] == "higher" else o < v for o in others)
+                ties = sum(o == v for o in others) - 1
+                total += w * (1 + better + ties / 2)
+        out.append(total / sum(w for _, _, w in cells))
+    return out
+
+
+def table(headways: Sequence[Mapping[str, Any]], names: Sequence[str], heldout: bool = False) -> str:
+    """The methods' results on their (first) common suite, as text: one row per method."""
+    ids = [{r["id"] for r in g.get("results", [])} for g in headways]
+    common = set.intersection(*ids) if ids else set()
+    if not common:
+        return "no suite that every method has results on"
+    sid = next(r["id"] for r in headways[0]["results"] if r["id"] in common)
+    entries = [next(r for r in g["results"] if r["id"] == sid) for g in headways]
+    suite = entries[-1]["suite"]
+    meta = suite["suite"]
+    datasets = [d for d in meta["datasets"] if heldout or not d["heldout"]]
+    cols = [(m, d) for m in meta["metrics"] for d in datasets]
+    head = ["method"] + [o["key"] for o in meta["objectives"]] + \
+        [f"{m['key']}{'↑' if m['better'] == 'higher' else '↓'}/{d['key']}" for m, d in cols]
+    rows = [head]
+    objs = [scores(entries, o, suite) for o in meta["objectives"]]
+    for n, (e, name) in enumerate(zip(entries, names)):
+        row = [name] + ["incomplete" if s[n] is None else f"{s[n]:.3f}" for s in objs]
+        for m, d in cols:
+            v = e["values"].get(d["key"], {}).get(m["key"])
+            row.append("-" if not v else f"{_mean(v):.3f}" + (f"±{_sd(v):.3f}" if len(v) > 1 else ""))
+        rows.append(row)
+    width = [max(len(r[k]) for r in rows) for k in range(len(head))]
+    objectives = "; ".join(f"{o['key']} ({o['how']}): {o['name']}" for o in meta["objectives"])
+    lines = [f"suite {sid}; objectives: {objectives}"]
+    lines += ["  ".join(c.ljust(w) for c, w in zip(r, width)).rstrip() for r in rows]
+    return "\n".join(lines)
+
+
+def _sd(v: Sequence[float]) -> float:
+    m = _mean(v)
+    return math.sqrt(sum((x - m) ** 2 for x in v) / (len(v) - 1))

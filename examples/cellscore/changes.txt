@@ -1,0 +1,44 @@
+v1 -> v2: 3 changes
+  + op center (center genes)
+  ~ op score (module score): structure, equation
+      inputs: -Z, +Zc
+      equation: S_i = \frac{\sum_g a_g Z_{ig}}{\sum_g a_g}
+             -> S_i = \frac{\sum_g a_g \tilde Z_{ig}}{\sum_g a_g}
+  + symbol Zc (centered expression)
+v2 -> v3: 6 changes
+  < op sizefactor (size factors): split from normalize
+      normalize -> sizefactor, scale_counts
+  < op scale_counts (scale counts): split from normalize
+      normalize -> sizefactor, scale_counts
+  ~ op log (log transform): code
+      code:
+      @@ -2,2 +2,2 @@
+       def log_transform(y: Array) -> Array:
+      -    return np.log1p(y)
+      +    return np.log1p(np.maximum(y, 0))
+  + symbol f (size factor)
+  - symbol scale (scale)
+  ~ group norm (normalization): renamed
+      renamed from prep
+v3 -> v4: 5 changes
+  + op weights (gene weights)
+  ~ op weighted_score (module score): renamed, structure, equation, code
+      renamed from score
+      inputs: +w
+      equation: S_i = \frac{\sum_g a_g \tilde Z_{ig}}{\sum_g a_g}
+             -> S_i = \frac{\sum_g a_g w_g \tilde Z_{ig}}{\sum_g a_g w_g}
+      code:
+      @@ -1,4 +1,5 @@
+      -# cellscore.core:module_score
+      -def module_score(z: Array, module: NDArray[np.bool_]) -> Array:
+      -    """The mean over the module's genes."""
+      -    return z[:, module].mean(1)
+      +# cellscore.core:weighted_score
+      +def weighted_score(z: Array, module: NDArray[np.bool_], weights: Array) -> Array:
+      +    """The weighted mean over the module's genes."""
+      +    w = weights[module]
+      +    return (z[:, module] * w).sum(1) / w.sum()
+  + symbol w (gene weight)
+  + symbol sd_floor (spread floor)
+  ~ symbol S (module score): renamed
+      renamed from score

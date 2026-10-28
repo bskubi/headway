@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+# the example's build outputs (./build.sh makes them; the pages hold local file paths)
+examples/cellscore/headways/
+examples/cellscore/results/
+examples/cellscore/compare.html
+examples/cellscore/suite.html

@@ -1,0 +1,1998 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title><!--TITLE--></title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root {
+  --bg: #fbfaf7; --panel: #ffffff; --fg: #1d1d1f; --muted: #6b6b70; --border: #d6d3cc; --grid: #ece9e2;
+  --accent: #2f5fd0; --accent-soft: #e5ecfb; --edge: #9a978f;
+  --input: #2f7d6d; --input-bg: #e3f2ee; --value: #4a4a50; --value-bg: #ffffff;
+  --output: #8a4fbf; --output-bg: #f1e8fa; --setting: #a8650b; --setting-bg: #fbf0dd; --constant: #69707c; --constant-bg: #eef0f3;
+  --op-bg: #f3f1ec; --group-bg: rgba(47, 95, 208, 0.035); --ok: #23863a; --bad: #c4352b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17171a; --panel: #1f1f23; --fg: #e8e6e1; --muted: #9b9a96; --border: #3a3a40; --grid: #26262b;
+    --accent: #7ea2ff; --accent-soft: #263255; --edge: #6d6c69;
+    --input: #6cc4b0; --input-bg: #1c302b; --value: #d4d2cc; --value-bg: #232328;
+    --output: #c39af0; --output-bg: #2c2238; --setting: #e4aa55; --setting-bg: #33281a; --constant: #a3abb8; --constant-bg: #272a30;
+    --op-bg: #2a2a2f; --group-bg: rgba(126, 162, 255, 0.05); --ok: #5cc173; --bad: #f07167;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+header, #checks { flex: none; }
+header { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: end; }
+header h1 { font-size: 19px; margin: 0; font-weight: 650; letter-spacing: -0.01em; }
+header .desc { color: var(--muted); max-width: 70ch; font-size: 13px; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-left: auto; }
+button, .seg label, details.menu > summary {
+  font: inherit; font-size: 12.5px; color: var(--fg); background: var(--panel); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 9px; cursor: pointer; user-select: none;
+}
+button:hover, details.menu > summary:hover { border-color: var(--accent); }
+.seg { display: inline-flex; }
+.seg label { border-radius: 0; margin-left: -1px; }
+.seg label:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.seg label:last-child { border-radius: 0 6px 6px 0; }
+.seg input { display: none; }
+label.seg { font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; cursor: pointer; background: var(--panel); user-select: none; }
+label.seg:hover { border-color: var(--accent); }
+.seg input:checked + span { color: var(--accent); font-weight: 600; }
+label.seg > span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -1px;
+  border: 1.5px solid var(--muted); border-radius: 2px; }
+label.seg > input:checked + span::before { background: var(--accent); border-color: var(--accent); box-shadow: inset 0 0 0 1.5px var(--panel); }
+details.menu { position: relative; }
+details.menu > summary { list-style: none; }
+details.menu > div { position: absolute; right: 0; z-index: 10; background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px 12px; min-width: 220px; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+details.menu label { display: block; padding: 2px 0; white-space: nowrap; font-size: 13px; }
+.checks { margin: 0 20px; padding: 8px 12px; border: 1px solid var(--bad); color: var(--bad); border-radius: 8px; margin-top: 10px; font-size: 13px; }
+.checks summary { cursor: pointer; margin-top: 4px; color: var(--muted); }
+.checks pre { white-space: pre-wrap; margin: 6px 0 0; color: var(--fg); }
+
+#work { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.top { flex: 1; display: flex; min-height: 0; }
+#graph { flex: 1; position: relative; overflow: hidden; background-image: radial-gradient(var(--grid) 1px, transparent 1px); background-size: 18px 18px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+#graph.panning { cursor: grabbing; }
+#graph svg { width: 100%; height: 100%; display: block; }
+#note { position: absolute; left: 12px; top: 10px; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; background: var(--panel);
+  border: 1px solid var(--accent); pointer-events: none; opacity: 0; transition: opacity .4s; }
+#note.on { opacity: 1; transition: none; }
+#note { z-index: 4; }
+.node.new .n { animation: flash 1.6s ease-out 2; }
+@keyframes flash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 30% { box-shadow: 0 0 0 5px var(--accent); } }
+#hint { position: absolute; left: 12px; bottom: 8px; color: var(--muted); font-size: 12px; pointer-events: none; }
+#detail { flex: none; width: min(var(--detail-w, 460px), calc(100vw - 200px)); background: var(--panel); overflow: auto; padding: 16px 18px; }
+/* dividers: drag to resize, drag (almost) shut or double-click or ‹ › to collapse, as in an editor */
+.split { flex: none; position: relative; z-index: 3; background: var(--border); touch-action: none; }
+.split.v { width: 1px; cursor: col-resize; }
+.split.h { height: 1px; cursor: row-resize; }
+.split::before { content: ""; position: absolute; inset: 0 -4px; }
+.split.h::before { inset: -4px 0; }
+.split:hover, .split.drag { background: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.split button { position: absolute; padding: 0; font-size: 11px; line-height: 1; color: var(--muted); opacity: 0; transition: opacity .15s; pointer-events: none; }
+.split:hover button, .split button:focus-visible, .shut button { opacity: 1; pointer-events: auto; }   /* hidden, it must not take clicks */
+.split.v button { top: 50%; left: -8px; width: 16px; height: 34px; transform: translateY(-50%); }
+.split.h button { left: 50%; top: -8px; width: 34px; height: 16px; transform: translateX(-50%); }
+body.nodetail #detail, body.nolegend #legend { display: none; }
+#detail .empty { color: var(--muted); }
+#detail .decl { font-size: 12px; margin: -2px 0 8px; }
+#detail .decl a { color: var(--muted); text-decoration: none; }
+#detail .decl a:hover { color: var(--accent); text-decoration: underline; }
+#live { font-size: 12px; color: var(--muted); margin-left: 6px; }
+#live.on::before { content: "●"; color: var(--ok); margin-right: 4px; }
+#live.off::before { content: "●"; color: var(--bad); margin-right: 4px; }
+@media (max-width: 760px) {
+  body { height: auto; overflow: visible; display: block; }
+  .top { flex-direction: column; height: auto; }
+  #graph { height: 62vh; flex: none; }
+  #detail, body.nodetail #detail { display: block; width: auto; border-top: 1px solid var(--border); }
+  #legend, body.nolegend #legend { display: grid; height: auto; }
+  .split { display: none; }
+}
+
+/* nodes */
+.n { font-size: 13px; border: 1.5px solid var(--border); border-radius: 7px; padding: 5px 10px; background: var(--value-bg); white-space: nowrap; display: inline-block; cursor: pointer; }
+.n .katex { font-size: 1.12em; }
+.n.sym { border-radius: 999px; text-align: center; padding: 4px 13px 3px; }
+.n.sym .dims { color: var(--muted); font-size: 10.5px; line-height: 1.2; }
+.n.sym .dims .katex { font-size: 1em; }
+.n.role-input { border-color: var(--input); background: var(--input-bg); }
+.n.role-output { border-color: var(--output); background: var(--output-bg); }
+.n.role-setting { border-color: var(--setting); background: var(--setting-bg); border-style: dashed; }
+.n.role-constant { border-color: var(--constant); background: var(--constant-bg); border-style: dotted; border-width: 2px; }
+.n.op { background: var(--op-bg); border-color: var(--edge); border-radius: 4px; font-weight: 560; }
+.n.op .ok { color: var(--ok); font-weight: 700; margin-left: 5px; }
+.n.op .bad { color: var(--bad); font-weight: 700; margin-left: 5px; }
+.n.op .per, .n.cg .per { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+.n.cg { background: var(--group-bg); border: 1.5px solid var(--accent); border-radius: 8px; font-weight: 600; color: var(--accent); }
+.n.cg .sub { font-weight: 400; color: var(--muted); font-size: 11px; }
+.n.stack { box-shadow: 3px 3px 0 -1.5px var(--bg), 3px 3px 0 0 var(--edge), 6px 6px 0 -1.5px var(--bg), 6px 6px 0 0 var(--edge); }
+.node.sel .n { outline: 2.5px solid var(--accent); outline-offset: 2px; }
+/* a stack is outlined as a whole, around the cards behind it too */
+.node.sel .n.stack { outline: none; position: relative; }
+.node.sel .n.stack::after { content: ""; position: absolute; inset: -6px -12px -12px -6px; border: 2.5px solid var(--accent); border-radius: 9px; pointer-events: none; }
+.node.sel .n.stack.sym::after { border-radius: 999px; }
+.node.dim, .edge.dim { opacity: 0.28; }
+.edge path { fill: none; stroke: var(--edge); stroke-width: 1.3; }
+.edge.hl path { stroke: var(--accent); stroke-width: 2; }
+.grp rect { fill: var(--group-bg); stroke: var(--border); stroke-width: 1.2; rx: 10; }
+.grp.sel rect { stroke: var(--accent); stroke-width: 2; }
+.grp .head { font-size: 12px; font-weight: 650; color: var(--muted); letter-spacing: 0.02em; display: flex; gap: 6px; align-items: center; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
+.grp .head .tog { border: 1px solid var(--border); border-radius: 4px; width: 16px; height: 16px; line-height: 13px; text-align: center; font-size: 13px; color: var(--fg); background: var(--panel); }
+#measure { position: absolute; left: -10000px; top: 0; visibility: hidden; }
+
+/* detail */
+#detail h2 { font-size: 17px; margin: 0 0 2px; }
+.pen { color: var(--muted); text-decoration: none; font-size: 12px; font-weight: 400; margin-left: 6px; opacity: .55; text-transform: none; letter-spacing: 0; }
+.pen:hover { color: var(--accent); opacity: 1; }
+#legend .pen { opacity: 0; }
+#legend tr:hover .pen, #legend .eqrow:hover .pen, #legend .pen:focus { opacity: .8; }
+#detail .eq { position: relative; }
+#detail .eq .pen { position: absolute; top: 4px; right: 6px; }
+#detail .askmode { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin: 0 0 8px; }
+#detail .askmode button { border: 0; border-radius: 0; padding: 3px 10px; font-size: 12.5px; background: var(--panel); }
+#detail .askmode button + button { border-left: 1px solid var(--border); }
+#detail .askmode button.on, #detail .formats button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+#detail .formats { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+#detail .formats button { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg); }
+#detail .presets { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 6px; }
+#detail .presets button { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--bg); }
+#detail .ask textarea { width: 100%; min-height: 4.5em; font: inherit; font-size: 13px; color: var(--fg); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; resize: vertical; }
+#detail .ask textarea:focus { outline: none; border-color: var(--accent); }
+#detail .ask .row { display: flex; gap: 10px; align-items: center; margin-top: 6px; font-size: 12px; color: var(--muted); }
+#detail .ask button { white-space: nowrap; }
+#detail .ask details pre { white-space: pre-wrap; font-size: 11.5px; max-height: 22em; overflow: auto; background: var(--bg);
+  border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--fg); }
+#detail .crumb { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+#detail .eq .katex-display { font-size: 0.92em; }
+#detail .eq { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; overflow-x: auto; margin: 10px 0; }
+#detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; cursor: pointer; background: var(--bg); font-size: 13px; }
+.chip:hover { border-color: var(--accent); }
+.chip.op { border-radius: 4px; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.status { font-size: 13px; }
+.status.ok { color: var(--ok); } .status.bad { color: var(--bad); }
+.status pre { white-space: pre-wrap; color: var(--fg); font-size: 11.5px; }
+.code { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0 12px; overflow: hidden; }
+.code .where { display: flex; justify-content: space-between; gap: 8px; font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 5px 10px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.code .where a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+.code .where .missing { color: var(--bad); }
+.code pre { margin: 0; padding: 8px 0; overflow-x: auto; font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--panel); }
+.code .ln { display: inline-block; width: 3.6em; padding-right: 0.9em; text-align: right; color: var(--muted); user-select: none; opacity: .7; }
+.code code.hljs { background: transparent; padding: 0; }
+
+/* legend */
+#legend { flex: none; height: min(var(--legend-h, 36vh), calc(100vh - 260px)); overflow: auto; padding: 4px 20px 40px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: 8px 36px; }
+@media (max-width: 1000px) { #legend { grid-template-columns: minmax(0, 1fr); } }
+#legend h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 18px 0 8px; font-weight: 650; }
+#legend table { border-collapse: collapse; width: 100%; }
+#legend td { padding: 5px 8px; border-top: 1px solid var(--border); vertical-align: top; }
+#legend td.tex { white-space: nowrap; width: 1%; }
+#legend td.shape { white-space: nowrap; width: 1%; color: var(--muted); }
+#legend td .name { font-weight: 560; }
+#legend td .d { color: var(--muted); font-size: 13px; }
+#legend tr, .eqrow { cursor: pointer; }
+#legend tr:hover td, .eqrow:hover { background: var(--accent-soft); }
+#legend tr.hl td, .eqrow.hl { background: var(--accent-soft); }
+#legend tr.sel td, .eqrow.sel { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+#legend tr.sel td + td { box-shadow: none; }
+.rolehead td { font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding-top: 12px !important; cursor: default; }
+.eqgroup { font-size: 12px; font-weight: 650; color: var(--muted); margin: 14px 0 4px; letter-spacing: .02em; }
+.eqrow { border-top: 1px solid var(--border); padding: 6px 8px; display: grid; grid-template-columns: 11em minmax(0, 1fr) 1.2em; gap: 12px; align-items: baseline; }
+#legend .act { width: 1%; text-align: right; } #legend .act .pen { margin-left: 0; }
+.eqrow .lbl { font-weight: 560; }
+.eqrow .lbl .ok { color: var(--ok); } .eqrow .lbl .bad { color: var(--bad); }
+.eqrow .math { overflow-x: auto; overflow-y: hidden; }
+.eqrow .math .katex-display { margin: 0.2em 0; text-align: left; }
+.eqrow .math .katex-display > .katex { text-align: left; }
+.eqrow .d { color: var(--muted); font-size: 13px; }
+.whr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 2px 10px; align-items: baseline; font-size: 13px; margin: -4px 0 10px 4px; }
+.whr .wl { color: var(--muted); font-style: italic; }
+.whr .wt { white-space: nowrap; }
+.eqrow .whr { margin: 2px 0 4px; font-size: 12.5px; color: var(--muted); }
+
+/* results: the methods' benchmark results */
+body.resultsview .toolbar > :not(#viewseg):not(#addlane):not(#lanefile), body.resultsview .gonly, body.resultsview #hint { display: none; }
+#results { position: absolute; inset: 0; overflow: auto; background: var(--bg); padding: 14px 20px 40px; cursor: default; user-select: text; -webkit-user-select: text; z-index: 2; }
+#results .rbar { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; margin-bottom: 12px; font-size: 12.5px; color: var(--muted); }
+#results .rbar b { color: var(--fg); }
+#results .empty { color: var(--muted); max-width: 60ch; }
+table.heat { border-collapse: separate; border-spacing: 2px; font-size: 12.5px; }
+table.heat th { font-weight: 600; padding: 3px 6px; white-space: nowrap; cursor: pointer; vertical-align: bottom; }
+table.heat th:hover { color: var(--accent); }
+table.heat th.grp { border-bottom: 2px solid var(--border); text-align: center; }
+table.heat th.sub { font-weight: 400; color: var(--muted); font-size: 12px; }
+table.heat th.row { text-align: left; padding-right: 12px; }
+table.heat tr.on th.row { color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
+table.heat tr.off th.row, table.heat tr.off td { opacity: .45; }
+table.heat th .dir { color: var(--muted); font-weight: 400; margin-left: 3px; }
+table.heat th.sorted::after { content: " ▾"; color: var(--accent); }
+table.heat td.cell { min-width: 78px; height: 36px; padding: 2px 6px; text-align: center; border-radius: 4px; cursor: pointer; font-variant-numeric: tabular-nums; line-height: 1.2; }
+table.heat td.cell:hover, table.heat td.cell.sel { outline: 2px solid var(--accent); }
+table.heat td.obj { font-weight: 650; }
+table.heat td.gap { width: 8px; padding: 0; }
+td.cell .sd { color: var(--muted); font-size: 10.5px; font-weight: 400; }
+td.cell .dl { display: block; font-size: 10.5px; font-weight: 400; }
+.dl.good { color: var(--ok); } .dl.bad { color: var(--bad); } .dl.same { color: var(--muted); }
+td.cell.missing { background: repeating-linear-gradient(45deg, transparent 0 5px, var(--grid) 5px 10px); color: var(--muted); font-weight: 400; }
+#detail .strip { width: 100%; height: auto; display: block; margin: 4px 0 10px; }
+#detail .strip text { font-size: 11px; fill: var(--fg); }
+#detail .strip .mu { fill: var(--muted); }
+#detail .strip circle { fill: var(--accent); fill-opacity: .55; }
+#detail .strip .mean { stroke: var(--fg); stroke-width: 2; }
+#detail .strip .axis { stroke: var(--border); }
+#detail table.wts { border-collapse: collapse; font-size: 13px; }
+#detail table.wts td { padding: 2px 10px 2px 0; }
+#detail table.wts tr.varies td { font-weight: 650; }
+#results .dsl { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
+#results .dsl .chip { margin-left: 4px; }
+table.heat th[data-ds] { cursor: pointer; }
+
+/* lanes: other versions, one lane each, registered on one layout */
+#lanes { flex: none; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 20px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+#lanes:empty { display: none; }
+#lanes .lbl, #lanes .cmpnote { color: var(--muted); }
+#lanes .cmpnote { margin-left: 4px; }
+.lanechip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px 2px 6px; background: var(--panel); cursor: pointer; user-select: none; }
+.lanechip:hover { border-color: var(--accent); }
+.lanechip.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.lanechip.over { box-shadow: -3px 0 0 var(--accent); }
+.lanechip.over.after { box-shadow: 3px 0 0 var(--accent); }
+.lanechip .grip { color: var(--muted); cursor: grab; font-size: 11px; }
+.lanechip button { font-size: 11px; padding: 0 5px; border-radius: 4px; font-weight: 400; color: var(--muted); }
+.lanechip button.on { color: var(--accent); border-color: var(--accent); }
+.lane rect { fill: none; stroke: var(--border); stroke-dasharray: 4 3; rx: 10; }
+.lane.on rect { stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
+.lane .lanehead { font-size: 12.5px; color: var(--muted); padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+.lane .lanehead b { color: var(--fg); margin-right: 6px; }
+.lane.on .lanehead b { color: var(--accent); }
+.node.ghost { opacity: 0.4; }
+.node.ghost .n { border-style: dashed; background: transparent; box-shadow: none; text-decoration: line-through; text-decoration-color: var(--bad); }
+.n.fill { display: inline-flex; align-items: center; justify-content: center; }
+.mk circle { stroke: var(--bg); stroke-width: 1.5; }
+.mk text { font: 700 10px system-ui, sans-serif; fill: #fff; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+.mk.added circle { fill: var(--ok); } .mk.changed circle { fill: var(--setting); } .mk.removed circle { fill: var(--bad); }
+.mk.split circle, .mk.merged circle { fill: var(--output); } .mk.quiet circle { fill: var(--muted); }
+#detail table.versions { border-collapse: collapse; width: 100%; font-size: 13px; }
+#detail table.versions td:first-child { white-space: nowrap; }
+#detail table.versions td { padding: 3px 6px; border-top: 1px solid var(--border); vertical-align: top; }
+#detail table.versions tr { cursor: pointer; }
+#detail table.versions tr:hover td { background: var(--accent-soft); }
+#detail table.versions tr.on td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
+.vs.added { color: var(--ok); } .vs.changed { color: var(--setting); } .vs.none, .vs.same { color: var(--muted); } .vs.split, .vs.merged { color: var(--output); }
+#detail .chg { margin: 6px 0; font-size: 13px; }
+#detail .chg .k { color: var(--muted); margin-right: 6px; }
+#detail .chg .chip.gone { text-decoration: line-through; text-decoration-color: var(--bad); }
+#detail .eq.old { opacity: .75; border-style: dashed; }
+#detail .eqlbl { font-size: 11.5px; color: var(--muted); margin: 8px 0 -6px; }
+.code .del { background: color-mix(in srgb, var(--bad) 16%, transparent); display: inline-block; width: 100%; }
+.code .ins { background: color-mix(in srgb, var(--ok) 16%, transparent); display: inline-block; width: 100%; }
+.code .fold { color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="title"></h1>
+    <div class="desc" id="desc"></div>
+  </div>
+  <div class="toolbar">
+    <span class="seg" id="viewseg" hidden title="the methods' computation graph, or their benchmark results">
+      <label><input type="radio" name="view" value="graph" checked><span>Graph</span></label>
+      <label><input type="radio" name="view" value="results"><span>Results</span></label>
+    </span>
+    <button id="expand">Expand all</button>
+    <button id="collapse">Collapse all</button>
+    <details class="menu" id="groupsmenu"><summary>Groups ▾</summary><div id="groupslist"></div></details>
+    <label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Show settings &amp; constants</span></label>
+    <label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label>
+    <span class="seg" id="focus">
+      <label><input type="radio" name="focus" value="" checked><span>All</span></label>
+      <label><input type="radio" name="focus" value="up"><span>Upstream</span></label>
+      <label><input type="radio" name="focus" value="down"><span>Downstream</span></label>
+    </span>
+    <span class="seg" id="dir">
+      <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
+      <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
+    </span>
+    <button id="fit">Fit</button>
+    <button id="addlane" title="open another version of this headway (or another method's) in a lane of its own, aligned with this one: a page built by headway, or the JSON from build --json">Compare…</button>
+    <input type="file" id="lanefile" accept=".json,.html,.htm" multiple hidden>
+  </div>
+</header>
+<div id="lanes"></div>
+<div id="checks"></div>
+<div id="work">
+<div class="top">
+  <div id="graph"><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
+    <div id="results" hidden></div>
+    <div id="note"></div>
+    <div id="hint">click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom</div>
+  </div>
+  <div class="split v" id="vsplit" title="drag to resize the side panel; double-click to collapse it"><button id="vtog"></button></div>
+  <aside id="detail"><p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p></aside>
+</div>
+<div class="split h" id="hsplit" title="drag to resize the legend; double-click to collapse it"><button id="htog"></button></div>
+<section id="legend">
+  <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table></div>
+  <div><h2>Equations</h2><div id="equations"></div></div>
+</section>
+</div>
+<div id="measure"></div>
+
+<script>
+let D = /*HEADWAY_DATA*/null;
+const NS = "http://www.w3.org/2000/svg";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const tex = (t, display = false) => { try { return katex.renderToString(t, {displayMode: display, throwOnError: false}); } catch (e) { return esc(t); } };
+// text with inline $math$
+const rich = (s) => esc(s).split(/\$([^$]+)\$/).map((part, n) => n % 2 ? tex(part.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")) : part).join("");
+
+// lookups over D, remade when a live rebuild replaces it
+let SYM, OP, IDX, GRP, PRODUCER, CONSUMERS, ORDER;
+function index() {
+  SYM = Object.fromEntries(D.symbols.map((s) => [s.key, s]));
+  OP = Object.fromEntries(D.ops.map((o) => [o.key, o]));
+  IDX = Object.fromEntries(D.indices.map((i) => [i.key, i]));
+  GRP = Object.fromEntries(D.groups.map((g) => [g.path, g]));
+  PRODUCER = {}; CONSUMERS = {};
+  for (const o of D.ops) {
+    o.outputs.forEach((s) => PRODUCER[s] = o.key);
+    o.inputs.forEach((s) => (CONSUMERS[s] ??= []).push(o.key));
+  }
+  // ops in dependency order, for the equations list
+  const seen = new Set();
+  ORDER = [];
+  const visit = (k) => { if (seen.has(k)) return; seen.add(k); for (const s of OP[k].inputs) if (PRODUCER[s]) visit(PRODUCER[s]); ORDER.push(k); };
+  D.ops.forEach((o) => visit(o.key));
+}
+index();
+const chain = (path) => path ? path.split("/").map((_, n, a) => a.slice(0, n + 1).join("/")) : [];
+const parent = (path) => path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+const within = (path, g) => path === g || path.startsWith(g + "/");
+const opsIn = (g) => D.ops.filter((o) => within(o.group, g));
+
+const state = {
+  collapsed: new Set(D.groups.filter((g) => g.collapsed).map((g) => g.path)),
+  hidden: new Set(D.hidden), settings: false, split: true, focus: "", dir: "RIGHT", sel: null,
+};
+
+const PARAM = (s) => s.role === "setting" || s.role === "constant";     // drawn only with "Show settings & constants"
+const dimsTex = (s) => s.dims.map((d) => IDX[d]?.tex ?? d).join(" \\times ");
+const shapeText = (s) => s.dims.length ? s.dims.map((d) => `${IDX[d]?.name ?? d}`).join(" × ") : "scalar";
+
+/* ---------- which nodes are visible ---------- */
+function reach() {
+  if (!state.sel || !state.focus) return null;
+  const up = state.focus === "up", out = new Set();
+  const stack = [];
+  if (state.sel.type === "group") opsIn(state.sel.key).forEach((o) => stack.push("o:" + o.key));
+  else stack.push((state.sel.type === "op" ? "o:" : "s:") + state.sel.key);
+  while (stack.length) {
+    const id = stack.pop();
+    if (out.has(id)) continue;
+    out.add(id);
+    const k = id.slice(2);
+    if (id[0] === "o") (up ? OP[k].inputs : OP[k].outputs).forEach((s) => stack.push("s:" + s));
+    else if (up) { if (PRODUCER[k]) stack.push("o:" + PRODUCER[k]); }
+    else (CONSUMERS[k] ?? []).forEach((o) => stack.push("o:" + o));
+  }
+  return out;
+}
+
+function view(keep = reach()) {
+  const hiddenOp = (o) => chain(o.group).some((g) => state.hidden.has(g)) || (keep && !keep.has("o:" + o.key));
+  const collapsedAt = (o) => chain(o.group).find((g) => state.collapsed.has(g));
+  const nodes = new Map(), edges = new Map();
+  const rep = {};
+  for (const o of D.ops) {
+    if (hiddenOp(o)) continue;
+    const c = collapsedAt(o);
+    if (c) {
+      rep[o.key] = "g:" + c;
+      if (!nodes.has("g:" + c)) nodes.set("g:" + c, {id: "g:" + c, type: "cgroup", key: c, container: parent(c)});
+    } else {
+      rep[o.key] = "o:" + o.key;
+      nodes.set("o:" + o.key, {id: "o:" + o.key, type: "op", key: o.key, container: o.group});
+    }
+  }
+  const containerOf = (id) => nodes.get(id).container;
+  const lca = (paths) => paths.reduce((a, b) => { while (a && !within(b, a)) a = parent(a); return a; });
+  for (const s of D.symbols) {
+    if (PARAM(s) && !state.settings) continue;
+    if (keep && !keep.has("s:" + s.key)) continue;
+    const users = (CONSUMERS[s.key] ?? []).filter((k) => rep[k]).map((k) => rep[k]);
+    const made = PRODUCER[s.key] && rep[PRODUCER[s.key]];
+    if (!made && !users.length) continue;
+    if (made && made[0] === "g" && s.role !== "output" && users.every((u) => u === made)) continue;   // inside a collapsed group
+    if (!made && state.split) {
+      // data and settings: a copy next to each group that uses them, instead of long edges across the graph
+      for (const u of users) {
+        const container = containerOf(u), id = "s:" + s.key + "@" + container;
+        nodes.set(id, {id, type: "sym", key: s.key, container});
+        edges.set(id + ">" + u, [id, u]);
+      }
+      continue;
+    }
+    const id = "s:" + s.key;
+    const container = made ? containerOf(made) : lca(users.map(containerOf));
+    nodes.set(id, {id, type: "sym", key: s.key, container});
+    if (made) edges.set(made + ">" + id, [made, id]);
+    for (const u of users) if (u !== made) edges.set(id + ">" + u, [id, u]);
+  }
+  // groups shown expanded: those holding a visible node
+  const open = new Set();
+  for (const n of nodes.values()) chain(n.container).forEach((g) => open.add(g));
+  return {nodes, edges: [...edges.values()], open, rep};
+}
+
+/* ---------- node contents ---------- */
+// `fill`: [width, height] to stretch to, in a slot that another version's node made larger
+function nodeHTML(n, fill = null) {
+  const box = (cls, inner) => `<div class="n ${cls}${fill ? " fill" : ""}"${fill ? ` style="min-width:${fill[0]}px;min-height:${fill[1]}px"` : ""}><div class="nc">${inner}</div></div>`;
+  if (n.type === "sym") {
+    const s = SYM[n.key];
+    const dims = s.dims.length ? `<div class="dims">${tex(dimsTex(s))}</div>` : s.value !== null ? `<div class="dims">= ${esc(s.value)}</div>` : "";
+    return box(`sym role-${s.role}${s.per ? " stack" : ""}`, tex(s.tex) + dims);
+  }
+  if (n.type === "op") {
+    const o = OP[n.key];
+    const mark = o.verified === true ? `<span class="ok" title="equation verified against the code">✓</span>`
+      : o.verified === false ? `<span class="bad" title="verification failed">✗</span>` : "";
+    const per = o.per ? `<span class="per">per ${tex(IDX[o.per]?.tex ?? o.per)}</span>` : "";
+    return box(`op${o.per ? " stack" : ""}`, esc(o.label) + per + mark);
+  }
+  const g = GRP[n.key], count = opsIn(n.key).length;
+  return box("cg", `⊞ ${esc(g.label)}<div class="sub">${count} step${count === 1 ? "" : "s"} · double-click to open</div>`);
+}
+const PAD = 8;   // room for the stacked-card shadow
+const HALO = 7;  // room on every side for the selection outline and the flash, outside the laid-out box
+function measure(nodes) {
+  const box = $("measure");
+  box.innerHTML = [...nodes.values()].map((n) => `<div data-id="${esc(n.id)}" style="display:inline-block">${nodeHTML(n)}</div>`).join("");
+  const size = {};
+  for (const el of box.children) {
+    const r = el.firstElementChild.getBoundingClientRect();
+    size[el.dataset.id] = [Math.ceil(r.width) + 2, Math.ceil(r.height) + 2];
+  }
+  const heads = {};
+  for (const g of D.groups) {
+    box.innerHTML = `<div class="grp"><div class="head" style="display:inline-flex"><span class="tog">−</span>${esc(g.label)}</div></div>`;
+    heads[g.path] = Math.ceil(box.firstElementChild.firstElementChild.getBoundingClientRect().width) + 4;
+  }
+  box.innerHTML = "";
+  return {size, heads};
+}
+
+/* ---------- layout and drawing ----------
+   Every open version (a lane) is drawn on one layout: the union of the lanes' graphs, with the nodes that
+   correspond (the same key, or a `was` key) in one slot, so they line up from lane to lane. With one lane this
+   is the plain graph. */
+const elk = new ELK();
+let current = null;
+const LANE_HEAD = 30, LANE_GAP = 26, PACK = 6;
+const lanesDown = () => state.dir === "RIGHT";          // lanes are stacked across the direction of flow
+// several nodes of one lane in one slot (a step split in two): stacked across the flow as well
+function packed(items) {
+  const w = items.map((i) => i.w), h = items.map((i) => i.h), gaps = PACK * (items.length - 1);
+  return lanesDown() ? [Math.max(...w), h.reduce((a, b) => a + b) + gaps] : [w.reduce((a, b) => a + b) + gaps, Math.max(...h)];
+}
+// one lane's graph, its nodes keyed by their slot in the union
+function laneView(lane, lin) {
+  use(lane);
+  let keep;
+  if (state.sel && state.focus) {
+    const there = counterpart(state.sel, lane, lin), sel = state.sel;
+    if (there) { state.sel = there; keep = reach(); state.sel = sel; } else keep = new Set();
+  }
+  const v = view(keep);
+  const {size, heads} = measure(v.nodes);
+  const G = (path) => path ? lin.of(lane.id, "group", path) : "";
+  const slot = (n) => n.type === "op" ? "o:" + lin.of(lane.id, "op", n.key) : n.type === "cgroup" ? "g:" + G(n.key)
+    : "s:" + lin.of(lane.id, "sym", n.key) + (n.id.includes("@") ? "@" + G(n.container) : "");
+  const map = new Map(), items = new Map(), container = new Map(), edges = new Map(), groups = new Map();
+  for (const n of v.nodes.values()) {
+    const u = slot(n), [w, h] = size[n.id];
+    map.set(n.id, u);
+    container.set(u, G(n.container));
+    (items.get(u) ?? items.set(u, []).get(u)).push({n, w, h});
+  }
+  for (const [a, b] of v.edges) if (map.get(a) !== map.get(b)) edges.set(map.get(a) + ">" + map.get(b), [map.get(a), map.get(b)]);
+  for (const p of v.open) groups.set(G(p), {parent: G(parent(p)), path: p, head: heads[p] ?? 60});
+  return {lane, v, map, items, container, edges, groups};
+}
+async function render(fit = false, flash = false, changed = new Set()) {
+  const before = flash && current && LANES.length === 1 ? new Set(current.v.nodes.keys()) : null;
+  const lin = lineages();
+  const per = (cmp.solo ? [active] : LANES).map((lane) => laneView(lane, lin));
+  use(active);
+  const nodes = new Map(), edges = new Map(), groups = new Map();
+  for (const p of per) {                                 // a slot is as large as its largest version; a later lane places it
+    for (const [u, items] of p.items) {
+      const [w, h] = packed(items), n = nodes.get(u);
+      nodes.set(u, {id: u, container: p.container.get(u), w: Math.max(w, n?.w ?? 0), h: Math.max(h, n?.h ?? 0)});
+    }
+    p.edges.forEach((e, k) => edges.set(k, e));
+    p.groups.forEach((g, u) => groups.set(u, {parent: g.parent, head: Math.max(g.head, groups.get(u)?.head ?? 0)}));
+  }
+  const depth = (u, n = 0) => !u || n > 64 ? n : depth(groups.get(u)?.parent, n + 1);
+  const elkNode = {id: "root", children: [], edges: [], layoutOptions: {
+    "elk.algorithm": "layered", "elk.direction": state.dir, "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+    "elk.edgeRouting": "ORTHOGONAL", "elk.layered.spacing.nodeNodeBetweenLayers": "34", "elk.spacing.nodeNode": "16",
+    "elk.layered.spacing.edgeNodeBetweenLayers": "14", "elk.spacing.edgeNode": "12", "elk.spacing.edgeEdge": "8",
+    "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF", "elk.layered.considerModelOrder.strategy": "NODES_AND_EDGES"}};
+  const holder = {"": elkNode};
+  for (const u of [...groups.keys()].sort((a, b) => depth(a) - depth(b))) {
+    const gn = {id: "G:" + u, children: [], edges: [], layoutOptions: {
+      "elk.padding": `[top=${30},left=12,bottom=12,right=12]`, "elk.nodeSize.constraints": "MINIMUM_SIZE",
+      "elk.nodeSize.minimum": `(${groups.get(u).head + 24}, 40)`}};
+    holder[u] = gn;
+    (holder[groups.get(u).parent] ?? elkNode).children.push(gn);
+  }
+  for (const n of nodes.values()) (holder[n.container] ?? elkNode).children.push({id: n.id, width: n.w + PAD, height: n.h + PAD});
+  [...edges.values()].forEach(([a, b], k) => elkNode.edges.push({id: "e" + k, sources: [a], targets: [b]}));
+  const laid = await elk.layout(elkNode);
+  const changes = new Map(LANES.map((l) => [l.id, refOf(l) ? diffLanes(lin, refOf(l), l) : null]));
+  const act = per.find((p) => p.lane === active);
+  current = {v: act.v, laid, per, lin, changes, slots: nodes};
+  draw();
+  if (before) document.querySelectorAll("#vp .node").forEach((el) => {
+    if (!before.has(el.dataset.id) || changed.has(el.dataset.id.split("@")[0])) el.classList.add("new");
+  });
+  if (fit) fitView(true);
+}
+
+function draw() {
+  const {laid, per, lin, slots} = current, multi = per.length > 1, down = lanesDown();
+  const W = laid.width, H = laid.height, head = multi ? LANE_HEAD : 0;
+  const vp = $("vp");
+  vp.innerHTML = "";
+  const layer = () => { const g = document.createElementNS(NS, "g"); vp.append(g); return g; };
+  const bLayer = layer(), gLayer = layer(), eLayer = layer(), nLayer = layer();
+  // elkjs gives node positions relative to their parent, and edge points relative to the edge's container
+  const boxes = new Map(), origin = {root: [0, 0]};
+  const walk = (node, ox, oy) => {
+    for (const c of node.children ?? []) {
+      const x = c.x + ox, y = c.y + oy;
+      boxes.set(c.id, {x, y, w: c.width, h: c.height});
+      if (c.id.startsWith("G:")) { origin[c.id] = [x, y]; walk(c, x, y); }
+    }
+  };
+  walk(laid, 0, 0);
+  const paths = [];
+  const collect = (node) => {
+    for (const e of node.edges ?? []) {
+      const [ox, oy] = origin[e.container ?? "root"] ?? [0, 0];
+      paths.push({from: e.sources[0], to: e.targets[0], parts: (e.sections ?? []).map((sec) => [sec.startPoint, ...(sec.bendPoints ?? []), sec.endPoint].map((pt) => [pt.x + ox, pt.y + oy]))});
+    }
+    (node.children ?? []).forEach(collect);
+  };
+  collect(laid);
+  current.w = down ? W : per.length * (W + LANE_GAP) - LANE_GAP;
+  current.h = down ? per.length * (H + head + LANE_GAP) - LANE_GAP : H + head;
+  const svgEl = (cls, html, data = {}) => {
+    const el = document.createElementNS(NS, "g");
+    el.setAttribute("class", cls);
+    Object.assign(el.dataset, data);
+    el.innerHTML = html;
+    return el;
+  };
+  const sn = suiteNow(), first = sn?.meta.objectives[0];
+  const scored = first && LANES.length > 1 ? objScores(LANES.map((l) => resultsOf(l, sn.id)), first, sn.meta).scores : null;
+  per.forEach((p, k) => {
+    const lane = p.lane, ref = refOf(lane), refP = ref && per.find((q) => q.lane === ref);
+    const score = scored?.[LANES.indexOf(lane)];
+    const ch = current.changes.get(lane.id);
+    const dx = down ? 0 : k * (W + LANE_GAP), dy = (down ? k * (H + head + LANE_GAP) : 0) + head;
+    use(lane);
+    if (multi) {
+      const band = svgEl(`lane${lane === active ? " on" : ""}`, `<rect x="${dx - 8}" y="${dy - head}" width="${W + 16}" height="${H + head + 8}"/>` +
+        `<foreignObject x="${dx - 8}" y="${dy - head}" width="${W + 16}" height="${head}"><div xmlns="http://www.w3.org/1999/xhtml" class="lanehead" title="click to read this version in the panels"><b>${esc(lane.name)}</b>${esc(laneMeta(lane))}${ref ? ` · against ${esc(ref.name)}` : cmp.base === lane.id ? " · the baseline" : ""}${score !== undefined && score !== null ? ` · ${esc(first.name)} ${fmt(score)}` : ""}</div></foreignObject>`, {lane: lane.id});
+      band.querySelector(".lanehead").addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); });
+      bLayer.append(band);
+    }
+    for (const [id, b] of boxes) {
+      const x = b.x + dx, y = b.y + dy;
+      if (id.startsWith("G:")) {
+        const g = p.groups.get(id.slice(2));
+        if (!g) continue;
+        const path = g.path;
+        const el = svgEl("grp", `<rect x="${x}" y="${y}" width="${b.w}" height="${b.h}"/>` +
+          `<foreignObject x="${x}" y="${y}" width="${b.w}" height="28"><div xmlns="http://www.w3.org/1999/xhtml" class="head"><span class="tog" title="collapse">−</span>${esc(GRP[path]?.label ?? path)}</div></foreignObject>`, {id, lane: lane.id});
+        el.querySelector(".tog").addEventListener("click", (e) => { e.stopPropagation(); toggle(path, lane); });
+        el.querySelector(".head").addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); select({type: "group", key: path}); });
+        el.querySelector(".head").addEventListener("dblclick", (e) => { e.stopPropagation(); toggle(path, lane); });
+        gLayer.append(el);
+        continue;
+      }
+      const slot = slots.get(id), items = p.items.get(id);
+      if (items) placeItems(items, x, y, slot, lane, (it) => mark(it, ch, p));
+      else if (multi && refP?.items.has(id) && gone(id, lane, lin)) {       // in the version it is compared with, not in this one
+        use(ref);
+        placeItems(refP.items.get(id), x, y, slot, ref, () => ({status: "removed", title: `not in this version (it is in ${ref.name})`}), true);
+        use(lane);
+      }
+    }
+    for (const e of paths) {
+      if (!p.edges.has(e.from + ">" + e.to)) continue;
+      const d = e.parts.map((pts) => "M" + pts.map(([px, py]) => `${px + dx},${py + dy}`).join(" L")).join(" ");
+      eLayer.append(svgEl("edge", `<path d="${d}" marker-end="url(#arrow)"/>`, {from: e.from, to: e.to, lane: lane.id}));
+    }
+  });
+  use(active);
+
+  function placeItems(items, x, y, slot, lane, status, ghost = false) {
+    let off = 0;
+    for (const it of items) {
+      const ix = x + (down ? 0 : off), iy = y + (down ? off : 0);
+      const fill = items.length === 1 ? [slot.w - 2, slot.h - 2] : down ? [slot.w - 2, 0] : [0, slot.h - 2];
+      const stretch = fill[0] > it.w - 2 + 0.5 || fill[1] > it.h - 2 + 0.5;
+      const fw = stretch ? Math.max(fill[0], it.w - 2) + 2 : it.w, fh = stretch ? Math.max(fill[1], it.h - 2) + 2 : it.h;
+      const n = it.n;
+      const el = svgEl(`node${ghost ? " ghost" : ""}`, `<foreignObject x="${ix - HALO}" y="${iy - HALO}" width="${fw + PAD + 2 * HALO}" height="${fh + PAD + 2 * HALO}"><div xmlns="http://www.w3.org/1999/xhtml" style="padding:${HALO}px">${nodeHTML(n, stretch ? [fw - 2, fh - 2] : null)}</div></foreignObject>`,
+        {id: slotOf(it, lane), lane: lane.id, key: n.key});
+      el.addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); select(n.type === "cgroup" ? {type: "group", key: n.key} : {type: n.type, key: n.key}); });
+      if (n.type === "cgroup") el.addEventListener("dblclick", (e) => { e.stopPropagation(); toggle(n.key, lane); });
+      nLayer.append(el);
+      const m = LANES.length > 1 && status(it);
+      if (m && m.status !== "same") {
+        const mx = ix + fw - 3, my = iy + 3;
+        const el2 = svgEl(`mk ${m.status}${m.quiet ? " quiet" : ""}`, `<title>${esc(m.title)}</title><circle cx="${mx}" cy="${my}" r="7.5"/><text x="${mx}" y="${my}">${esc(m.sym ?? MARK[m.status])}</text>`);
+        nLayer.append(el2);
+      }
+      off += (down ? it.h : it.w) + PACK;
+    }
+  }
+  function slotOf(it, lane) { return per.find((q) => q.lane === lane).map.get(it.n.id); }
+  highlight();
+}
+const MARK = {added: "+", changed: "Δ", removed: "−", split: "⋔", merged: "⋔"};
+// the marker on a node: what changed against the version its lane is compared with
+function mark(it, ch, p) {
+  if (!ch) return null;
+  const n = it.n;
+  if (n.type === "cgroup") {                              // a collapsed group: how many of its steps changed
+    const inside = Object.entries(p.v.rep).filter(([, r]) => r === n.id).map(([k]) => ch.map.get("op|" + k)).filter(shown);
+    return inside.length ? {status: "changed", sym: String(inside.length), title: `${inside.length} step${inside.length > 1 ? "s" : ""} changed or added inside`} : null;
+  }
+  const c = ch.map.get((n.type === "op" ? "op|" : "sym|") + n.key);
+  if (!c || c.status === "same") return null;
+  const quiet = c.status === "changed" && c.what.every((w) => QUIET.has(w));   // only labels or descriptions
+  if (quiet && !cmp.wording) return null;
+  return {status: c.status, quiet, title: statusText(c)};
+}
+const QUIET = new Set(["wording"]);
+const shown = (c) => !!c && c.status !== "same" && (cmp.wording || c.status !== "changed" || c.what.some((w) => !QUIET.has(w)));
+const statusText = (c) => !c ? "" : c.status === "same" ? "same" : c.status === "added" ? "added" :
+  c.status === "split" ? `split from ${c.old.join(", ")}` : c.status === "merged" ? `merged from ${c.old.join(", ")}` :
+  shown(c) ? "changed: " + c.what.filter((w) => cmp.wording || !QUIET.has(w)).join(", ") : "reworded";
+// a slot's lineage is absent from the lane (not merely collapsed or filtered out of it)
+function gone(id, lane, lin) {
+  const t = id.slice(0, 2), name = id.slice(2).split("@")[0];
+  const kind = {"o:": "op", "s:": "sym", "g:": "group"}[t];
+  return kind !== "group" && !lin.members(kind, name).has(lane.id);
+}
+
+/* ---------- pan and zoom ---------- */
+let T = {x: 20, y: 20, k: 1};
+const applyT = () => $("vp").setAttribute("transform", `translate(${T.x},${T.y}) scale(${T.k})`);
+function fitView(readable = false) {
+  if (!current) return;
+  const r = $("graph").getBoundingClientRect(), w = current.w || 1, h = current.h || 1;
+  const fit = Math.min(1.4, (r.width - 40) / w, (r.height - 40) / h);
+  T.k = readable ? Math.max(fit, Math.min(0.85, (r.height - 40) / h)) : fit;
+  T.x = w * T.k > r.width - 40 ? 20 : (r.width - w * T.k) / 2;
+  T.y = h * T.k > r.height - 40 ? 20 : (r.height - h * T.k) / 2;
+  applyT();
+}
+(() => {
+  const g = $("graph");
+  g.addEventListener("wheel", (e) => {
+    if (e.target.closest("#results")) return;
+    e.preventDefault();
+    const r = g.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const k = Math.min(4, Math.max(0.15, T.k * Math.exp(-e.deltaY * 0.0015)));
+    T.x = mx - (mx - T.x) * k / T.k; T.y = my - (my - T.y) * k / T.k; T.k = k;
+    applyT();
+  }, {passive: false});
+  let drag = null, panned = false;
+  g.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("#results")) return;
+    window.getSelection()?.removeAllRanges();       // a selection left over from elsewhere would be dragged
+    drag = {x: e.clientX, y: e.clientY, tx: T.x, ty: T.y, moved: false};
+    panned = false;                                 // a pan that ended off where it began made no click to swallow
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true; g.classList.add("panning");
+    T.x = drag.tx + dx; T.y = drag.ty + dy; applyT();
+  });
+  window.addEventListener("pointerup", () => { panned = !!drag?.moved; drag = null; g.classList.remove("panning"); });
+  // a press-and-drag pans: it must not select the nodes' text or drag it, nor count as a click where it ends
+  g.addEventListener("selectstart", (e) => { if (!(e.target.parentElement ?? e.target).closest("#results")) e.preventDefault(); });
+  g.addEventListener("dragstart", (e) => e.preventDefault());
+  g.addEventListener("click", (e) => { if (panned) { panned = false; e.stopPropagation(); } }, true);
+  g.addEventListener("click", (e) => { if (e.target.closest(".node, .grp, #results")) return; if (state.sel && !state.focus) select(null); });
+})();
+
+/* ---------- selection ---------- */
+function related(sel) {
+  // fine-grained keys related to the selection: itself and its direct neighbours
+  const ids = new Set();
+  if (!sel) return ids;
+  if (sel.type === "op") { ids.add("o:" + sel.key); OP[sel.key].inputs.concat(OP[sel.key].outputs).forEach((s) => ids.add("s:" + s)); }
+  else if (sel.type === "sym") { ids.add("s:" + sel.key); if (PRODUCER[sel.key]) ids.add("o:" + PRODUCER[sel.key]); (CONSUMERS[sel.key] ?? []).forEach((o) => ids.add("o:" + o)); }
+  else opsIn(sel.key).forEach((o) => { ids.add("o:" + o.key); o.inputs.concat(o.outputs).forEach((s) => ids.add("s:" + s)); });
+  return ids;
+}
+function selId(sel) {
+  // the selection's slot, which is the same in every lane
+  if (!sel || !current || !(sel.type === "op" ? OP : sel.type === "sym" ? SYM : sel.type === "group" ? GRP : {})[sel.key]) return null;
+  const L = (kind, key) => current.lin.of(active.id, kind, key);
+  if (sel.type === "sym") return "s:" + L("sym", sel.key);
+  if (sel.type === "group") return current.v.open.has(sel.key) ? "G:" + L("group", sel.key) : "g:" + L("group", sel.key);
+  const c = chain(OP[sel.key].group).find((g) => state.collapsed.has(g));
+  return c ? "g:" + L("group", c) : "o:" + L("op", sel.key);
+}
+function highlight() {
+  const sid = selId(state.sel);
+  const is = (id) => !!sid && (id === sid || id.startsWith(sid + "@"));
+  document.querySelectorAll("#vp .node, #vp .grp").forEach((el) => el.classList.toggle("sel", is(el.dataset.id)));
+  document.querySelectorAll("#vp .edge").forEach((el) => {
+    const on = is(el.dataset.from) || is(el.dataset.to);
+    el.classList.toggle("hl", !!on);
+    el.querySelector("path").setAttribute("marker-end", on ? "url(#arrowhl)" : "url(#arrow)");
+  });
+  const rel = related(state.sel);
+  document.querySelectorAll("[data-ref]").forEach((el) => {
+    el.classList.toggle("hl", rel.has(el.dataset.ref));
+    el.classList.toggle("sel", !!state.sel && el.dataset.ref === (state.sel.type === "op" ? "o:" : state.sel.type === "sym" ? "s:" : "G:") + state.sel.key);
+  });
+}
+function select(sel) {
+  state.sel = sel;
+  showDetail(sel);
+  if (state.focus) render(); else highlight();
+}
+function toggle(path, lane = active) {
+  // the group in every lane, under whichever path it has there
+  const paths = current && LANES.length > 1 ? new Set([path, ...[...current.lin.members("group", current.lin.of(lane.id, "group", path)).values()].flat()]) : [path];
+  const close = !state.collapsed.has(path);
+  paths.forEach((p) => close ? state.collapsed.add(p) : state.collapsed.delete(p));
+  render();
+}
+function reveal(sel) {
+  // open the groups that hide a selected op or value
+  const g = sel.type === "op" ? OP[sel.key].group : sel.type === "sym" && PRODUCER[sel.key] ? OP[PRODUCER[sel.key]].group : sel.type === "group" ? parent(sel.key) : "";
+  let changed = false;
+  for (const p of chain(g)) if (state.collapsed.has(p)) { state.collapsed.delete(p); changed = true; }
+  if (sel.type === "sym" && PARAM(SYM[sel.key]) && !state.settings) { state.settings = true; $("settings").checked = true; changed = true; }
+  return changed;
+}
+
+/* ---------- detail panel ---------- */
+// a link that opens a file at a line in the chosen editor (headway build --editor)
+const editorURL = (file, line, col = 1) => {
+  const path = "/" + file.replace(/\\/g, "/").replace(/^\//, "");
+  return D.editor.url.replace("{file}", encodeURI(path)).replace("{line}", line).replace("{col}", col);
+};
+// ✎: the spec at one argument of the declaring call (the equation, the description, ...), else at the call
+const pen = (decl, field, what) => {
+  if (!decl || D.snapshot) return "";                  // a saved version: the spec on disk may differ now
+  const [line, col] = decl.fields?.[field] ?? [decl.line, decl.col];
+  return `<a class="pen" href="${editorURL(decl.file, line, col)}" title="edit ${esc(what)} in the spec (${esc(decl.relpath)}:${line})">✎</a>`;
+};
+const symChip = (k) => `<span class="chip" data-go="sym:${esc(k)}">${tex(SYM[k]?.tex ?? k)}</span>`;
+const opChip = (k) => `<span class="chip op" data-go="op:${esc(k)}">${esc(OP[k].label)}</span>`;
+function codeHTML(refs) {
+  return refs.map((c) => {
+    if (!c.ok) return `<div class="code"><div class="where"><span class="missing">${esc(c.ref)} — does not resolve</span></div></div>`;
+    const lines = hljs.highlight(c.source.replace(/\n$/, ""), {language: "python", ignoreIllegals: true}).value.split("\n");
+    const body = lines.map((l, n) => `<span class="ln">${c.start + n}</span>${l}`).join("\n");
+    const range = c.end > c.start ? `${c.start}–${c.end}` : `${c.start}`;
+    const link = D.snapshot ? `<span title="as it was in this version; the file may have changed since">as of ${esc(D.built)}</span>` : `<a href="${editorURL(c.file, c.start)}" title="${esc(c.ref)}">open in ${esc(D.editor.name)} ↗</a>`;
+    return `<div class="code"><div class="where"><span>${esc(c.relpath)}:${range}</span>${link}</div><pre><code class="hljs">${body}</code></pre></div>`;
+  }).join("");
+}
+// the symbols a step defines for its equation alone, as a paper does after it: "where μ_f  mean of …"
+const whereHTML = (o, edit = "") => !o.where?.length ? "" : `<div class="whr">${o.where.map(([t, def], n) =>
+  `<span class="wl">${n ? "" : "where" + edit}</span><span class="wt">${tex(t)}</span><span>${rich(def)}</span>`).join("")}</div>`;
+const declHTML = (d) => d && D.snapshot ? `<div class="decl">declared at ${esc(d.relpath)}:${d.line}, in this version</div>` : d ? `<div class="decl"><a href="${editorURL(d.file, d.line, d.col)}" title="open the spec at this declaration">✎ declared at ${esc(d.relpath)}:${d.line}</a>${d.function !== "<module>" ? ` · in <code>${esc(d.function)}()</code>, which may declare more than this` : ""}</div>` : "";
+function showDetail(sel) {
+  const el = $("detail");
+  document.querySelectorAll("#datasets tr.sel").forEach((tr) => tr.classList.remove("sel"));
+  if (sel && !(sel.type === "op" ? OP : sel.type === "sym" ? SYM : GRP)[sel.key]) sel = state.sel = null;   // gone in a rebuild
+  if (!sel) {
+    el.innerHTML = `<p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p>` + askHTML(SPEC);
+    wireAsk(SPEC);
+    return;
+  }
+  let h = "";
+  if (sel.type === "op") {
+    const o = OP[sel.key];
+    h += `<h2>${esc(o.label)}${pen(o.decl, "label", "the label")}</h2><div class="crumb">${esc(o.group || "top level")}${o.per ? " · once per " + tex(IDX[o.per]?.tex ?? o.per) + " (" + esc(IDX[o.per]?.name ?? "") + ")" : ""}</div>`;
+    h += declHTML(o.decl);
+    if (o.tex) h += `<div class="eq">${tex(o.tex, true)}${pen(o.decl, "tex", "the equation")}</div>`;
+    h += whereHTML(o, pen(o.decl, "where", "the definitions"));
+    if (o.desc) h += `<p>${rich(o.desc)}${pen(o.decl, "desc", "the description")}</p>`;
+    h += `<h3>Inputs${pen(o.decl, "inputs", "the inputs")}</h3><div class="chips">${o.inputs.map(symChip).join("") || "<span class='empty'>none</span>"}</div>`;
+    h += `<h3>Outputs${pen(o.decl, "outputs", "the outputs")}</h3><div class="chips">${o.outputs.map(symChip).join("")}</div>`;
+    if (o.verified !== null) h += `<h3>Equation check</h3><div class="status ${o.verified ? "ok" : "bad"}">${o.verified ? "✓ " : "✗ "}${esc(o.verify_msg.split("\n")[0])}${o.verified ? "" : `<pre>${esc(o.verify_msg.split("\n").slice(1).join("\n"))}</pre>`}</div>`;
+    h += `<h3>Code${pen(o.decl, "code", "the code references")}</h3>${codeHTML(o.code) || "<span class='empty'>no reference</span>"}`;
+  } else if (sel.type === "sym") {
+    const s = SYM[sel.key];
+    h += `<h2>${tex(s.tex)} &nbsp;${esc(s.name)}${pen(s.decl, "tex", "the symbol")}</h2><div class="crumb">${esc(s.role)} · ${esc(s.kind)}${s.dims.length ? " · " + tex(dimsTex(s)) + " (" + esc(shapeText(s)) + ")" : ""}${s.per ? " · one per " + tex(IDX[s.per]?.tex ?? s.per) : ""}</div>`;
+    h += declHTML(s.decl);
+    if (s.value !== null) h += `<p>Default: <code>${esc(s.value)}</code></p>`;
+    const perDs = (D.suite?.datasets ?? []).filter((d) => d.values && s.key in d.values);
+    if (perDs.length) h += `<h3>By dataset</h3><table class="wts">${perDs.map((d) => `<tr data-ds="${esc(d.key)}" style="cursor:pointer"><td>${esc(d.name)}${d.heldout ? " (held out)" : ""}</td><td><code>${esc(d.values[s.key])}</code></td></tr>`).join("")}</table>`;
+    if (s.desc) h += `<p>${rich(s.desc)}${pen(s.decl, "desc", "the description")}</p>`;
+    if (PRODUCER[s.key]) h += `<h3>Made by</h3><div class="chips">${opChip(PRODUCER[s.key])}</div>`;
+    if (CONSUMERS[s.key]) h += `<h3>Used by</h3><div class="chips">${CONSUMERS[s.key].map(opChip).join("")}</div>`;
+    if (s.code.length) h += `<h3>Code${pen(s.decl, "code", "the code references")}</h3>${codeHTML(s.code)}`;
+    else if (PRODUCER[s.key]) h += `<h3>Code (where it is made)</h3>${codeHTML(OP[PRODUCER[s.key]].code)}`;
+  } else {
+    const g = GRP[sel.key];
+    const isOpen = !state.collapsed.has(sel.key);
+    h += `<h2>${esc(g.label)}${pen(g.decl, "label", "the label")}</h2><div class="crumb">group · ${esc(sel.key)}</div>` + declHTML(g.decl);
+    if (g.desc) h += `<p>${rich(g.desc)}${pen(g.decl, "desc", "the description")}</p>`;
+    h += `<p><button id="gtoggle">${isOpen ? "Collapse" : "Expand"}</button> <button id="ghide">Hide</button></p>`;
+    h += `<h3>Steps</h3><div class="chips">${ORDER.filter((k) => within(OP[k].group, sel.key)).map(opChip).join("")}</div>`;
+  }
+  h += askHTML(sel);
+  el.innerHTML = h;
+  el.scrollTop = 0;
+  const crumb = el.querySelector(".decl") ?? el.querySelector(".crumb");
+  crumb?.insertAdjacentHTML("afterend", versionsHTML(sel));
+  el.querySelectorAll("table.versions tr[data-lane]").forEach((tr) => tr.addEventListener("click", () => {
+    const lane = LANES.find((l) => l.id === +tr.dataset.lane);
+    if (lane && counterpart(sel, lane)) { setActive(lane); panTo(); }
+  }));
+  wireAsk(sel);
+  el.querySelectorAll("[data-go]").forEach((c) => c.addEventListener("click", () => go(c.dataset.go)));
+  el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => showDataset(c.dataset.ds)));
+  $("gtoggle")?.addEventListener("click", () => { toggle(sel.key); showDetail(sel); });
+  $("ghide")?.addEventListener("click", () => { state.hidden.add(sel.key); buildGroupsMenu(); select(null); render(); });
+}
+/* ---------- the selection across versions ---------- */
+const symLabel = (lane, k) => { const x = lane.D.symbols.find((y) => y.key === k); return x ? tex(x.tex) : esc(k); };
+function versionsHTML(sel) {
+  if (LANES.length < 2 || !current || sel.type === "spec") return "";
+  const kind = sel.type, mem = current.lin.members(kind, current.lin.of(active.id, kind, sel.key));
+  const rows = LANES.map((l) => {
+    const keys = mem.get(l.id) ?? [], ch = current.changes.get(l.id), c = keys.length && ch ? ch.map.get(kind + "|" + keys[0]) : null;
+    const st = !keys.length ? `<span class="vs none">not in this version</span>` : !ch ? `<span class="vs same">${cmp.base === l.id ? "the baseline" : "the first version"}</span>`
+      : `<span class="vs ${c?.status ?? "same"}">${esc(statusText(c) || "same")}</span>`;
+    const named = keys.length && (keys.length > 1 || keys[0] !== sel.key) ? " " + keys.map((k) => `<code>${esc(k)}</code>`).join(", ") : "";
+    return `<tr class="${l === active ? "on" : ""}" data-lane="${l.id}" title="${keys.length ? "show this version" : ""}"><td>${esc(l.name)}${named}</td><td>${st}</td></tr>`;
+  });
+  let h = `<h3>Versions</h3><table class="versions">${rows.join("")}</table>`;
+  const ref = refOf(active), c = current.changes.get(active.id)?.map.get(kind + "|" + sel.key);
+  if (ref && c && c.status !== "same") h += `<h3>Against ${esc(ref.name)}</h3>` + changeHTML(c, kind, ref);
+  return h;
+}
+function changeHTML(c, kind, ref) {
+  if (c.status === "added") return `<p class="chg">New: not in ${esc(ref.name)}.</p>`;
+  if (c.status === "split" || c.status === "merged") {
+    const was = c.o, eq = kind === "op" && was.tex ? `<div class="eqlbl">${esc(ref.name)}: ${esc(was.label)}</div><div class="eq old">${tex(was.tex, true)}</div>` : "";
+    return `<p class="chg">${c.status === "split" ? "Split from" : "Merged from"} ${c.old.map((k) => `<code>${esc(k)}</code>`).join(", ")} in ${esc(ref.name)}.</p>${eq}`;
+  }
+  const h = [];
+  for (const d of c.details) {
+    if (d.cat === "wording" && !cmp.wording && d.field !== "label" && d.field !== "name") continue;
+    if (d.field === "key") h.push(`<div class="chg"><span class="k">renamed</span>from <code>${esc(d.a)}</code></div>`);
+    else if (d.field === "inputs" || d.field === "outputs")
+      h.push(`<div class="chg"><span class="k">${d.field}</span>${d.gone.map((k) => `<span class="chip gone" title="not in this version">${symLabel(ref, k)}</span>`).join(" ")} ${d.added.map((k) => `<span class="chip" title="new">+ ${symLabel(active, k)}</span>`).join(" ")}</div>`);
+    else if (d.field === "tex")
+      h.push(`<div class="eqlbl">the equation in ${esc(ref.name)} (${esc(active.name)}'s is below)</div><div class="eq old">${tex(d.a ?? "", true)}</div>`);
+    else if (d.field === "code") {
+      const lines = codeDiff(d.a, d.b).map((l) => l === null ? `<span class="fold">  ⋯</span>` : `<span class="${l[0] === "-" ? "del" : l[0] === "+" ? "ins" : ""}">${esc(l[0] + " " + l[1])}</span>`);
+      h.push(`<div class="code"><div class="where"><span>code, ${esc(ref.name)} → ${esc(active.name)}</span></div><pre><code>${lines.join("\n")}</code></pre></div>`);
+    } else if (d.field === "verified") h.push(`<div class="chg"><span class="k">equation check</span>${{true: "passed", false: "failed", null: "none"}[d.a ?? null]} → ${{true: "passed", false: "failed", null: "none"}[d.b ?? null]}</div>`);
+    else if (d.field === "where") h.push(`<div class="chg"><span class="k">where=</span>definitions changed</div>`);
+    else if (d.field === "desc") h.push(`<div class="chg"><span class="k">description</span>${rich(d.a ?? "")} → ${rich(d.b ?? "")}</div>`);
+    else h.push(`<div class="chg"><span class="k">${esc(d.field)}</span>${esc(JSON.stringify(d.a ?? null))} → ${esc(JSON.stringify(d.b ?? null))}</div>`);
+  }
+  return h.join("");
+}
+// the same, as lines for a prompt
+function changeLines(c, kind, ref) {
+  if (!c || c.status === "same") return [];
+  const L = [`Compared with the version "${ref.name}" (${laneMeta(ref)}):`];
+  if (c.status === "added") return [...L, `- it is new: "${ref.name}" has no such ${kind === "op" ? "step" : kind === "sym" ? "symbol" : "group"}`];
+  if (c.status === "split" || c.status === "merged")
+    return [...L, `- ${c.status} from \`${c.old.join("`, `")}\` in "${ref.name}"${kind === "op" && c.o?.tex ? `, whose equation was: ${c.o.tex}` : ""}`];
+  for (const d of c.details) {
+    if (d.field === "key") L.push(`- renamed from \`${d.a}\``);
+    else if (d.field === "inputs" || d.field === "outputs") L.push(`- ${d.field}: ${[...d.gone.map((k) => "no longer " + k), ...d.added.map((k) => "now also " + k)].join("; ")}`);
+    else if (d.field === "tex") L.push(`- the equation was: ${d.a}`);
+    else if (d.field === "code") L.push("- the code changed:", "```diff", ...codeDiff(d.a, d.b).map((l) => l === null ? "..." : l[0] + " " + l[1]), "```");
+    else if (d.field === "verified") L.push(`- the equation check was: ${d.a === null ? "none" : d.a ? "passed" : "failed"}`);
+    else L.push(`- ${d.field} was: ${typeof d.a === "string" ? d.a : JSON.stringify(d.a ?? null)}`);
+  }
+  return L;
+}
+// which version a prompt is about, and where it came from
+// what changed in the whole spec, against the version the active one is compared with
+function summaryLines() {
+  const ref = refOf(active);
+  return ref ? [...summaryLinesFor(active, ref), ...resultLines(active, ref)] : [];
+}
+// the benchmark results of a version and the one it is compared with, where both have them
+function resultLines(lane, ref) {
+  const a = resultsOf(ref), b = a && resultsOf(lane, a.id);
+  if (!b) return [];
+  const meta = b.suite.suite, name = (k) => b.suite.symbols.find((x) => x.key === k)?.name ?? k;
+  const L = [`Benchmark results on "${b.suite.title}" (version ${meta.version}), mean ± s.d. over replicates, "${ref.name}" → "${lane.name}":`];
+  for (const m of meta.metrics) for (const d of meta.datasets) {
+    const x = a.values[d.key]?.[m.key], y = b.values[d.key]?.[m.key];
+    if (x || y) L.push(`- ${name(m.key)} (${m.better} is better) on ${d.name}${d.heldout ? " (held out)" : ""}: ${x ? `${fmt(mean(x))} ± ${fmt(sd(x))}` : "not run"} → ${y ? `${fmt(mean(y))} ± ${fmt(sd(y))}` : "not run"}`);
+  }
+  return [...L, ""];
+}
+function summaryLinesFor(lane, ref) {
+  const active = lane, ch = current?.changes.get(lane.id);
+  if (!ref || !ch) return [];
+  const name = {op: "step", sym: "symbol", group: "group"};
+  const label = (lane, kind, key) => { const o = lane.D[KIND[kind]].find((x) => kkey(kind, x) === key); return o?.label ?? o?.name ?? ""; };
+  const L = [...ch.map].filter(([, c]) => shown(c)).map(([k, c]) => {
+    const [kind, key] = [k.slice(0, k.indexOf("|")), k.slice(k.indexOf("|") + 1)];
+    return `- ${name[kind]} \`${key}\` (${label(active, kind, key)}): ${statusText(c)}`;
+  });
+  ch.removed.forEach(([kind, key]) => L.push(`- ${name[kind]} \`${key}\` (${label(ref, kind, key)}): gone`));
+  return [`What changed from "${ref.name}" (${laneMeta(ref)}) to "${active.name}":`, ...(L.length ? L : ["- nothing"]), ""];
+}
+function versionLines() {
+  const L = [];
+  if (LANES.length > 1 || active.D.snapshot) {
+    L.push(`This is about the version "${active.name}" (${laneMeta(active) || "built " + D.built}), one of ${LANES.length} versions open side by side: ${LANES.map((l) => `"${l.name}"`).join(", ")}.`);
+    if (D.snapshot) L.push(`"${active.name}" is a saved build${active.from ? ` (${fileName(active.from)})` : ""}, not necessarily what is on disk now: the declarations and code below are quoted as they were then.${D.source?.git ? " To read the files as they were, look at that commit." : ""}`);
+  } else if (D.source?.git) L.push(`The page was built from ${gitText(D)}.`);
+  return L.length ? [...L, ""] : [];
+}
+
+async function go(spec) {
+  if (rs.view === "results") setView("graph");
+  const [type, key] = [spec.slice(0, spec.indexOf(":")), spec.slice(spec.indexOf(":") + 1)];
+  const sel = {type, key};
+  const changed = reveal(sel);
+  state.sel = sel;
+  showDetail(sel);
+  if (changed || state.focus) await render(); else highlight();
+  panTo();
+}
+function panTo() {
+  // bring the selection into view if it is off screen
+  const el = document.querySelector(`#vp .node.sel[data-lane="${active.id}"], #vp .grp.sel[data-lane="${active.id}"]`) ?? document.querySelector("#vp .node.sel, #vp .grp.sel");
+  if (!el) return;
+  const g = $("graph").getBoundingClientRect(), r = (el.querySelector("rect, foreignObject") ?? el).getBoundingClientRect();
+  if (r.left >= g.left && r.right <= g.right && r.top >= g.top && r.bottom <= g.bottom) return;
+  T.x += (g.left + g.width / 2) - (r.left + r.width / 2);
+  T.y += (g.top + g.height / 2) - (r.top + r.height / 2);
+  applyT();
+}
+
+/* ---------- ask an AI: a prompt describing the selected object and its context, to paste into any assistant ---------- */
+const drafts = {};          // what was typed, per object, so a redraw (or a live rebuild) keeps it
+const selName = (sel) => sel.type + ":" + sel.key;
+const SPEC = {type: "spec", key: ""};                   // nothing selected: the spec as a whole
+const scopeOf = (sel) => ({op: "this step", sym: "the steps that make and use this symbol", group: "the steps in this group"})[sel.type] ?? "every step of the spec";
+// common requests, worded for what is selected
+const PRESETS = [
+  ["Define local symbols", "explain the symbols an equation uses that the graph does not define", (S) =>
+    `Find every symbol in the equations of ${S} that the spec does not explain: one that is not an input or output of its step, not an index, and not defined in the step's \`where=\`. Define each in \`where=\` with a short definition taken from what the code computes. If one is a value that another step also uses, declare it with \`G.symbol\` and list it in both steps' inputs or outputs instead. If an equation writes an input or output under another name than its declared symbol, use the declared symbol.`],
+  ["Add explanations", "write into the spec a sentence or two saying what each computation and output is, and what it is for", (S) =>
+    `Add brief conceptual explanations to ${S}, for a reader who can follow the math but does not know this method. In each step's description, say in a sentence or two what the computation is in plain words and what it is for: what the later steps use it for, and why it is done this way when that is not obvious (a shrinkage, a centering, a clip). Confirm how to read the equation, e.g. which symbols are the quantities that matter and which are only intermediate. Give each output symbol a short description of what it represents (its \`desc\`). Base this on the code, its comments and docstrings, how the outputs are used downstream, and the project's own documentation (e.g. its README); if the purpose of something is not clear from these, say so to me rather than guessing. Do not restate the equation symbol by symbol, and keep what is already said and correct. Keep descriptions short, and list what you added.`],
+  ["Check descriptions", "check the labels, descriptions, equations and definitions against the code", (S) =>
+    `Check the labels, descriptions, equations and \`where=\` definitions of ${S} against the code they point to, and correct whatever the code does not do: steps in the wrong order, a missing or extra operation, the wrong set of cells, rows or columns, a wrong default or constant. Do not change the method's code. List each correction with the line of code that shows it.`],
+  ["Reconcile with the code", "bring the spec up to date with code that has changed", (S) =>
+    `The method's code may have changed since the spec of ${S} was written. Read the code it points to as it is now (and the code that calls or is called by it, where that matters for an equation) and bring the spec up to date: equations, inputs and outputs, code references and their anchors, descriptions, \`where=\` definitions, and the @G.verify functions that cover them. If a step was added, removed or moved to another function, change the graph to match. The version history (e.g. \`git log -p\` on the referenced files) may show what changed. Summarize what changed in the code and what you changed in the spec.`],
+  ["Standardize notation", "write the same kind of operation the same way, and fixed numbers as constants", (S) =>
+    `Make the notation ${S === scopeOf(SPEC) ? "of the spec consistent" : `of ${S} consistent with the rest of the spec`}: write the same kind of operation the same way everywhere (for example clipping as \\operatorname{clip} with its bounds in the subscript, logit and \\sigma, sums and means over the learning cells, conditions under sums), following the form most steps already use or the project's own documentation (e.g. its README). Where an equation or a description states a number that is fixed in the code (a clip bound, a tolerance, an iteration limit, a pseudocount), declare it with \`G.constant\` (with a code reference to the line that sets it), use its symbol in the equation and list it among the step's inputs; a number the user can change is a \`G.setting\` instead. Do not change what any equation means. List what you changed.`],
+  ["Disambiguate symbols", "make each symbol mean one thing across the spec", (S) =>
+    `Make sure every symbol in the equations of ${S} means one thing across the whole spec. Search the spec for the same TeX, and the same letter with other subscripts or accents, used for something else: in equations, \`where=\` definitions, symbol declarations and descriptions. Where one symbol has two meanings, rename one of them, keeping the notation the project's own documentation (e.g. its README) uses and choosing a replacement no other symbol uses. Update every place the renamed symbol appears, and list the renames.`],
+];
+// an explanation instead of a change: what to ask, and how elaborate an answer to ask for (worded for any assistant)
+const explainScope = (sel) => ({op: "this step", sym: "this symbol", group: "this group of steps"})[sel.type] ?? "the method";
+const EXPLAIN = [
+  ["What is it for?", "what it is in plain words, and why it is needed", (S) =>
+    `What is ${S}, in plain words, and what is it for? Why is it needed, and what would go wrong without it?`],
+  ["Read the equation", "what each symbol stands for, and what the equation says in words", (S) =>
+    `Walk me through ${S === "this symbol" ? "the equation that makes this symbol" : `the equation${S === "the method" ? "s" : ""} of ${S}`}: what each symbol stands for, which are the quantities that matter and which are only intermediate, and what it says in words.`],
+  ["Why this way?", "the choices made, their alternatives, and what each buys", (S) =>
+    `Why is ${S} ${S === "this symbol" ? "computed" : "done"} this way? Name the choices made (a shrinkage, a centering, a weighting, a fixed number), their alternatives, and what each choice buys.`],
+  ["How it fits in", "where its inputs come from, and what later steps do with its outputs", (S) =>
+    `How does ${S} fit into the method: what goes in and where it comes from, and what do the later steps do with what comes out?`],
+  ["Code vs. math", "the code against the equation, line by line", (S) =>
+    `Show how the code computes ${S}, line by line against the equation, and point out what the code does that the equation does not show (clips, guards, chunking, defaults).`],
+  ["Check my understanding", "write your understanding below the question", (S) =>
+    `Here is my understanding of ${S}. Tell me what is right, what is wrong and what is missing:\n\n`],
+];
+const explainPresets = () => LANES.length > 1 && refOf(active) ? [...EXPLAIN, ["What changed?", "what changed against the version this one is compared with, and what it does", (S) =>
+  `What changed in ${S} from the version "${refOf(active).name}" to "${active.name}", and what does the change do to the results? Say which reasons are documented and which are your reading.`]] : EXPLAIN;
+const FORMATS = [            // from the quickest answer to the most elaborate
+  ["quick", "Quick answer", "a few sentences in the chat",
+    "Answer in a few sentences, in the chat: the point first, no headings."],
+  ["full", "Full explanation", "a thorough answer in the chat",
+    "Explain it thoroughly, in the chat: the idea in plain words first, then the equation piece by piece, then how the code does it and how it fits into the method. Use headings and math where they help."],
+  ["tutor", "Tutoring session", "taught interactively, a piece at a time, with questions",
+    "Teach it to me as a tutor would, over several turns: first ask what I already know, then explain one piece at a time, each followed by a short question that checks my understanding, and adjust to my answers. Do not explain everything at once."],
+  ["example", "Worked example", "tiny made-up numbers, computed step by step",
+    "Work through a small numerical example: make up tiny inputs (a few cells, windows or bins), compute each quantity step by step as the code does, and say what each number means. If you can run code, check the numbers with the method's own functions."],
+  ["notes", "Study notes", "a document to keep",
+    "Write study notes I can keep, as a self-contained document (Markdown, math in $…$): the intuition, the definitions, the equation explained, a small worked example, easy misreadings, and how it connects to the steps before and after. Make it a document if your environment makes those, or else a new Markdown file outside the spec and the code."],
+  ["page", "Interactive page", "a visual, explorable web page",
+    "Make a self-contained interactive web page that explains it visually: the shapes of the data, a diagram of how it flows, controls for the settings that show their effect on a small example, and the equation with each term explained. Show it the way your environment shows pages (e.g. an artifact, a canvas or a preview), or else write it as one HTML file outside the spec and the code. Keep the math faithful to the code."],
+];
+const ask = {mode: "change", format: "full"};        // remembered per browser
+try { Object.assign(ask, JSON.parse(localStorage.getItem("headway.ask") ?? "{}")); } catch {}
+const saveAsk = () => { try { localStorage.setItem("headway.ask", JSON.stringify(ask)); } catch {} };
+const draftKey = (sel) => selName(sel) + "|" + ask.mode;
+const MODES = [["change", "Change the spec", "a prompt for an assistant that edits the spec"],
+  ["explain", "Explain", "a prompt for an explanation, a separate product: the assistant changes nothing"]];
+
+function askHTML(sel) {
+  const about = {sym: "symbol", op: "step", group: "group"}[sel.type];
+  const explain = ask.mode === "explain";
+  const hint = explain
+    ? (about ? `the question, with this ${about}'s declaration, code and context` : "the question, with the method's outline and where its spec is")
+    : (about ? `the request, with this ${about}'s declaration, code and context` : "the request, with where the spec is and what its checks report");
+  return `<div class="ask" id="askbox"><h3>Ask an AI</h3>
+    <div class="askmode">${MODES.map(([m, label, tip]) => `<button data-mode="${m}" class="${ask.mode === m ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>
+    <div class="presets">${(explain ? explainPresets() : PRESETS).map(([label, tip], n) => `<button data-preset="${n}" title="${esc(tip)}: fills in the ${explain ? "question" : "request"}">${esc(label)}</button>`).join("")}</div>
+    <textarea id="ask" placeholder="${explain ? "What do you want to understand? e.g. “why are the residuals shrunk?”, “what does this give the next step?”" : "What should change? e.g. “define the symbols in the equation that are not explained”, “split this into two steps”"}">${esc(drafts[draftKey(sel)] ?? "")}</textarea>
+    ${explain ? `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` : ""}
+    <div class="row"><button id="askcopy">Copy prompt</button><span>${hint}</span></div>
+    <details><summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-top:6px">preview</summary><pre id="askpreview"></pre></details></div>`;
+}
+function wireAsk(sel) {
+  const box = $("ask"), preview = $("askpreview");
+  if (!box) return;
+  const refresh = () => { drafts[draftKey(sel)] = box.value; preview.textContent = askPrompt(sel, box.value.trim()); };
+  box.addEventListener("input", refresh);
+  refresh();
+  document.querySelectorAll("#askbox [data-mode]").forEach((b) => b.addEventListener("click", () => {
+    if (ask.mode === b.dataset.mode) return;
+    ask.mode = b.dataset.mode; saveAsk();
+    const open = $("askbox").querySelector("details").open;
+    $("askbox").outerHTML = askHTML(sel);
+    $("askbox").querySelector("details").open = open;
+    wireAsk(sel);
+  }));
+  document.querySelectorAll("#askbox [data-format]").forEach((b) => b.addEventListener("click", () => {
+    ask.format = b.dataset.format; saveAsk();
+    document.querySelectorAll("#askbox [data-format]").forEach((o) => o.classList.toggle("on", o === b));
+    refresh();
+  }));
+  const filled = new Set();                             // preset texts put in, untouched since
+  document.querySelectorAll("#askbox [data-preset]").forEach((b) => b.addEventListener("click", () => {
+    const explain = ask.mode === "explain";
+    const text = explain ? explainPresets()[+b.dataset.preset][2](explainScope(sel)) : PRESETS[+b.dataset.preset][2](scopeOf(sel));
+    const now = box.value.trim();
+    box.value = !now || filled.has(now) ? text : now + "\n\n" + text;
+    filled.add(box.value.trim());
+    box.style.height = "auto";
+    box.style.height = Math.min(box.scrollHeight + 2, 320) + "px";
+    refresh();
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  }));
+  $("askcopy").addEventListener("click", async () => {
+    const text = askPrompt(sel, box.value.trim());
+    try { await navigator.clipboard.writeText(text); }
+    catch {                                                         // no clipboard API (some file:// pages)
+      const t = document.createElement("textarea");
+      t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove();
+    }
+    note(`Copied the prompt (${text.split("\n").length} lines)${box.value.trim() ? "" : `; it has no ${ask.mode === "explain" ? "question" : "request"} yet`}`);
+  });
+}
+const BACKGROUND = "Background: headway describes a method's computation as a graph, declared in a Python spec module next to the code: indices (`G.index`), symbols (`G.symbol`, with their dimensions), settings the user can change (`G.setting`), numbers fixed in the code (`G.constant`), steps (`G.op`, each with a TeX equation, inputs, outputs, references into the code such as \"module:function\" or \"module:function#anchor text\", and `where={TeX: definition}` for symbols its equation uses that are not values of the graph) and groups (`G.group`, paths like \"round 1/model\"). Functions decorated with `@G.verify(...)` check numerically that the code computes a step's equation as written. `headway check` checks the spec against the code.";
+const PLEASE = () => ["Please:",
+  "- Make the change in the spec, keeping its style. Keep every code reference resolving.",
+  "- A symbol used only inside a step's equation is defined with `where=`; one that another step also uses should be a symbol (`G.symbol`) listed in both steps' inputs or outputs.",
+  "- If you change an equation, check that the @G.verify function covering it (if any) still tests the equation as written, and update it if not.",
+  "- If the request needs the method's code itself to change, say so and describe the change before making it.",
+  `- Then run \`headway check ${D.spec || "<spec module>"}\` and fix what it reports.`];
+const EXPLAIN_BACKGROUND = "Context: the method's computation is described by a headway spec, a Python module next to the code that declares its indices, symbols, steps (each with an equation, inputs, outputs and references into the code) and groups; `@G.verify` functions check numerically that the code computes an equation as written.";
+const EXPLAIN_PLEASE = ["Please:",
+  "- This is a request for an explanation, not a change: do not edit the spec, the method's code or any other file of the project.",
+  "- Take the code as the ground truth. Read around the referenced code, and the project's documentation (e.g. its README and any notes on the method), where they help.",
+  "- Say which reasons are documented (in the code, its comments or the documentation) and which are your own reading; do not present a guess as the authors' intent.",
+  "- If the spec's equation or description disagrees with the code, point it out."];
+const formatText = () => (FORMATS.find((f) => f[0] === ask.format) ?? FORMATS[1])[3];
+function explainSpecPrompt(question) {
+  const files = D.ops.map((o) => o.decl).filter((d) => d && d.function === "<module>");
+  const file = files[0] ?? D.ops.find((o) => o.decl)?.decl;
+  const L = [`I want to understand the method "${D.title}" as a whole.`, "", "My question:", question || "<your question here>", "",
+    "How to answer: " + formatText(), "", EXPLAIN_BACKGROUND, ""];
+  L.push(`The spec: module \`${D.spec || "?"}\`${file ? `, ${file.relpath} (${file.file})` : ""}. It has every step's equation, inputs, outputs and references into the code; read it, and the code, as the question needs.`, "");
+  if (D.desc) L.push(`The method, as the spec sums it up: ${D.desc}`, "");
+  L.push(...versionLines(), ...summaryLines());
+  L.push("Its steps, in order, by group:");
+  const byGroup = new Map();
+  ORDER.forEach((k) => { const g = OP[k].group || "(top level)"; byGroup.set(g, [...(byGroup.get(g) ?? []), k]); });
+  byGroup.forEach((keys, g) => L.push(`- ${g}${GRP[g]?.desc ? ` (${GRP[g].desc})` : ""}: ${keys.map((k) => `${OP[k].label} (\`${k}\`)`).join(", ")}`));
+  return [...L, "", ...EXPLAIN_PLEASE].join("\n");
+}
+function specPrompt(request) {
+  const files = D.ops.map((o) => o.decl).filter((d) => d && d.function === "<module>");
+  const file = files[0] ?? D.ops.find((o) => o.decl)?.decl;
+  const unverified = D.ops.filter((o) => o.verified === null).map((o) => o.key);
+  const L = [`I want to change the headway spec of "${D.title}" as a whole.`, "", "Requested change:", request || "<describe the change here>", "", BACKGROUND, ""];
+  L.push(`The spec: module \`${D.spec || "?"}\`${file ? `, ${file.relpath} (${file.file})` : ""}. It declares ${D.indices.length} indices, ${D.symbols.length} symbols and settings, and ${D.ops.length} steps in ${D.groups.length} groups.`, "");
+  L.push(...versionLines(), ...summaryLines());
+  L.push(`What \`headway check\` reported when this page was built: ${D.check.errors.length} errors, ${D.check.warnings.length} warnings.`,
+    ...D.check.errors.map((e) => "- error: " + e), ...D.check.warnings.map((w) => "- warning: " + w),
+    `Steps no @G.verify function covers: ${unverified.join(", ") || "none"}.`, "");
+  return [...L, ...PLEASE()].join("\n");
+}
+function askPrompt(sel, request) {
+  const explain = ask.mode === "explain";
+  if (sel.type === "spec") return explain ? explainSpecPrompt(request) : specPrompt(request);
+  const L = [];
+  const symText = (k) => SYM[k] ? `${k} ($${SYM[k].tex}$, ${SYM[k].name})` : k;
+  const where = (d) => !d ? "" : `${d.relpath}, line ${d.line} (${d.file})` +
+    (d.function !== "<module>" ? `, inside the spec's helper function \`${d.function}()\`, which may declare other objects from the same lines, so a change there can change them too` : "");
+  const code = (refs) => refs.forEach((c) => {
+    if (!c.ok) { L.push(`- \`${c.ref}\`: does not resolve`); return; }
+    const lines = c.source.replace(/\n$/, "").split("\n");
+    L.push(`- \`${c.ref}\`, ${c.relpath} lines ${c.start}–${c.end}:`, "```python", ...lines.slice(0, 80), ...(lines.length > 80 ? [`# … ${lines.length - 80} more lines`] : []), "```");
+  });
+  let what, obj;
+  if (sel.type === "op") { obj = OP[sel.key]; what = `the step "${obj.label}" (op key \`${obj.key}\`)`; }
+  else if (sel.type === "sym") { obj = SYM[sel.key]; what = `the ${PARAM(obj) ? obj.role : "symbol"} $${obj.tex}$ "${obj.name}" (symbol key \`${obj.key}\`)`; }
+  else { obj = GRP[sel.key]; what = `the group "${obj.label}" (path \`${obj.path}\`)`; }
+
+  if (explain) {
+    L.push(`I want to understand ${what} in the method "${D.title}".`, "", "My question:", request || "<your question here>", "",
+      "How to answer: " + formatText(), "", EXPLAIN_BACKGROUND + " Below is what the spec says about it, and the code it points to.", "", ...versionLines());
+    if (obj.decl) L.push(`Where the spec declares it: ${where(obj.decl)}.`, "");
+    L.push("What the spec says:");
+  } else {
+    L.push(`I want to change ${what} in the headway spec of "${D.title}".`, "", "Requested change:", request || "<describe the change here>", "");
+    L.push(BACKGROUND, "", ...versionLines());
+    if (obj.decl) L.push(`Where it is declared: ${where(obj.decl)}.`, "");
+    L.push("Current declaration:");
+  }
+  if (sel.type === "op") {
+    L.push(`- label: ${obj.label}`, `- equation (TeX): ${obj.tex || "(none)"}`,
+      `- defined for the equation (where=): ${obj.where.map(([t, def]) => `$${t}$: ${def}`).join("; ") || "(none)"}`,
+      `- description: ${obj.desc || "(none)"}`,
+      `- inputs: ${obj.inputs.map(symText).join("; ") || "(none)"}`, `- outputs: ${obj.outputs.map(symText).join("; ")}`,
+      `- group: ${obj.group || "(top level)"}${obj.per ? `; done once per ${obj.per} (${IDX[obj.per]?.name ?? ""})` : ""}`,
+      `- equation check (@G.verify): ${obj.verified === null ? "none covers this step" : obj.verify_msg.split("\n")[0]}`);
+    if (explain) L.push(
+      `- its inputs come from: ${obj.inputs.map((k) => `${k}: ${PRODUCER[k] ? `the step "${OP[PRODUCER[k]].label}"` : `the ${SYM[k]?.role ?? "data"}`}`).join("; ") || "(none)"}`,
+      `- its outputs are used by: ${obj.outputs.map((k) => `${k}: ${(CONSUMERS[k] ?? []).map((c) => `"${OP[c]?.label ?? c}"`).join(", ") || "nothing (a result)"}`).join("; ")}`);
+  } else if (sel.type === "sym") {
+    L.push(`- TeX: ${obj.tex}`, `- name: ${obj.name}`, `- description: ${obj.desc || "(none)"}`, `- role: ${obj.role}`,
+      `- dimensions: ${obj.dims.length ? obj.dims.map((d) => `${d} (${IDX[d]?.name ?? "?"})`).join(" × ") : "scalar"}${obj.per ? `; one per ${obj.per}` : ""}`,
+      ...(obj.value !== null ? [`- default: ${obj.value}`] : []),
+      `- made by: ${PRODUCER[obj.key] ?? "(nothing: an input, a setting or a constant)"}`, `- used by: ${(CONSUMERS[obj.key] ?? []).join(", ") || "(nothing)"}`);
+  } else {
+    L.push(`- label: ${obj.label}`, `- description: ${obj.desc || "(none)"}`, `- steps: ${ORDER.filter((k) => within(OP[k].group, obj.path)).join(", ")}`);
+  }
+  L.push("");
+  if (LANES.length > 1 && current && refOf(active)) {
+    const c = current.changes.get(active.id)?.map.get(sel.type + "|" + sel.key);
+    const lines = changeLines(c, sel.type, refOf(active));
+    if (lines.length) L.push(...lines, "");
+  }
+  const refs = sel.type === "sym" && !obj.code.length && PRODUCER[obj.key] ? OP[PRODUCER[obj.key]].code : obj.code ?? [];
+  if (refs.length) { L.push(sel.type === "sym" && !obj.code.length ? "The code that makes it:" : "The code it points to:"); code(refs); L.push(""); }
+  const used = new Set(sel.type === "op" ? [...obj.inputs, ...obj.outputs] : sel.type === "sym" ? [obj.key] : []);
+  const indices = new Set([...used].flatMap((k) => SYM[k]?.dims ?? []));
+  if (indices.size) L.push("Indices involved: " + [...indices].map((d) => `$${IDX[d]?.tex ?? d}$ = ${IDX[d]?.name ?? d}`).join(", "), "");
+  L.push(...(explain ? EXPLAIN_PLEASE : PLEASE()));
+  return L.join("\n");
+}
+
+/* ---------- legend ---------- */
+function buildLegend() {
+  $("indices").innerHTML = D.indices.map((i) => `<tr><td class="tex">${tex(i.tex)}</td><td><span class="name">${esc(i.name)}</span>${i.desc ? `<div class="d">${rich(i.desc)}</div>` : ""}</td><td class="act">${pen(i.decl, "tex", "the index")}</td></tr>`).join("");
+  const roles = [["input", "Data"], ["setting", "Settings (configurable)"], ["constant", "Constants (fixed in the code)"], ["value", "Intermediate values"], ["output", "Results"]];
+  $("symbols").innerHTML = roles.map(([role, title]) => {
+    const rows = D.symbols.filter((s) => s.role === role);
+    if (!rows.length) return "";
+    return `<tr class="rolehead"><td colspan="4">${title}</td></tr>` + rows.map((s) =>
+      `<tr data-ref="s:${esc(s.key)}" data-go="sym:${esc(s.key)}"><td class="tex">${tex(s.tex)}</td><td class="shape">${s.dims.length ? tex(dimsTex(s)) : s.value !== null ? `= ${esc(s.value)}` : D.suite?.datasets.some((d) => d.values && s.key in d.values) ? "per dataset" : ""}${s.per ? `<div>per ${tex(IDX[s.per]?.tex ?? s.per)}</div>` : ""}</td><td><span class="name">${esc(s.name)}</span>${s.desc ? `<div class="d">${rich(s.desc)}</div>` : ""}</td><td class="act">${pen(s.decl, "tex", "the symbol")}</td></tr>`).join("");
+  }).join("");
+  const ds = D.suite?.datasets ?? [];
+  $("dshead").hidden = !ds.length;
+  $("datasets").innerHTML = ds.map((d) => `<tr data-ds="${esc(d.key)}"><td><span class="name">${esc(d.name)}</span>${d.heldout ? `<div class="d">held out</div>` : ""}</td><td>${d.desc ? `<div class="d">${rich(d.desc)}</div>` : ""}${valuesText(d, D) ? `<div class="d">${valuesText(d, D)}</div>` : ""}</td><td class="act">${pen(d.decl, "desc", "the dataset")}</td></tr>`).join("");
+  document.querySelectorAll("#datasets tr").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest(".pen")) showDataset(tr.dataset.ds); }));
+  let last = null, h = "";
+  for (const k of ORDER) {
+    const o = OP[k];
+    if (o.group !== last) { h += `<div class="eqgroup" data-ref="G:${esc(o.group)}">${esc(o.group ? o.group.split("/").map((p, n, a) => GRP[a.slice(0, n + 1).join("/")]?.label ?? p).join(" › ") : "top level")}</div>`; last = o.group; }
+    const mark = o.verified === true ? ` <span class="ok" title="verified against the code">✓</span>` : o.verified === false ? ` <span class="bad">✗</span>` : "";
+    h += `<div class="eqrow" data-ref="o:${esc(k)}" data-go="op:${esc(k)}"><div class="lbl">${esc(o.label)}${mark}${o.per ? `<div class="d">per ${tex(IDX[o.per]?.tex ?? o.per)}</div>` : ""}</div><div>${o.tex ? `<div class="math">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}${o.desc ? `<div class="d">${rich(o.desc)}</div>` : ""}</div><div class="act">${pen(o.decl, "tex", "the equation")}</div></div>`;
+  }
+  $("equations").innerHTML = h;
+  document.querySelectorAll("#legend [data-go]").forEach((el) => el.addEventListener("click", () => {
+    go(el.dataset.go);
+  }));
+}
+function buildGroupsMenu() {
+  $("groupslist").innerHTML = `<div class="d" style="color:var(--muted);font-size:12px;margin-bottom:4px">Show</div>` + D.groups.map((g) =>
+    `<label style="padding-left:${g.path.split("/").length * 12 - 12}px"><input type="checkbox" data-g="${esc(g.path)}" ${state.hidden.has(g.path) ? "" : "checked"}> ${esc(g.label)}</label>`).join("");
+  $("groupslist").querySelectorAll("input").forEach((c) => c.addEventListener("change", () => {
+    c.checked ? state.hidden.delete(c.dataset.g) : state.hidden.add(c.dataset.g);
+    render();
+  }));
+}
+
+/* ---------- lanes: versions side by side ----------
+   Each lane holds one built headway: this page's own, ones given with build --compare, ones opened with Compare….
+   The panels and the legend show the active lane; D is its data. Lineages and changes follow diff.py. */
+const own = {id: 0, name: D.name ?? (D.live ? "live" : "this build"), D, own: true};
+// when a version was built (builds from before built_at have only the minute); lanes start in that order
+const madeAt = (d) => d.built_at ?? String(d.built ?? "").replace(" ", "T");
+const LANES = [...(D.lanes ?? []).map((l, n) => ({id: n + 1, name: l.name, from: l.from, D: snapshot(l.data)})), own]
+  .sort((a, b) => madeAt(a.D) < madeAt(b.D) ? -1 : madeAt(a.D) > madeAt(b.D) ? 1 : 0);
+delete D.lanes;
+let active = own, laneSeq = LANES.length;
+const cmp = {base: null, wording: false, solo: false};  // against the lane before or a baseline; solo: draw the active lane only
+function snapshot(d) { delete d.lanes; d.snapshot = true; return d; }
+function use(lane) { if (D !== lane.D) { D = lane.D; index(); } }
+const refOf = (lane) => {
+  if (cmp.base !== null) return lane.id === cmp.base ? null : LANES.find((l) => l.id === cmp.base) ?? null;
+  const k = LANES.indexOf(lane);
+  return k > 0 ? LANES[k - 1] : null;
+};
+const KIND = {op: "ops", sym: "symbols", group: "groups"};
+const kkey = (kind, o) => kind === "group" ? o.path : o.key;
+// objects that correspond across the lanes (the same key, or a `was` key), each lineage named by a key of its last lane
+function lineages() {
+  const up = new Map(), holders = new Map();
+  const find = (x) => { while (up.get(x) !== x) { up.set(x, up.get(up.get(x))); x = up.get(x); } return x; };
+  const join = (a, b) => up.set(find(a), find(b));
+  const each = (fn) => LANES.forEach((l, pos) => { for (const kind in KIND) l.D[KIND[kind]].forEach((o, n) => fn(l, kind, o, `${l.id}|${kind}|${kkey(kind, o)}`, pos, n)); });
+  each((l, kind, o, it) => { up.set(it, it); const h = kind + "|" + kkey(kind, o); (holders.get(h) ?? holders.set(h, []).get(h)).push(it); });
+  for (const same of holders.values()) same.slice(1).forEach((it) => join(it, same[0]));
+  each((l, kind, o, it) => (o.was ?? []).forEach((w) => (holders.get(kind + "|" + w) ?? []).forEach((other) => { if (!other.startsWith(l.id + "|")) join(it, other); })));
+  const best = new Map();                                       // root -> [lane position, order, key]
+  each((l, kind, o, it, pos, n) => { const r = find(it), b = best.get(r); if (!b || pos > b[0] || (pos === b[0] && n < b[1])) best.set(r, [pos, n, kkey(kind, o)]); });
+  const name = new Map(), members = new Map();
+  each((l, kind, o, it) => {
+    const nm = best.get(find(it))[2];
+    name.set(it, nm);
+    const m = members.get(kind + "|" + nm) ?? members.set(kind + "|" + nm, new Map()).get(kind + "|" + nm);
+    (m.get(l.id) ?? m.set(l.id, []).get(l.id)).push(kkey(kind, o));
+  });
+  return {of: (laneId, kind, key) => name.get(`${laneId}|${kind}|${key}`) ?? key,
+          members: (kind, nm) => members.get(kind + "|" + nm) ?? new Map()};
+}
+// the selection (in the active lane's keys) in another lane, or null if that version has no such object
+function counterpart(sel, lane, lin = current?.lin) {
+  if (!sel || sel.type === "spec" || lane === active) return sel;
+  if (!lin) return null;
+  const keys = lin.members(sel.type, lin.of(active.id, sel.type, sel.key)).get(lane.id);
+  return keys?.length ? {type: sel.type, key: keys[0]} : null;
+}
+const normTex = (t) => (t ?? "").split(/\s+/).filter(Boolean).join(" ");
+// what changed from lane A to lane B: kind|key (in B) -> {status, what, details}, and what of A is gone
+function diffLanes(lin, A, B) {
+  const map = new Map(), removed = [];
+  for (const kind in KIND) {
+    const byLin = (lane) => { const m = new Map(); for (const o of lane.D[KIND[kind]]) { const nm = lin.of(lane.id, kind, kkey(kind, o)); (m.get(nm) ?? m.set(nm, []).get(nm)).push(o); } return m; };
+    const old = byLin(A), now = byLin(B);
+    for (const [nm, objs] of now) {
+      if (!old.has(nm)) { objs.forEach((o) => map.set(kind + "|" + kkey(kind, o), {status: "added", what: [], details: [], n: o})); continue; }
+      const olds = old.get(nm);
+      for (const [o, n, status] of pairUp(kind, olds, objs))
+        map.set(kind + "|" + kkey(kind, n), status === "same" ? compareObj(kind, o, n, A, B, lin)
+          : {status, what: ["structure"], details: [], old: olds.map((x) => kkey(kind, x)), o, n});
+    }
+    for (const [nm, objs] of old) if (!now.has(nm)) objs.forEach((o) => removed.push([kind, kkey(kind, o)]));
+  }
+  return {map, removed};
+}
+function pairUp(kind, olds, news) {
+  const ok = new Map(olds.map((o) => [kkey(kind, o), o])), nk = new Set(news.map((n) => kkey(kind, n)));
+  const pairs = news.filter((n) => ok.has(kkey(kind, n))).map((n) => [ok.get(kkey(kind, n)), n, "same"]);
+  const lo = olds.filter((o) => !nk.has(kkey(kind, o))), ln = news.filter((n) => !ok.has(kkey(kind, n)));
+  if (lo.length === 1 && ln.length === 1) return [...pairs, [lo[0], ln[0], "same"]];
+  if (lo.length && !ln.length) return pairs.map(([o, n, st], k) => [o, n, k ? st : "merged"]);
+  const status = ln.length > lo.length ? "split" : "merged";
+  return [...pairs, ...ln.map((n) => [olds[0], n, status])];
+}
+function compareObj(kind, o, n, A, B, lin) {
+  const what = [], details = [];
+  const note = (cat, d) => { if (!what.includes(cat)) what.push(cat); details.push({cat, ...d}); };
+  const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+  if (kkey(kind, o) !== kkey(kind, n)) note("renamed", {field: "key", a: kkey(kind, o), b: kkey(kind, n)});
+  if (kind === "op") {
+    for (const side of ["inputs", "outputs"]) {
+      const a = new Set(o[side].map((k) => lin.of(A.id, "sym", k))), b = new Set(n[side].map((k) => lin.of(B.id, "sym", k)));
+      const gone = o[side].filter((k) => !b.has(lin.of(A.id, "sym", k))), added = n[side].filter((k) => !a.has(lin.of(B.id, "sym", k)));
+      if (gone.length || added.length) note("structure", {field: side, gone, added});
+    }
+    const grp = (lane, path) => path ? lin.of(lane.id, "group", path) : "";
+    if (grp(A, o.group) !== grp(B, n.group)) note("structure", {field: "group", a: o.group || "(top level)", b: n.group || "(top level)"});
+    if (!same(o.per, n.per)) note("structure", {field: "per", a: o.per, b: n.per});
+    if (normTex(o.tex) !== normTex(n.tex)) note("equation", {field: "tex", a: o.tex, b: n.tex});
+    if (!same(o.verified, n.verified)) note("check", {field: "verified", a: o.verified, b: n.verified});
+    for (const f of ["label", "desc"]) if (!same(o[f], n[f])) note("wording", {field: f, a: o[f], b: n[f]});
+    if (!same(o.where, n.where)) note("wording", {field: "where", a: o.where, b: n.where});
+  } else if (kind === "sym") {
+    for (const f of ["dims", "per", "role"]) if (!same(o[f], n[f])) note("structure", {field: f, a: o[f], b: n[f]});
+    if (normTex(o.tex) !== normTex(n.tex)) note("equation", {field: "tex", a: o.tex, b: n.tex});
+    if (!same(o.value, n.value)) note("value", {field: "value", a: o.value, b: n.value});
+    for (const f of ["name", "desc"]) if (!same(o[f], n[f])) note("wording", {field: f, a: o[f], b: n[f]});
+  } else for (const f of ["label", "desc"]) if (!same(o[f], n[f])) note("wording", {field: f, a: o[f], b: n[f]});
+  const code = (x) => (x.code ?? []).map((c) => [c.ref, c.source ?? ""]);
+  if (kind !== "group" && !same(code(o), code(n))) note("code", {field: "code", a: o.code, b: n.code});
+  return {status: what.length ? "changed" : "same", what, details, o, n};
+}
+// a line diff (longest common subsequence), for the code two versions point to
+function lineDiff(a, b) {
+  const n = a.length, m = b.length;
+  if (n * m > 400000) return [...a.map((l) => ["-", l]), ...b.map((l) => ["+", l])];
+  const L = Array.from({length: n + 1}, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push([" ", a[i]]); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) out.push(["-", a[i++]]);
+    else out.push(["+", b[j++]]);
+  }
+  while (i < n) out.push(["-", a[i++]]);
+  while (j < m) out.push(["+", b[j++]]);
+  return out;
+}
+const codeLines = (refs) => (refs ?? []).flatMap((c) => [`# ${c.ref}`, ...(c.source ?? "(does not resolve)").replace(/\n$/, "").split("\n")]);
+// the changed lines with two lines of context around them; null for an elision
+function codeDiff(a, b, context = 2) {
+  const d = lineDiff(codeLines(a), codeLines(b)), keep = d.map(() => false);
+  d.forEach(([op], k) => { if (op !== " ") for (let j = Math.max(0, k - context); j <= Math.min(d.length - 1, k + context); j++) keep[j] = true; });
+  const out = [];
+  d.forEach((line, k) => { if (keep[k]) out.push(line); else if (out.length && out.at(-1) !== null) out.push(null); });
+  return out;
+}
+
+const fileName = (path) => String(path ?? "").split(/[\\/]/).pop();
+const gitText = (d) => {
+  const g = d.source?.git;
+  if (!g) return "";
+  const name = g.describe || g.commit.slice(0, 8);
+  return `git ${name}${g.branch && g.branch !== "HEAD" ? ` on ${g.branch}` : ""}${g.dirty && !/dirty/.test(name) ? ", with uncommitted changes" : ""}`;
+};
+const laneMeta = (l) => [l.D.title !== own.D.title ? `“${l.D.title}”` : "", l.own ? "" : fileName(l.from) || "opened file",
+  `built ${l.D.built}`, gitText(l.D)].filter(Boolean).join(" · ");
+
+function setActive(lane) {
+  if (lane === active) return;
+  const there = state.sel ? counterpart(state.sel, lane) : null;
+  active = lane;
+  use(lane);
+  state.sel = there;
+  const p = current?.per.find((q) => q.lane === lane);
+  if (p) current.v = p.v;
+  header(); buildLegend(); buildGroupsMenu(); laneBar();
+  if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel);
+  document.querySelectorAll("#vp .lane").forEach((el) => el.classList.toggle("on", +el.dataset.lane === lane.id));
+  if (state.focus || cmp.solo) render(); else highlight();
+}
+function lanesChanged(fit = true) {
+  if (!LANES.includes(active)) { active = LANES.includes(own) ? own : LANES.at(-1); use(active); state.sel = null; header(); buildLegend(); buildGroupsMenu(); }
+  if (cmp.base !== null && !LANES.some((l) => l.id === cmp.base)) cmp.base = null;
+  laneBar();
+  viewSwitch();
+  render(fit).then(() => { if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel); });
+}
+function laneBar() {
+  const el = $("lanes");
+  if (LANES.length < 2) { el.innerHTML = ""; return; }
+  const base = LANES.find((l) => l.id === cmp.base);
+  el.innerHTML = `<span class="seg gonly" title="draw every open version, or only the one you are reading (the others stay open; click one to switch)">` +
+    `<label><input type="radio" name="solo" value=""${cmp.solo ? "" : " checked"}><span>Side by side</span></label>` +
+    `<label><input type="radio" name="solo" value="1"${cmp.solo ? " checked" : ""}><span>One at a time</span></label></span>` +
+    `<span class="lbl">Versions</span>` + LANES.map((l) =>
+    `<span class="lanechip${l === active ? " on" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;click: read this version in the panels · drag: reorder"><span class="grip">⠿</span>${esc(l.name)}` +
+    `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="compare every other version with this one">baseline</button>` +
+    `<button data-close="${l.id}" title="close this lane">×</button></span>`).join("") +
+    `<span class="cmpnote gonly">markers: ${base ? `each version against ${esc(base.name)}` : `each version against the one ${lanesDown() ? "above" : "to its left"}`} (<span style="color:var(--ok)">+</span> added, <span style="color:var(--setting)">Δ</span> changed, <span style="color:var(--bad)">−</span> gone, <span style="color:var(--output)">⋔</span> split or merged)</span>` +
+    `<label class="seg gonly" title="also mark changes to labels, names and descriptions"><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label>` +
+    `<button id="unchanged" class="gonly" title="collapse the groups in which nothing changed, in every lane">Collapse unchanged</button>`;
+  let dragged = null;
+  el.querySelectorAll(".lanechip").forEach((chip) => {
+    const lane = LANES.find((l) => l.id === +chip.dataset.lane);
+    chip.addEventListener("click", (e) => { if (!e.target.closest("button")) setActive(lane); });
+    chip.addEventListener("dragstart", (e) => { dragged = lane; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(lane.id)); });
+    chip.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const r = chip.getBoundingClientRect();
+      chip.classList.add("over");
+      chip.classList.toggle("after", e.clientX > r.left + r.width / 2);
+    });
+    chip.addEventListener("dragleave", () => chip.classList.remove("over", "after"));
+    chip.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const after = chip.classList.contains("after");
+      chip.classList.remove("over", "after");
+      if (!dragged || dragged === lane) return;
+      moveLane(dragged, lane, after);
+    });
+  });
+  el.querySelectorAll("[data-base]").forEach((b) => b.addEventListener("click", () => {
+    cmp.base = cmp.base === +b.dataset.base ? null : +b.dataset.base;
+    lanesChanged(false);
+  }));
+  el.querySelectorAll("[data-close]").forEach((b) => b.addEventListener("click", () => {
+    const lane = LANES.find((l) => l.id === +b.dataset.close);
+    LANES.splice(LANES.indexOf(lane), 1);
+    note(`Closed ${lane.name}`);
+    lanesChanged();
+  }));
+  $("wording").onchange = (e) => { cmp.wording = e.target.checked; render(); showDetail(state.sel); };
+  el.querySelectorAll("input[name=solo]").forEach((r) => r.onchange = () => {
+    cmp.solo = !!r.value;
+    render(true);
+    note(cmp.solo ? `Showing ${active.name} only, marked against ${refOf(active)?.name ?? "nothing"}; click another version to switch` : "Showing every open version");
+  });
+  $("unchanged").onclick = collapseUnchanged;
+}
+function moveLane(lane, target, after = false) {
+  LANES.splice(LANES.indexOf(lane), 1);
+  LANES.splice(LANES.indexOf(target) + (after ? 1 : 0), 0, lane);
+  lanesChanged(false);
+}
+function collapseUnchanged() {
+  if (!current) return;
+  const {lin, changes} = current, changed = new Set();
+  const mark = (lane, opKey) => { const o = lane.D.ops.find((x) => x.key === opKey); if (o) chain(o.group).forEach((p) => changed.add(lin.of(lane.id, "group", p))); };
+  for (const l of LANES) {
+    const ch = changes.get(l.id);
+    if (!ch) continue;
+    for (const [k, c] of ch.map) if (k.startsWith("op|") && shown(c)) { mark(l, k.slice(3)); if (c.o) mark(refOf(l), c.o.key); }
+    for (const [kind, key] of ch.removed) if (kind === "op") mark(refOf(l), key);
+  }
+  let n = 0;
+  for (const l of LANES) for (const g of l.D.groups) {
+    if (changed.has(lin.of(l.id, "group", g.path))) state.collapsed.delete(g.path);
+    else { state.collapsed.add(g.path); n++; }
+  }
+  render(true);
+  note(n ? "Collapsed the groups in which nothing changed" : "Something changed in every group");
+}
+// the same version: one build, wherever it was saved, or two builds given the same --name (a rebuild of it)
+const sameBuild = (a, b) => a.title === b.title && (a.name && b.name ? a.name === b.name
+  : madeAt(a) === madeAt(b) && (a.name ?? "") === (b.name ?? ""));
+async function addLanes(files) {
+  const added = [], reloaded = [];
+  for (const f of files) {
+    try {
+      const text = await f.text();
+      let d;
+      if (text.trimStart().startsWith("{")) d = JSON.parse(text);
+      else { const m = text.match(/^let D = (\{.*\});$/m); if (!m) throw new Error("not a page built by headway"); d = JSON.parse(m[1]); }
+      if (!d || !Array.isArray(d.ops) || !Array.isArray(d.symbols) || !Array.isArray(d.groups)) throw new Error("not a headway");
+      const name = d.name ?? f.name.replace(/\.(json|html?)$/i, "");
+      const open = LANES.find((l) => sameBuild(l.D, d));
+      if (open?.own) { reloaded.push(`${name} (this page's own version, kept as built)`); continue; }
+      if (open) {                                       // open already: take the file as it is now, in the same place
+        Object.assign(open, {name, from: f.name, D: snapshot(d)});
+        if (open === active) { D = open.D; index(); }
+        reloaded.push(name);
+        continue;
+      }
+      const lane = {id: ++laneSeq, name, from: f.name, D: snapshot(d)};
+      const later = LANES.findIndex((l) => madeAt(l.D) > madeAt(d));      // in order of building, among the others
+      LANES.splice(later < 0 ? LANES.length : later, 0, lane);
+      added.push(lane.name);
+    } catch (e) { note(`Could not open ${f.name}: ${e.message}`); }
+  }
+  if (added.length || reloaded.length) {      // (the page's own version is never replaced: it may be live)
+    lanesChanged(!!added.length);
+    if (active.D !== D) use(active);
+    header(); buildLegend();
+    note([added.length && `Opened ${added.join(", ")}: each in a lane of its own`,
+          reloaded.length && `Open already: ${reloaded.join(", ")}; reloaded from the file`].filter(Boolean).join("; "));
+  }
+}
+$("addlane").onclick = () => $("lanefile").click();
+$("lanefile").onchange = (e) => { addLanes([...e.target.files]); e.target.value = ""; };
+
+/* ---------- results: the open versions' benchmark results on one suite (bench.py) ----------
+   Each version's headway may carry results, each on a suite (title@version) with the suite's built headway. The
+   versions compared are the open lanes; the suite is the active version's (else the first one found). The
+   objectives are computed here as in bench.py; keep the two in step. */
+const rs = {view: "graph", heldout: false, by: "metric", delta: true, color: "shown", sort: null, focus: null};
+try { Object.assign(rs, JSON.parse(localStorage.getItem("headway.results") ?? "{}"), {sort: null, focus: null}); } catch {}
+const saveRs = () => { try { localStorage.setItem("headway.results", JSON.stringify({view: rs.view, heldout: rs.heldout, by: rs.by, delta: rs.delta, color: rs.color})); } catch {} };
+const resultsOf = (lane, id) => (lane.D.results ?? []).find((r) => !id || r.id === id) ?? null;
+const hasResults = () => LANES.some((l) => l.D.results?.length);
+function suiteNow() {
+  const r = resultsOf(active) ?? LANES.map((l) => resultsOf(l)).find(Boolean);
+  return r ? {id: r.id, suite: r.suite, meta: r.suite.suite} : null;
+}
+const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
+const sd = (v) => v.length > 1 ? Math.sqrt(v.reduce((a, x) => a + (x - mean(v)) ** 2, 0) / (v.length - 1)) : 0;
+const fmt = (x) => x === null || x === undefined || Number.isNaN(x) ? "–" : Math.abs(x) >= 100 ? x.toFixed(0) : Math.abs(x) >= 10 ? x.toFixed(1) : x.toFixed(3);
+const objDatasets = (o, meta) => o.datasets ?? meta.datasets.filter((d) => !d.heldout).map((d) => d.key);
+// an objective for each row (null: incomplete), and what each incomplete row lacks
+function objScores(rows, o, meta) {
+  const metrics = Object.fromEntries(meta.metrics.map((m) => [m.key, m]));
+  const cells = Object.entries(o.weights).flatMap(([mk, w]) => objDatasets(o, meta).map((dk) => [dk, mk, w]));
+  const means = rows.map((r) => new Map(cells.filter(([dk, mk]) => r?.values[dk]?.[mk]?.length).map(([dk, mk]) => [dk + "|" + mk, mean(r.values[dk][mk])])));
+  const complete = means.map((m) => m.size === cells.length);
+  const missing = means.map((m) => cells.filter(([dk, mk]) => !m.has(dk + "|" + mk)).map(([dk, mk]) => `${mk} on ${dk}`));
+  const scores = means.map((m, n) => {
+    if (!complete[n]) return null;
+    let total = 0;
+    for (const [dk, mk, w] of cells) {
+      const spec = metrics[mk], v = m.get(dk + "|" + mk);
+      if (o.how === "mean") {
+        const [lo, hi] = spec.range, x = (v - lo) / (hi - lo);
+        total += w * (spec.better === "higher" ? x : 1 - x);
+      } else {                                            // rank among the complete rows, ties shared
+        const others = means.filter((_, j) => complete[j]).map((q) => q.get(dk + "|" + mk));
+        const better = others.filter((q) => spec.better === "higher" ? q > v : q < v).length;
+        total += w * (1 + better + (others.filter((q) => q === v).length - 1) / 2);
+      }
+    }
+    return total / cells.reduce((a, c) => a + c[2], 0);
+  });
+  return {scores, missing};
+}
+// how good a value is, 0..1, for the color: among the values shown, or by the metric's range
+function goodness(v, spec, column) {
+  let lo, hi;
+  if (spec.range && rs.color === "range") [lo, hi] = spec.range;
+  else { const vs = column.filter((x) => x !== null); lo = Math.min(...vs); hi = Math.max(...vs); }
+  if (v === null || !(hi > lo)) return v === null ? null : 0.5;
+  const x = Math.min(1, Math.max(0, (v - lo) / (hi - lo)));
+  return spec.better === "lower" ? 1 - x : x;
+}
+const cellStyle = (g) => g === null ? "" : `background: color-mix(in srgb, var(--accent) ${Math.round(6 + 52 * g)}%, var(--panel));`;
+function deltaHTML(v, ref, better) {
+  if (v === null || ref === null || ref === undefined) return "";
+  const d = v - ref;
+  if (Math.abs(d) < 1e-12) return `<span class="dl same" title="the same as the version it is compared with">=</span>`;
+  const good = better === "higher" ? d > 0 : d < 0;
+  return `<span class="dl ${good ? "good" : "bad"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
+}
+function renderResults() {
+  const el = $("results");
+  const sn = suiteNow();
+  if (!sn) { el.innerHTML = `<p class="empty">None of the open versions has benchmark results. Results are put into a headway with <code>headway build --results</code> or <code>headway attach</code>.</p>`; return; }
+  const {meta} = sn;
+  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
+  const metrics = meta.metrics, title = (m) => sn.suite.symbols.find((x) => x.key === m.key);
+  const objectives = meta.objectives.map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
+  const value = (row, dk, mk) => { const v = row.r?.values[dk]?.[mk]; return v?.length ? v : null; };
+  // columns: objectives, then metric x dataset, grouped by metric or by dataset
+  const groups = rs.by === "metric" ? metrics.map((m) => ({head: m, cols: datasets.map((d) => ({m, d}))}))
+    : datasets.map((d) => ({head: d, cols: metrics.map((m) => ({m, d}))}));
+  const cols = groups.flatMap((g) => g.cols);
+  // rows in lane order, or sorted by the chosen column
+  let order = rows.map((_, n) => n);
+  if (rs.sort) {
+    const key = (n) => {
+      if (rs.sort.kind === "objective") { const ob = objectives.find((x) => x.o.key === rs.sort.key); const v = ob.scores[n]; return v === null ? Infinity : ob.o.how === "rank" ? v : -v; }
+      const m = metrics.find((x) => x.key === rs.sort.key), v = value(rows[n], rs.sort.dataset, rs.sort.key);
+      return v === null ? Infinity : m.better === "higher" ? -mean(v) : mean(v);
+    };
+    order.sort((a, b) => key(a) - key(b));
+  }
+  const ref = (lane) => { const l = refOf(lane); return l ? rows.find((x) => x.lane === l) : null; };
+  const dirMark = (m) => `<span class="dir" title="${m.better} is better">${m.better === "higher" ? "↑" : "↓"}</span>`;
+  const sorted = (kind, key, dataset) => rs.sort && rs.sort.kind === kind && rs.sort.key === key && (kind === "objective" || rs.sort.dataset === dataset) ? " sorted" : "";
+  const focused = (kind, key, dataset) => rs.focus && rs.focus.kind === kind && rs.focus.key === key && (!dataset || rs.focus.dataset === dataset);
+  let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions have results on it</span>` +
+    `<span class="seg"><label><input type="radio" name="rby" value="metric"${rs.by === "metric" ? " checked" : ""}><span>By metric</span></label><label><input type="radio" name="rby" value="dataset"${rs.by === "dataset" ? " checked" : ""}><span>By dataset</span></label></span>` +
+    `<span class="seg" title="the shade of a cell: from the worst to the best of the versions shown, or across the metric's whole range"><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
+    `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline)"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
+    (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="the datasets kept out of development"><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
+    `<span>click a column for what it measures and the values' spread; click it again to sort by it</span></div>`;
+  h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
+    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}" title="${esc(o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
+    (objectives.length ? `<th rowspan="2"></th>` : "") +
+    groups.map((g) => `<th class="grp" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
+    `</tr><tr>` + cols.map(({m, d}) => `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}">${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
+  for (const n of order) {
+    const row = rows[n], rr = ref(row.lane);
+    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${row.r ? "" : " · no results on this suite"}">${esc(row.lane.name)}</th>`;
+    for (const ob of objectives) {
+      const v = ob.scores[n], g = v === null ? null : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : 1 - (v - 1) / Math.max(1, ob.scores.filter((x) => x !== null).length - 1);
+      const rv = rr ? ob.scores[rows.indexOf(rr)] : null;
+      h += v === null ? `<td class="cell obj missing" data-obj="${esc(ob.o.key)}" title="incomplete: no ${esc(ob.missing[n].join(", "))}">${row.r ? "incomplete" : "–"}</td>`
+        : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${rs.delta ? deltaHTML(v, rv, ob.o.how === "rank" ? "lower" : "higher") : ""}</td>`;
+    }
+    if (objectives.length) h += `<td class="gap"></td>`;
+    for (const {m, d} of cols) {
+      const v = value(row, d.key, m.key);
+      if (!v) { h += `<td class="cell missing" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" title="not run">–</td>`; continue; }
+      const column = rows.map((x) => { const q = value(x, d.key, m.key); return q ? mean(q) : null; });
+      const rv = rr && value(rr, d.key, m.key);
+      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${v.map(fmt).join(", ")}">` +
+        `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${rs.delta && rv ? deltaHTML(mean(v), mean(rv), m.better) : ""}</td>`;
+    }
+    h += `</tr>`;
+  }
+  h += `</tbody></table>`;
+  h += `<p class="dsl">Datasets:${datasets.map((d) => `<span class="chip${focused("dataset", d.key) ? " on" : ""}" data-ds="${esc(d.key)}" title="${esc(d.desc ?? "")}">${esc(d.name)}</span>`).join("")}</p>`;
+  const warn = rows.flatMap((x) => (x.r?.warnings ?? []).map((w) => `${x.lane.name}: ${w}`));
+  if (warn.length) h += `<p class="empty">Left out of the results: ${warn.map(esc).join("; ")}</p>`;
+  el.innerHTML = h;
+  // wiring
+  el.querySelectorAll("input[name=rby]").forEach((r) => r.onchange = () => { rs.by = r.value; saveRs(); renderResults(); });
+  el.querySelectorAll("input[name=rcolor]").forEach((r) => r.onchange = () => { rs.color = r.value; saveRs(); renderResults(); });
+  $("rdelta").onchange = (e) => { rs.delta = e.target.checked; saveRs(); renderResults(); };
+  if ($("rheld")) $("rheld").onchange = (e) => { rs.heldout = e.target.checked; saveRs(); renderResults(); };
+  const pick = (focus) => {
+    const again = rs.focus && JSON.stringify(rs.focus) === JSON.stringify(focus);
+    if (again && focus.kind !== "lane") rs.sort = rs.sort && JSON.stringify(rs.sort) === JSON.stringify(focus) ? null : focus;
+    rs.focus = focus;
+    renderResults();
+    showResultDetail();
+  };
+  el.querySelectorAll("[data-obj]").forEach((c) => c.addEventListener("click", () => pick({kind: "objective", key: c.dataset.obj})));
+  el.querySelectorAll("[data-metric]").forEach((c) => c.addEventListener("click", () => pick({kind: "metric", key: c.dataset.metric, dataset: c.dataset.dataset ?? null})));
+  el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => pick({kind: "dataset", key: c.dataset.ds})));
+  el.querySelectorAll("th.row").forEach((c) => c.addEventListener("click", () => {
+    const lane = LANES.find((l) => l.id === +c.dataset.lane);
+    setActive(lane);
+    pick({kind: "lane", key: lane.id});
+  }));
+}
+
+// the side panel in the Results view: what a metric or objective is, and the values' spread
+function showResultDetail() {
+  const el = $("detail"), sn = suiteNow(), f = rs.focus;
+  if (!sn || !f) { el.innerHTML = `<p class="empty">Click a metric, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
+  const {meta, suite} = sn;
+  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
+  let h = "";
+  if (f.kind === "metric") {
+    const m = meta.metrics.find((x) => x.key === f.key), sym = suite.symbols.find((x) => x.key === m.key), op = suite.ops.find((x) => x.key === m.key);
+    h += `<h2>${tex(sym.tex)} &nbsp;${esc(sym.name)}</h2><div class="crumb">metric · ${m.better} is better${m.range ? ` · from ${m.range[0]} to ${m.range[1]}` : ""}${m.unit ? " · " + esc(m.unit) : ""} · ${esc(suite.title)}</div>`;
+    if (sym.desc) h += `<p>${rich(sym.desc)}</p>`;
+    if (op?.tex) h += `<div class="eq">${tex(op.tex, true)}</div>` + whereHTML(op);
+    if (m.source) h += `<p class="empty">Source: ${rich(m.source)}</p>`;
+    h += `<h3>Values${f.dataset ? "" : ", by dataset"}</h3>`;
+    for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null})));
+    if (op) {
+      if (op.verified !== null) h += `<h3>Equation check</h3><div class="status ${op.verified ? "ok" : "bad"}">${op.verified ? "✓ " : "✗ "}${esc(op.verify_msg.split("\n")[0])}</div>`;
+      h += `<h3>Code</h3>${codeHTML(op.code) || "<span class='empty'>no reference</span>"}`;
+    }
+  } else if (f.kind === "dataset") {
+    const d = meta.datasets.find((x) => x.key === f.key);
+    const strips = meta.metrics.map((m) => {
+      const sy = suite.symbols.find((x) => x.key === m.key), v = rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null}));
+      return `<div class="eqlbl">${tex(sy?.tex ?? m.key)} ${esc(sy?.name ?? m.key)}, ${m.better} is better</div>` + (v.some((x) => x.v) ? stripHTML(m, v) : `<p class="empty">no version was run on it</p>`);
+    }).join("");
+    h += datasetHTML(d, suite, meta, `<h3>Results on it</h3>${strips}`);
+  } else if (f.kind === "objective") {
+    const o = meta.objectives.find((x) => x.key === f.key), {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
+    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${o.how === "mean" ? "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute)" : "a weighted mean rank, 1 is best (relative: it depends on which versions are compared)"}</div>`;
+    if (o.desc) h += `<p>${rich(o.desc)}</p>`;
+    if (o.tex) h += `<div class="eq">${tex(o.tex, true)}</div>`;
+    h += `<h3>Metrics and weights</h3><table class="wts">${Object.entries(o.weights).map(([k, w]) => { const sy = suite.symbols.find((x) => x.key === k); return `<tr><td>${tex(sy?.tex ?? k)}</td><td>${esc(sy?.name ?? k)}</td><td>× ${w}</td></tr>`; }).join("")}</table>`;
+    h += `<p class="empty">Over ${objDatasets(o, meta).map((k) => esc(meta.datasets.find((d) => d.key === k)?.name ?? k)).join(", ")}, each metric's mean over its replicates.</p>`;
+    h += `<h3>Versions</h3><table class="wts">${rows.map((x, n) => `<tr><td>${esc(x.lane.name)}</td><td>${scores[n] === null ? `<span class="empty">incomplete${x.r ? `: no ${esc(missing[n].join(", "))}` : ": no results on this suite"}</span>` : fmt(scores[n])}</td></tr>`).join("")}</table>`;
+  } else {
+    const lane = LANES.find((l) => l.id === f.key) ?? active, ref = refOf(lane), r = resultsOf(lane, sn.id);
+    h += `<h2>${esc(lane.name)}</h2><div class="crumb">${esc(laneMeta(lane))}</div>`;
+    h += `<p><button id="togarph">Show it in the graph</button></p>`;
+    if (r?.run && Object.keys(r.run).length) h += `<h3>The run</h3><pre class="status">${esc(JSON.stringify(r.run, null, 1))}</pre>`;
+    if (ref && current) {
+      const lines = summaryLinesFor(lane, ref).filter((l) => l.startsWith("- "));
+      h += `<h3>What changed from ${esc(ref.name)}</h3>` + (lines.length ? `<ul>${lines.map((l) => `<li>${esc(l.slice(2))}</li>`).join("")}</ul>` : `<p class="empty">nothing in the spec</p>`);
+    }
+  }
+  h += resultsAskHTML();
+  el.innerHTML = h;
+  el.scrollTop = 0;
+  $("togarph")?.addEventListener("click", () => setView("graph"));
+  el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => { rs.focus = {kind: "dataset", key: c.dataset.ds}; renderResults(); showResultDetail(); }));
+  wireResultsAsk();
+}
+/* ---------- datasets: a suite's steps that make the data, and each dataset's values of their settings ---------- */
+// the steps that make the data: those taking a setting some dataset gives a value, and the rest of their groups
+function dataSteps(suite, meta) {
+  const valued = new Set(meta.datasets.flatMap((d) => Object.keys(d.values ?? {})));
+  const direct = suite.ops.filter((o) => o.inputs.some((k) => valued.has(k)));
+  const groups = new Set(direct.map((o) => o.group).filter(Boolean));
+  return suite.ops.filter((o) => direct.includes(o) || groups.has(o.group));
+}
+const valuesText = (d, suite) => Object.entries(d.values ?? {}).map(([k, v]) => `${tex(suite.symbols.find((x) => x.key === k)?.tex ?? k)} = ${esc(v)}`).join(", ");
+function datasetHTML(d, suite, meta, extra = "") {
+  const sym = (k) => suite.symbols.find((x) => x.key === k);
+  const varies = (k) => new Set(meta.datasets.map((x) => x.values?.[k] ?? sym(k)?.value ?? null)).size > 1;
+  let h = `<h2>${esc(d.name)}${pen(d.decl, "name", "the name")}</h2><div class="crumb">dataset${d.heldout ? " · held out: kept out of development" : ""} · ${esc(suite.title)}</div>` + declHTML(d.decl);
+  if (d.desc) h += `<p>${rich(d.desc)}${pen(d.decl, "desc", "the description")}</p>`;
+  if (d.source) h += `<p class="empty">Source: ${rich(d.source)}</p>`;
+  const vals = Object.entries(d.values ?? {});
+  if (vals.length) {
+    h += `<h3>Settings${pen(d.decl, "values", "the values")}</h3><table class="wts">` + vals.map(([k, v]) => `<tr${varies(k) ? ` class="varies" title="differs between the datasets"` : ""}><td>${tex(sym(k)?.tex ?? k)}</td><td>${esc(sym(k)?.name ?? k)}</td><td><code>${esc(v)}</code></td></tr>`).join("") + `</table>`;
+    if (vals.some(([k]) => varies(k)) && vals.some(([k]) => !varies(k))) h += `<p class="empty">In bold, the settings that differ between the datasets.</p>`;
+  }
+  const facts = Object.entries(d.facts ?? {});
+  if (facts.length) h += `<h3>Facts${pen(d.decl, "facts", "the facts")}</h3><table class="wts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${rich(v)}</td></tr>`).join("")}</table>`;
+  const steps = vals.length ? dataSteps(suite, meta) : [];
+  if (steps.length) h += `<h3>How it is made</h3>` + steps.map((o) => `<div class="eqlbl">${esc(o.label)}</div>${o.tex ? `<div class="eq">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}`).join("");
+  h += extra;
+  if (d.code?.length) h += `<h3>Code${pen(d.decl, "code", "the code references")}</h3>${codeHTML(d.code)}`;
+  return h;
+}
+// a dataset in the graph view of a suite: shown in the side panel, nothing selected in the graph
+function showDataset(key) {
+  const d = D.suite?.datasets.find((x) => x.key === key);
+  if (!d) return;
+  select(null);
+  $("detail").innerHTML = datasetHTML(d, D, D.suite);
+  $("detail").scrollTop = 0;
+  document.querySelectorAll("#datasets tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.ds === key));
+}
+const datasetLines = (d, suite) => [`- ${d.name} (\`${d.key}\`)${d.heldout ? ", held out" : ""}: ${d.desc}`,
+  ...(Object.keys(d.values ?? {}).length ? [`  settings: ${Object.entries(d.values).map(([k, v]) => `${suite.symbols.find((x) => x.key === k)?.name ?? k} (\`${k}\`) = ${v}`).join(", ")}`] : []),
+  ...Object.entries(d.facts ?? {}).map(([k, v]) => `  ${k}: ${v}`), ...(d.source ? [`  source: ${d.source}`] : []),
+  ...(d.code?.length ? [`  code: ${d.code.map((c) => c.ref).join(", ")}`] : [])];
+
+// the replicates of each version, one row each, on the metric's scale
+function stripHTML(m, rows) {
+  const W = 420, left = 74, right = 14, rowH = 18, top = 20;
+  const all = rows.flatMap((x) => x.v ?? []);
+  // the values' extent, padded, within the metric's range
+  let lo = Math.min(...all), hi = Math.max(...all);
+  const pad = (hi - lo) * 0.12 || Math.abs(hi) * 0.05 || 0.5;
+  [lo, hi] = [lo - pad, hi + pad];
+  if (m.range) [lo, hi] = [Math.max(lo, m.range[0]), Math.min(hi, m.range[1])];
+  const x = (v) => left + (v - lo) / (hi - lo) * (W - left - right);
+  const H = top + rows.length * rowH + 22;
+  let g = `<text x="${W - right}" y="12" text-anchor="end" class="mu">${m.better === "higher" ? "better →" : "← better"}</text>`;
+  rows.forEach((row, k) => {
+    const y = top + k * rowH + rowH / 2;
+    g += `<text x="${left - 8}" y="${y + 4}" text-anchor="end"${row.lane === active ? ' font-weight="700"' : ""}>${esc(row.lane.name)}</text>`;
+    if (!row.v) { g += `<text x="${left}" y="${y + 4}" class="mu">not run</text>`; return; }
+    row.v.forEach((v) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y}" r="3.4"><title>${fmt(v)}</title></circle>`; });
+    const mu = x(mean(row.v));
+    g += `<line class="mean" x1="${mu}" x2="${mu}" y1="${y - 7}" y2="${y + 7}"><title>mean ${fmt(mean(row.v))}</title></line>`;
+  });
+  const yAxis = top + rows.length * rowH + 4;
+  g += `<line class="axis" x1="${left}" x2="${W - right}" y1="${yAxis}" y2="${yAxis}"/>` +
+    [lo, (lo + hi) / 2, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${fmt(v)}</text>`).join("");
+  return `<svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>`;
+}
+
+// prompts from the Results view: why the versions differ on what is selected, and what to try next
+const RESULT_ASKS = [
+  ["Why do they differ?", "explain the differences between the versions from what changed in each", "Explain why the versions differ on this, step by step through what changed from each version to the next. Separate differences that the replicates' spread could explain from real ones. For each real difference, point to the change in the method that most likely caused it, and say how sure you are and how to confirm it (e.g. an ablation)."],
+  ["What to try next?", "propose the next changes to try, and what each should do to the results", "Propose two or three changes to the method to try next, to do better on this without doing worse elsewhere. For each: what to change (in the spec's terms: which step, which equation), why, the effect you expect on each metric, and the experiment that would show it. Do not make any change yet."],
+];
+function resultsAskHTML() {
+  return `<div class="ask" id="askbox"><h3>Ask an AI</h3><div class="presets">${RESULT_ASKS.map(([label, tip], n) => `<button data-rask="${n}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` +
+    `<textarea id="ask" placeholder="Or ask your own question about these results"></textarea>` +
+    `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` +
+    `<div class="row"><button id="askcopy">Copy prompt</button><span>the question, with the results, the metric's definition and what changed between the versions</span></div>` +
+    `<details><summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-top:6px">preview</summary><pre id="askpreview"></pre></details></div>`;
+}
+function wireResultsAsk() {
+  const box = $("ask"), preview = $("askpreview");
+  if (!box) return;
+  const refresh = () => { preview.textContent = resultsPrompt(box.value.trim()); };
+  box.addEventListener("input", refresh);
+  refresh();
+  document.querySelectorAll("#askbox [data-rask]").forEach((b) => b.addEventListener("click", () => { box.value = RESULT_ASKS[+b.dataset.rask][2]; refresh(); box.focus(); }));
+  document.querySelectorAll("#askbox [data-format]").forEach((b) => b.addEventListener("click", () => {
+    ask.format = b.dataset.format; saveAsk();
+    document.querySelectorAll("#askbox [data-format]").forEach((o) => o.classList.toggle("on", o === b));
+    refresh();
+  }));
+  $("askcopy").addEventListener("click", async () => {
+    const text = resultsPrompt(box.value.trim());
+    try { await navigator.clipboard.writeText(text); }
+    catch { const t = document.createElement("textarea"); t.value = text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); }
+    note(`Copied the prompt (${text.split("\n").length} lines)${box.value.trim() ? "" : "; it has no question yet"}`);
+  });
+}
+function resultsPrompt(question) {
+  const sn = suiteNow(), f = rs.focus;
+  if (!sn) return "";
+  const {meta, suite} = sn;
+  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const sym = (k) => suite.symbols.find((x) => x.key === k), op = (k) => suite.ops.find((x) => x.key === k);
+  const about = !f || f.kind === "lane" ? "the results as a whole" : f.kind === "dataset" ? `the results on the dataset "${meta.datasets.find((d) => d.key === f.key)?.name}"` : f.kind === "objective" ? `the objective "${meta.objectives.find((o) => o.key === f.key)?.name}"`
+    : `the metric "${sym(f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`;
+  const L = [`I am comparing versions of the method "${own.D.title}" on the benchmark "${suite.title}" (version ${meta.version}), and want to understand ${about}.`, "",
+    "My question:", question || "<your question here>", "", "How to answer: " + formatText(), "",
+    "Context: each version's computation is described by a headway spec (a Python module of steps with equations, inputs, outputs and references into the code); the benchmark is a headway suite, whose metrics are declared the same way. The results were computed by the benchmark, outside headway; each value below is the mean over replicates ± their standard deviation (n).", ""];
+  L.push(`The versions, in order: ${rows.map(({lane}) => `"${lane.name}" (${laneMeta(lane)})`).join("; ")}.`, "");
+  const metricLines = (m) => {
+    const s = sym(m.key), o = op(m.key);
+    return [`- ${s?.name} (\`${m.key}\`, $${s?.tex}$), ${m.better} is better${m.range ? `, from ${m.range[0]} to ${m.range[1]}` : ""}: ${s?.desc ?? ""}`,
+      ...(o?.tex ? [`  equation: ${o.tex}`] : []), ...(o?.code?.length ? [`  code: ${o.code.map((c) => c.ref).join(", ")}`] : [])];
+  };
+  const shown = f?.kind === "metric" ? meta.metrics.filter((m) => m.key === f.key) : meta.metrics;
+  L.push("The metrics:", ...shown.flatMap(metricLines), "");
+  const datasets = meta.datasets.filter((d) => (rs.heldout || !d.heldout) && (f?.kind === "metric" && f.dataset ? d.key === f.dataset : f?.kind === "dataset" ? d.key === f.key : true));
+  L.push("The datasets:", ...datasets.flatMap((d) => datasetLines(d, suite)), "");
+  const steps = datasets.some((d) => Object.keys(d.values ?? {}).length) ? dataSteps(suite, meta) : [];
+  if (steps.length) L.push("How the datasets are made (the suite's steps; the datasets differ in the settings above):", ...steps.map((o) => `- ${o.label}: ${o.tex}${o.where?.length ? `, where ${o.where.map(([t, def]) => `${t}: ${def}`).join("; ")}` : ""}`), "");
+  L.push("The results:");
+  for (const m of shown) for (const d of datasets)
+    L.push(`- ${sym(m.key)?.name} on ${d.name}: ` + rows.map(({lane, r}) => { const v = r?.values[d.key]?.[m.key]; return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length})` : "not run"}`; }).join("; "));
+  for (const o of meta.objectives) {
+    const {scores} = objScores(rows.map((x) => x.r), o, meta);
+    L.push(`- objective ${o.name} (${o.how === "mean" ? "a weighted mean of the range-scaled metrics, 1 is best" : "a weighted mean rank, 1 is best"}): ` + rows.map(({lane}, n) => `${lane.name} ${scores[n] === null ? "incomplete" : fmt(scores[n])}`).join("; "));
+  }
+  L.push("");
+  if (current) for (const lane of LANES) {
+    const ref = refOf(lane);
+    if (!ref) continue;
+    const lines = summaryLinesFor(lane, ref);
+    if (lines.length) L.push(...lines);
+  }
+  L.push("Please:", "- This is a request for an explanation, not a change: do not edit the spec, the method's code, the benchmark or any other file.",
+    "- Take the code as the ground truth; read each version's spec and code (the git history or the saved versions) where the question needs it.",
+    "- Say which reasons are documented and which are your own reading; do not present a guess as established.");
+  return L.join("\n");
+}
+
+function setView(v) {
+  rs.view = v === "results" && hasResults() ? "results" : "graph";
+  saveRs();
+  document.body.classList.toggle("resultsview", rs.view === "results");
+  $("results").hidden = rs.view !== "results";
+  document.querySelectorAll("input[name=view]").forEach((r) => r.checked = r.value === rs.view);
+  if (rs.view === "results") { renderResults(); showResultDetail(); }
+  else showDetail(state.sel);
+}
+function viewSwitch() {
+  $("viewseg").hidden = !hasResults();
+  if (!hasResults() && rs.view === "results") setView("graph");
+}
+document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => setView(r.value));
+
+/* ---------- start ---------- */
+document.addEventListener("click", (e) => { if (e.target.closest(".pen")) e.stopPropagation(); }, true);
+function header(buildError = "") {
+  $("title").textContent = D.title;
+  document.title = D.title;
+  $("desc").innerHTML = rich(D.desc) + ` <span style="opacity:.7">· built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}</span>` + (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span>` : "");
+  $("checks").innerHTML = buildError
+    ? `<div class="checks"><b>The rebuild failed</b> (this is the last good build): ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
+    : D.check.errors.length ? `<div class="checks"><b>${D.check.errors.length} check error${D.check.errors.length > 1 ? "s" : ""}:</b> the graph may not match the code.<pre>${esc(D.check.errors.join("\n"))}</pre></div>` : "";
+  const names = (role) => D.symbols.filter((s) => s.role === role).map((s) => s.name).join(", ") || "none";
+  $("settingslabel").title = "Add to the graph, with edges to the steps that use them, the settings (configurable; amber, dashed): "
+    + names("setting") + " — and the constants (fixed in the code; grey, dotted): " + names("constant");
+}
+$("expand").onclick = () => { state.collapsed.clear(); render(true); };
+$("collapse").onclick = () => { LANES.forEach((l) => l.D.groups.forEach((g) => state.collapsed.add(g.path))); render(true); };
+$("settings").onchange = (e) => {
+  state.settings = e.target.checked;
+  render(false, true);
+  const n = (role) => D.symbols.filter((s) => s.role === role).length;
+  note(state.settings ? `Added ${n("setting")} setting${n("setting") === 1 ? "" : "s"} (dashed) and ${n("constant")} constant${n("constant") === 1 ? "" : "s"} (dotted) to the graph` : `Settings and constants hidden; they are listed in the legend below`);
+};
+$("split").onchange = (e) => {
+  state.split = e.target.checked;
+  render(false, true);
+  note(state.split ? "Each input is drawn next to every group that uses it" : "One node per input, with edges across the graph");
+};
+let noteTimer;
+function note(text) {
+  const el = $("note");
+  el.textContent = text;
+  el.classList.add("on");
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(() => el.classList.remove("on"), 2800);
+}
+document.querySelectorAll("input[name=focus]").forEach((r) => r.onchange = () => { state.focus = r.value; render(true); });
+document.querySelectorAll("input[name=dir]").forEach((r) => r.onchange = () => { state.dir = r.value; render(true); });
+$("fit").onclick = () => fitView();
+
+/* ---------- layout: the side panel and the legend resize and collapse; kept per browser ---------- */
+const layout = {detail: 460, legend: Math.round(innerHeight * 0.36), detailOpen: true, legendOpen: true};
+try { Object.assign(layout, JSON.parse(localStorage.getItem("headway.layout") ?? "{}")); } catch {}
+function applyLayout() {
+  const b = document.body;
+  b.style.setProperty("--detail-w", layout.detail + "px");
+  b.style.setProperty("--legend-h", layout.legend + "px");
+  b.classList.toggle("nodetail", !layout.detailOpen);
+  b.classList.toggle("nolegend", !layout.legendOpen);
+  $("vsplit").classList.toggle("shut", !layout.detailOpen);
+  $("hsplit").classList.toggle("shut", !layout.legendOpen);
+  $("vtog").textContent = layout.detailOpen ? "›" : "‹";
+  $("vtog").title = layout.detailOpen ? "collapse the side panel" : "show the side panel";
+  $("htog").textContent = layout.legendOpen ? "⌄" : "⌃";
+  $("htog").title = layout.legendOpen ? "collapse the legend" : "show the legend";
+  try { localStorage.setItem("headway.layout", JSON.stringify(layout)); } catch {}
+}
+function splitter(el, open, size, min, measure) {
+  const toggle = () => { layout[open] = !layout[open]; applyLayout(); };
+  el.querySelector("button").addEventListener("click", toggle);
+  el.addEventListener("dblclick", (e) => { if (!e.target.closest("button")) toggle(); });
+  el.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0 || e.target.closest("button")) return;
+    e.preventDefault();
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("drag");
+    const before = layout[open] ? layout[size] : null;
+    const move = (e) => {
+      const [want, max] = measure(e, $("work").getBoundingClientRect());
+      layout[open] = want >= min / 2;                               // dragged nearly shut: collapse, keeping its size
+      layout[size] = layout[open] ? Math.round(Math.min(Math.max(want, min), max)) : before ?? layout[size];
+      applyLayout();
+    };
+    const up = () => { el.classList.remove("drag"); el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  });
+}
+splitter($("vsplit"), "detailOpen", "detail", 240, (e, r) => [r.right - e.clientX, r.width - 200]);
+splitter($("hsplit"), "legendOpen", "legend", 100, (e, r) => [r.bottom - e.clientY, r.height - 120]);
+applyLayout();
+
+/* ---------- live: under `headway serve`, take each rebuild without losing the view ---------- */
+function update(next) {
+  const key = (kind, x) => kind + ":" + (x.key ?? x.path);
+  const entries = (d) => new Map([...d.ops.map((o) => [key("o", o), o]), ...d.symbols.map((x) => [key("s", x), x]),
+    ...d.groups.map((g) => [key("G", g), g])].map(([k, v]) => [k, JSON.stringify({...v, decl: null})]));
+  delete next.lanes;                                // the other versions were taken when the page loaded
+  const old = entries(own.D), now = entries(next);
+  const changed = new Set([...now].filter(([k, v]) => old.has(k) && old.get(k) !== v).map(([k]) => k));
+  const added = [...now.keys()].filter((k) => !old.has(k)).length, removed = [...old.keys()].filter((k) => !now.has(k)).length;
+  const known = new Set(own.D.groups.map((g) => g.path));
+  own.D = next;
+  if (active === own) { D = next; index(); }
+  for (const g of next.groups) if (g.collapsed && !known.has(g.path)) state.collapsed.add(g.path);     // new groups as declared
+  header();
+  buildLegend();
+  buildGroupsMenu();
+  viewSwitch();
+  if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel);
+  render(false, true, new Set([...changed].map((k) => k.replace(/^G:/, "g:"))));
+  const parts = [changed.size && `${changed.size} changed`, added && `${added} added`, removed && `${removed} removed`].filter(Boolean);
+  note(`Rebuilt: ${parts.join(", ") || "no change to the graph"}${D.check.errors.length ? " · check errors" : ""}`);
+}
+function live() {
+  let version = D.version;                          // the build this page holds
+  const events = new EventSource("events");
+  events.onmessage = async (e) => {
+    const st = JSON.parse(e.data);
+    $("live")?.classList.replace("off", "on");
+    if (st.version === version) return;
+    version = st.version;
+    if (!st.ok) { header(st.error); note("Rebuild failed: see above"); return; }
+    update(await (await fetch("data.json", {cache: "no-store"})).json());
+  };
+  events.onerror = () => { $("live")?.classList.replace("on", "off"); if ($("live")) $("live").title = "the server is not answering"; };
+}
+
+header();
+buildLegend();
+buildGroupsMenu();
+laneBar();
+viewSwitch();
+showDetail(null);
+if (D.live && location.protocol.startsWith("http")) live();
+render(true).then(() => { if (rs.view === "results" && hasResults()) setView("results"); else if (LANES.length > 1) showDetail(state.sel); }).catch((e) => { console.error(e); $("vp").innerHTML = `<text x="10" y="20" fill="red">${esc(e)}</text>`; });
+</script>
+</body>
+</html>
