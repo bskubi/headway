@@ -18,6 +18,7 @@ headway build my_pkg.graphspec -o headway.html  # one HTML file; open it in a br
     [--name v3] [--compare v1.json --compare v2.html] [--results results.json]
 headway serve my_pkg.graphspec [--open]         # the viewer at http://127.0.0.1:8765/, rebuilt live
     [--compare old.json]
+headway serve [--open]                          # no spec: a home page for the current directory
 headway diff v1.json v2.json my_pkg.graphspec   # what changed from each version to the next
 headway attach v3.json results.json             # put benchmark results into a built headway (or build --results)
 headway results v1.json v2.json v3.json         # the versions' results on their common benchmark suite
@@ -29,7 +30,7 @@ From Python, e.g. at the end of a benchmark script in the method's own repositor
 ```python
 import headway
 headway.build("my_pkg.graphspec", "headways/v5.html", json="headways/v5.json", name="v5",
-              results=[{"suite": "my_bench.suite", "values": values, "run": {"seeds": [0, 1, 2]}}],
+              results=[{"suite": "my_bench.suite", "values": values, "replicates": ["seed0", "seed1", "seed2"]}],
               compare=["headways/v4.json"])
 ```
 
@@ -38,6 +39,13 @@ Python process (about a second, including the equation checks) and the open page
 losing its view: the selection, the zoom, the open groups. Steps that changed pulse, and a note says how many
 changed. A spec that fails to build leaves the last good graph up, with the error over it. Each step, value and
 group in the side panel links to its declaration in the spec ("✎ declared at …").
+
+`headway serve` with no spec serves a home page for the current directory. It lists the specs it finds (modules
+that make a `Headway` or `Suite` at their top level; test files are skipped) and the built headways (pages and
+`--json` files), grouped by method, with when each was built, its results and its keys. Click a spec to serve it
+live, as `headway serve SPEC` would; click a headway to open it; or tick several to compare them, the most
+recently built opening with the others in lanes beside it. Built files open in the current viewer. Hidden
+directories, virtual environments, `node_modules`, `build` and `dist` are not looked in.
 
 ## Editing from the page
 
@@ -174,9 +182,13 @@ for anything but a declared setting). A dataset can also have a `source`, `facts
 and `code` (where it is made or loaded).
 
 headway computes no metric. Your benchmark writes a results file, `{"suite": "my_bench.suite", "values":
-{dataset: {metric: [one value per replicate]}}, "run": {...}}`, and `build --results` or `attach` puts it into a
-version's headway with the suite, built and checked. Versions with results on the same suite (title and version) are
-compared, wherever their files are.
+{dataset: {metric: [one value per replicate]}}, "replicates": [ids], "figures": {...}, "run": {...}}`, and `build
+--results` or `attach` puts it into a version's headway with the suite, built and checked. Versions with results on
+the same suite (title and version) are compared, wherever their files are. `replicates` names the values (seeds,
+folds) so that versions pair up. `figures` gives the images the benchmark made for each dataset and figure the
+suite declares (`B.figure`); they are written into the headway and shown as columns beside the metrics, a
+thumbnail per version, compared side by side when clicked: to look at, never ranked (a judgment of them is a
+metric of its own). `--key NAME=VALUE` (or `keys=` in Python) labels a version with a hyperparameter, a variant or an option.
 
 In the viewer, **Graph | Results** switches between the computation graph and the results of the same open
 versions: a heatmap of versions × metrics × datasets (grouped by metric or by dataset), each value the mean over

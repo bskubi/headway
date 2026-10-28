@@ -1,7 +1,9 @@
 """Runs each version of cellscore on the benchmark and builds that version's headway with the results, through
 headway's Python API: what a benchmark script in a method's own repository does after each change. Writes
 ../results/vN.json (the same results, for `headway attach` or `build --results`) and ../headways/vN.{html,json}.
-Five replicates (simulation seeds) per dataset.
+Five replicates (simulation seeds) per dataset, named by seed so that versions pair up; for each dataset, one
+figure (seed 0's scores against depth, results/figs/), the suite's figure "score against depth"; and keys saying which of the
+method's options each version has.
 
     python bench/run.py            every version
     python bench/run.py v4         one
@@ -17,9 +19,13 @@ import numpy as np
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 import headway  # noqa: E402
-from cellscore_bench import data, metrics, suite  # noqa: E402
+from cellscore_bench import data, figures, metrics, suite  # noqa: E402
 
 VERSIONS = ("v1", "v2", "v3", "v4")
+# what each version does, as labels to group or pair versions by
+KEYS = {"v1": {"centered": False, "weighted": False}, "v2": {"centered": True, "weighted": False},
+        "v3": {"centered": True, "weighted": False}, "v4": {"centered": True, "weighted": True}}
+FIGS = HERE.parent / "results" / "figs"
 
 SEEDS = range(5)
 SKIP = {("v1", "noisy"), ("v2", "heldout"), ("v3", "heldout")}
@@ -41,6 +47,8 @@ def version(v: str, module: str = "core"):
 def run(v: str) -> dict:
     core = version(v)
     values: dict = {}
+    figs: dict = {}
+    FIGS.mkdir(parents=True, exist_ok=True)
     for name in data.DATASETS:
         if (v, name) in SKIP:
             continue
@@ -55,8 +63,12 @@ def run(v: str) -> dict:
             out["depth_dep"].append(metrics.depth_dependence(score, d.depth))
             out["split"].append(metrics.split_agreement(core.score_cells(d.counts, half),
                                                         core.score_cells(d.counts, d.module & ~half)))
-    return {"suite": "cellscore_bench.suite", "values": values,
-            "run": {"seeds": list(SEEDS), "note": "simulated data; see cellscore_bench/data.py"}}
+            if seed == 0:
+                fig = FIGS / f"{v}_{name}.svg"
+                fig.write_text(figures.score_vs_depth(score, d.depth, d.active, f"{v} on {name}, seed 0"))
+                figs[name] = {"score_depth": {"image": str(fig), "replicate": "seed0"}}
+    return {"suite": "cellscore_bench.suite", "values": values, "replicates": [f"seed{s}" for s in SEEDS],
+            "figures": figs, "run": {"seeds": list(SEEDS), "note": "simulated data; see cellscore_bench/data.py"}}
 
 
 if __name__ == "__main__":
@@ -68,5 +80,5 @@ if __name__ == "__main__":
         (out / "results" / f"{v}.json").write_text(json.dumps(results, indent=1))
         # the version's headway, with its results; the suite given as the object, already imported
         headway.build(version(v, "graphspec").G, out / "headways" / f"{v}.html", json=out / "headways" / f"{v}.json",
-                      name=v, results=[results | {"suite": suite.B}], strict=True)
+                      name=v, keys=KEYS[v], results=[results | {"suite": suite.B}], strict=True)
         print(f"{v}: wrote results/{v}.json, headways/{v}.html and .json", file=sys.stderr)

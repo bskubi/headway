@@ -314,6 +314,7 @@ B.dataset("b", "B")
 B.dataset("h", "held out", heldout=True)
 B.metric("acc", "a", "accuracy", equation="a = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram")
 B.metric("err", "e", "error", equation="e = 1 - s", inputs=[s], better="lower", range=(0, 2), code="toy:gram")
+B.figure("samples", "samples", "what the method makes", code="toy:gram")
 B.objective("overall", "overall", metrics={"acc": 3, "err": 1})
 B.objective("rank", "mean rank", metrics=["acc", "err"], how="rank")
 '''
@@ -413,3 +414,98 @@ def test_api(tmp_path, monkeypatch, capsys) -> None:
     with pytest.raises(ValueError):
         headway.build(spec("toy:no_such_function"), None, strict=True)
     assert cli.main(["guide"]) == 0 and "headway" in capsys.readouterr().out
+
+
+def test_replicates_figures_keys(tmp_path, monkeypatch, capsys) -> None:
+    """Replicate ids pair values across versions; figures' images go in with their paths; keys label a version."""
+    import json
+    from headway import cli
+    (tmp_path / "toysuite.py").write_text(SUITE)
+    monkeypatch.syspath_prepend(str(tmp_path))
+    (tmp_path / "figs").mkdir()
+    (tmp_path / "figs" / "a.svg").write_text('<svg xmlns="http://www.w3.org/2000/svg"/>')
+    (tmp_path / "notes.txt").write_text("not an image")
+    results = {"suite": "toysuite", "replicates": ["s0", "s1", "s2"],
+               "values": {"a": {"acc": [0.8, float("nan"), 0.9], "err": [0.1, 0.2]}},
+               "figures": {"a": {"samples": [{"image": "figs/a.svg", "replicate": "s0", "keys": {"judged_by": "agent"}},
+                                             {"url": "https://example.org/p.png"},
+                                             {"image": "notes.txt"},                       # not an image
+                                             {"image": "figs/a.svg", "url": "x"},          # one or the other
+                                             {"image": "figs/a.svg", "replicate": "s9"}],
+                                 "nope": {"url": "u"}},                                     # not declared
+                           "b": {"samples": {"url": "https://example.org/b.png"}},          # one image, not a list
+                           "zz": {"samples": {"url": "u"}}}}
+    (tmp_path / "res.json").write_text(json.dumps(results))
+    d = headway.build(spec(), None, results=[tmp_path / "res.json"], keys={"lr": 0.01, "variant": "small"})
+    r = d["results"][0]
+    # the NaN is left out with its id; err's two values cannot be paired with three ids
+    assert r["values"]["a"] == {"acc": [0.8, 0.9], "err": [0.1, 0.2]} and r["replicates"] == {"a": {"acc": ["s0", "s2"]}}
+    ev = r["figures"]["a"]["samples"]
+    assert len(ev) == 3 and set(r["figures"]["a"]) == {"samples"} and len(r["figures"]["b"]["samples"]) == 1
+    assert ev[0]["src"].startswith("data:image/svg+xml;base64,") and ev[0]["path"] == str(tmp_path / "figs" / "a.svg")
+    assert ev[0]["keys"] == {"judged_by": "agent"} and ev[0]["replicate"] == "s0"
+    assert ev[1]["src"] == ev[1]["url"] == "https://example.org/p.png" and "path" not in ev[1]
+    w = "\n".join(r["warnings"])
+    assert "a/err: 2 values but 3 replicate ids" in w and "notes.txt is not an image" in w and "not both" in w
+    assert "replicate 's9' is not among" in w and "figures: dataset 'zz'" in w and "figure 'nope' is not in" in w
+    figure = r["suite"]["suite"]["figures"][0]
+    assert figure["name"] == "samples" and figure["code"][0]["ok"] and figure["decl"]["line"]
+    assert d["keys"] == {"lr": 0.01, "variant": "small"}
+    # a key named like a constant of the spec must agree with it
+    G = spec()
+    G.constant("floor", r"\epsilon", "floor", value=0.001, code="toy:SCALE")
+    assert not any("key floor" in w for w in headway.build(G, None, keys={"floor": 1e-3})["check"]["warnings"])
+    d = headway.build(G, None, keys={"floor": 0.01})
+    assert "key floor=0.01, but the spec's floor is 0.001" in d["check"]["warnings"]
+    with pytest.raises(AssertionError):
+        headway.build(spec(), None, keys={"lr": [1, 2]})
+    # the command line: --key, numbers and booleans read as such
+    (tmp_path / "kspec.py").write_text("import headway\nG = headway.Headway('k')\n")
+    assert cli.main(["build", "kspec", "-o", str(tmp_path / "p.html"), "--json", str(tmp_path / "p.json"),
+                     "--key", "lr=0.5", "--key", "warm=true", "--key", "arch=resnet"]) == 0
+    assert json.loads((tmp_path / "p.json").read_text())["keys"] == {"lr": 0.5, "warm": True, "arch": "resnet"}
+
+
+def test_home(tmp_path) -> None:
+    """`headway serve` with no spec: a home page listing specs and built headways, opening and comparing them."""
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from headway.home import Home, module_of
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "__init__.py").write_text("")
+    (tmp_path / "pkg" / "graphspec.py").write_text(LIVE.replace("TEX", "2 x_n"))
+    (tmp_path / "test_x.py").write_text(LIVE.replace("TEX", "2 x_n"))                 # tests are not specs
+    (tmp_path / ".venv").mkdir()
+    (tmp_path / ".venv" / "v.json").write_text("{}")
+    assert module_of(tmp_path / "pkg" / "graphspec.py") == ("pkg.graphspec", tmp_path)
+    for name in ("v1", "v2"):
+        headway.build(spec(), tmp_path / f"{name}.html", json=tmp_path / f"{name}.json", name=name,
+                      keys={"warm": name == "v2"})
+    (tmp_path / "other.json").write_text('{"not": "a headway"}')
+    home = Home(tmp_path)
+    found = [x for x in map(home.what, home.files()) if x]
+    assert sorted(x["path"] for x in found) == ["pkg/graphspec.py", "v1.html", "v1.json", "v2.html", "v2.json"]
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), home.handler())
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    def get(path: str) -> str:
+        return urllib.request.urlopen(f"http://127.0.0.1:{httpd.server_port}{path}").read().decode()
+    try:
+        page = get("/")
+        assert "pkg.graphspec" in page and "warm=true" in page and "/view?file=v1.html" in page
+        both = get("/view?file=v2.json&compare=v1.json")
+        assert '"lanes": [{"name": "v1"' in both and '"name": "v2"' in both
+        live = get("/live/pkg/graphspec.py/")
+        assert '"live": true' in live and "y_n = 2 x_n" in live and "pkg/graphspec.py" in home.live
+        assert json.loads(get("/live/pkg/graphspec.py/state.json"))["ok"]
+        for bad in ("/view?file=../x.json", "/view?file=other.json", "/live/test_x.py/"):
+            with pytest.raises(urllib.error.HTTPError):
+                get(bad)
+    finally:
+        home.close()
+        httpd.shutdown()

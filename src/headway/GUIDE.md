@@ -268,9 +268,15 @@ the method being benchmarked. The graph then reads data → method → metrics, 
   once and the datasets differ in their values. `values` may only name declared settings. Keep one copy of the
   values: either the benchmark code holds them and the suite reads them (`values=data.DATASETS["pbmc"]`), or the
   suite holds them and the benchmark code reads them back (`B.datasets["pbmc"].values`, a dict). Replicates (seeds,
-  folds) are not dataset values; record them in the results' `run`. `facts` is anything
+  folds) are not dataset values; name them in the results' `replicates`. `facts` is anything
   else worth knowing; `source`, where the data come from; `code`, where they are made or loaded. A held-out
   dataset is hidden in the viewer unless asked for.
+- **`B.figure(key, name, desc="", *, source="", code=())`** declares a figure: an image the benchmark makes for
+  each dataset (samples, reconstructions, an embedding, a diagnostic plot), for what cannot be reduced to a
+  number or should be seen as well as measured. It is a column of the results beside the metrics, a thumbnail
+  per version and dataset; clicking it compares the versions' images side by side. A figure is never shaded,
+  sorted, ranked or part of an objective. `desc` says what to look for; `code` points to the function that draws
+  it.
 - **`B.objective(key, name, desc="", *, metrics, how="mean", datasets=None, tex="")`** combines metrics into one
   number, kept apart from the metrics. `metrics` is `{metric: weight}` or a list (weight 1). `how="mean"`: each
   metric's mean scaled to 0..1 by its range, turned so 1 is best, weighted and averaged over the datasets
@@ -278,7 +284,8 @@ the method being benchmarked. The graph then reads data → method → metrics, 
   default every dataset not held out. A version missing any value an objective needs gets no score ("incomplete").
 
 Suite errors: an empty range, an objective naming an undeclared metric or dataset, a `how="mean"` objective over a
-metric without a range, a weight that is not positive, a dataset value for anything but a declared setting.
+metric without a range, a weight that is not positive, a dataset value for anything but a declared setting, a
+figure with the same key as a metric.
 
 ### Results
 
@@ -288,13 +295,48 @@ one per replicate (seed, fold), for each dataset and metric it ran. Missing comb
 ```json
 {"suite": "mybench.suite",
  "values": {"pbmc": {"auroc": [0.91, 0.90, 0.93], "stability": [0.8, 0.82, 0.79]}},
- "run": {"seeds": [0, 1, 2], "date": "2026-10-27"}}
+ "replicates": ["seed0", "seed1", "seed2"],
+ "figures": {"pbmc": {"umap": {"image": "figs/v5_pbmc_umap.png", "replicate": "seed0"}}},
+ "run": {"date": "2026-10-27"}}
 ```
 
 `suite` names the module holding the Suite (or `"module:attribute"`); in Python it can be the Suite itself. `run`
 is anything worth keeping. Results are stored in the version's headway together with the built suite; versions
 are compared on results with the same suite title and version, so bump `version` when a change to the suite makes
 old results incomparable. Values for a dataset or metric the suite does not declare are left out with a warning.
+
+**Name the replicates.** `replicates` says what each value is, in the same order as every value list: one list for
+all datasets, or `{dataset: [ids]}` when they differ (different folds per dataset). Two versions' values with the
+same id are paired (the same seed, the same split of the data), which is what a paired comparison needs; use the
+same ids for the same seeds in every version's run. Without `replicates` the values are unpaired. A value list
+whose length differs from its ids is kept unpaired, with a warning.
+
+**Figures: images to look at.** `figures` gives, for each dataset and declared figure (`B.figure`), the image the
+benchmark made, or a list of them (one per replicate, say; the table shows the first). An image is:
+
+- `image`: a file (PNG, JPEG, GIF, WebP or SVG), relative to the results file (to the working directory when
+  results are given as a dict in Python; absolute paths are fine). It is written into the headway, so it is still
+  there when the version is opened elsewhere later, and its absolute path is kept: the viewer's Ask-AI prompts
+  list it so an agent can open the file. Or `url` instead: a link, not written in (for very large images);
+- `caption`, `replicate` (one of the replicate ids), and `keys`: free-form labels, `{name: string, number or
+  boolean}`.
+
+Images for an undeclared figure or dataset, missing files and files that are not images are left out with a
+warning. The benchmark draws the image (with any plotting library); headway only shows it. Draw every version's
+image the same way (same axes, same size), since they are compared side by side.
+
+If a judgment of a figure should count, make it a metric: declare it in the suite (e.g. `visual_quality`,
+`range=(1, 5)`, higher is better, its description saying how it is judged), and give its values in `values` like
+any other. Whoever judges (a person, or an agent asked to look at the images in the page) records the score there.
+On the image, say what the judgment was made from and by whom with keys, e.g. `"keys": {"judged_for":
+"visual_quality", "judged_by": "agent"}`.
+
+**Keys: labels of a version.** `headway.build(..., keys={"lr": 3e-4, "variant": "no-qc"})` (or `--key lr=3e-4`
+on the command line) labels the version with free-form keys: a hyperparameter, an ablation, an option. They are
+stored in the headway, shown with the version in the Results view and passed to the Ask-AI prompts, and will be
+what versions are grouped and paired by. A key named like a setting or constant of the spec with a value is
+checked against it (a warning if they differ). Use keys for what describes the version as a whole; what describes
+one run goes in `run`.
 
 From the command line:
 
@@ -318,22 +360,24 @@ for name in ("pbmc", "check"):
         values.setdefault(name, {}).setdefault("auroc", []).append(metrics.auroc(s, d.truth))
 
 headway.build("mypkg.graphspec", "headways/v5.html", json="headways/v5.json", name="v5",
-              results=[{"suite": suite.B, "values": values, "run": {"seeds": [0, 1, 2]}}],
-              compare=["headways/v4.json"])
+              results=[{"suite": suite.B, "values": values, "replicates": ["seed0", "seed1", "seed2"]}],
+              keys={"variant": "weighted"}, compare=["headways/v4.json"])
 ```
 
-In the viewer, **Graph | Results** switches to the heatmap of the open versions: objectives first, then metric ×
-dataset columns (group by metric or by dataset), each cell the mean ± s.d. of the replicates and its difference
-from the version it is compared with. Click a column for the metric's definition and every version's replicates;
-click a dataset for what it is; click a version for what changed in it.
+In the viewer, **Graph | Results** switches to the heatmap of the open versions: objectives first, then the
+figures' columns (a thumbnail in each cell), then metric × dataset columns (group by metric or by dataset), each
+cell the mean ± s.d. of the replicates and its difference from the version it is compared with. Click a column for the
+metric's definition and every version's replicates, or for the figure's images side by side (click one to enlarge
+it); click a dataset for what it is; click a version for what changed in it, its keys and its figures.
 
 ## Command line
 
 ```
 headway check SPEC [--no-verify]                  exit 1 if the spec and the code disagree
 headway build SPEC [-o headway.html] [--json FILE] [--name NAME] [--results FILE ...] [--compare [NAME=]FILE ...]
-              [--collapse GROUP ...] [--hide GROUP ...] [--no-verify] [--offline] [--editor EDITOR]
+              [--key NAME=VALUE ...] [--collapse GROUP ...] [--hide GROUP ...] [--no-verify] [--offline] [--editor EDITOR]
 headway serve SPEC [--port 8765] [--open] [--compare ...] [--collapse ...] [--hide ...] [--editor EDITOR]
+headway serve [--port 8765] [--open]              no spec: a home page listing the specs and built headways here
 headway diff VERSION VERSION ... [--wording]      a VERSION is a built file, or a spec module (built as it is now)
 headway attach VERSION RESULTS.json [-o OUT]
 headway results VERSION VERSION ... [--heldout]
@@ -344,7 +388,9 @@ SPEC is an importable module holding one Headway (or `module:attribute`); run fr
 `--offline` writes the page's libraries into it (about 3 MB) so it opens without internet. `--editor` (or
 `$HEADWAY_EDITOR`): `vscode` (default), `cursor`, `pycharm`, `file`, or a URL template with `{file}`, `{line}`,
 `{col}`. `serve` rebuilds when the spec or any file its references point to changes, and the open page keeps its
-view.
+view. Without a SPEC, `serve` lists the specs (modules making a Headway or Suite at their top level) and the built
+headways under the current directory: click a spec to serve it live, a headway to open it, or tick several to
+compare them. Each spec is imported from the directory above its outermost package.
 
 ## Python API
 
@@ -354,7 +400,7 @@ headway.Headway, headway.Suite                    # declaring
 headway.check(G) -> Report                        # .ok, .errors, .warnings, .text()
 headway.trace(G)                                  # context manager; .assert_ok()
 headway.build(spec, out="headway.html", *, json=None, name=None, results=(), compare=(), collapse=(), hide=(),
-              verify=True, offline=False, editor=None, strict=False, log=None) -> dict
+              keys=None, verify=True, offline=False, editor=None, strict=False, log=None) -> dict
 headway.attach(path, results, out=None, log=None) -> dict
 headway.read_results(results, log=None) -> dict   # a results dict or file -> the entry stored in a headway
 headway.load("pkg.mod[:attr]") -> Headway

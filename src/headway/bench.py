@@ -14,7 +14,23 @@ headway computes no metric. Your benchmark computes them and writes a results fi
 
     {"suite": "my_bench.suite",                     # the suite module (or "module:attribute")
      "values": {"dataset": {"metric": [0.81, 0.79, ...], ...}, ...},     # one value per replicate (seed, fold)
+     "replicates": ["seed0", "seed1", ...],          # what each value is, in the same order (optional)
+     "figures": {"dataset": {"figure": {"image": "figs/x.png"}, ...}, ...},     # images to look at (optional)
      "run": {...}}                                  # anything worth keeping: date, settings, seeds (optional)
+
+The replicate ids name the replicates, so that two methods' values can be paired (the same seed, the same fold);
+without them the values are unpaired. They are a list, the same for every dataset, or {dataset: list}.
+
+A figure is what is looked at rather than measured: an image the benchmark makes (samples, reconstructions, a
+diagnostic plot). The suite declares it like a metric (`B.figure`), and it is a column of the results beside the
+metrics, each method's image in it, compared side by side; it is never ranked. If a judgment of it should count,
+that is a metric of its own, with its values in "values"; the judgment's image can say so in its keys. An image:
+
+    {"image": "figs/v5_even.png",      # written into the headway (relative to the results file), its path kept,
+                                       #   for agents to open; or "url": a link, not written in
+     "caption": "...", "replicate": "seed0", "keys": {"judged_by": "agent"}}     # all optional
+
+or a list of them (one per replicate, say), the first shown in the table.
 
 which `headway build --results` or `headway attach` puts into the method's built headway, together with the
 built suite. Methods whose results are on the same suite (title and version) are compared: in the viewer's
@@ -30,8 +46,11 @@ A method missing any value an objective needs gets no score for it ("incomplete"
 from __future__ import annotations
 
 import math
+import mimetypes
+from base64 import b64encode
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from headway.spec import Headway, Symbol, SymbolLike, _caller, _refs
@@ -59,6 +78,15 @@ class Metric:
 
 
 @dataclass
+class Figure:
+    key: str
+    name: str
+    desc: str = ""
+    source: str = ""
+    code: list[str] = field(default_factory=list)              # where it is drawn
+
+
+@dataclass
 class Objective:
     key: str
     name: str
@@ -70,13 +98,15 @@ class Objective:
 
 
 class Suite(Headway):
-    """A benchmark: datasets, metrics (each a step of the headway, with its equation and code) and objectives."""
+    """A benchmark: datasets, metrics (each a step of the headway, with its equation and code), figures (images to
+    look at, not ranked) and objectives."""
 
     def __init__(self, title: str, desc: str = "", *, version: str = "1"):
         super().__init__(title, desc)
         self.version = version
         self.datasets: dict[str, Dataset] = {}
         self.metrics: dict[str, Metric] = {}
+        self.figures: dict[str, Figure] = {}
         self.objectives: dict[str, Objective] = {}
 
     def dataset(self, key: str, name: str, desc: str = "", *, source: str = "", heldout: bool = False,
@@ -104,6 +134,15 @@ class Suite(Headway):
                                    unit, source)
         return s
 
+    def figure(self, key: str, name: str, desc: str = "", *, source: str = "",
+               code: str | Iterable[str] = ()) -> Figure:
+        """A figure: an image the benchmark makes for each dataset, shown in a column beside the metrics, every
+        method's side by side; looked at, never ranked. `code` points to where it is drawn."""
+        assert key not in self.figures, f"figure {key!r} declared twice"
+        self.figures[key] = f = Figure(key, name, desc, source, _refs(code))
+        self.declared["figure:" + key] = _caller()
+        return f
+
     def objective(self, key: str, name: str, desc: str = "", *, metrics: Mapping[str, float] | Sequence[str],
                   how: str = "mean", datasets: Sequence[str] | None = None, tex: str = "") -> Objective:
         weights = dict(metrics) if isinstance(metrics, Mapping) else {m: 1.0 for m in metrics}
@@ -116,6 +155,9 @@ def check_suite(s: Suite, errors: list[str], warnings: list[str]) -> None:
     for m in s.metrics.values():
         if m.range and not m.range[0] < m.range[1]:
             errors.append(f"metric {m.key}: range {m.range} is empty")
+    for k in s.figures:
+        if k in s.metrics:
+            errors.append(f"figure {k}: a metric has the same key")
     if not s.datasets:
         warnings.append("suite: no datasets declared")
     for d in s.datasets.values():
@@ -151,6 +193,7 @@ def suite_data(s: Suite, code: Callable[[list[str]], list[dict[str, Any]]],
             "datasets": [vars(d) | {"values": {k: str(v) for k, v in d.values.items()}, "code": code(d.code),
                                     "decl": decl("dataset:" + d.key)} for d in s.datasets.values()],
             "metrics": [vars(m) | {"range": None if m.range is None else list(m.range)} for m in s.metrics.values()],
+            "figures": [vars(f) | {"code": code(f.code), "decl": decl("figure:" + f.key)} for f in s.figures.values()],
             "objectives": [vars(o) for o in s.objectives.values()]}
 
 
@@ -159,13 +202,29 @@ def suite_id(suite: Mapping[str, Any]) -> str:
     return f"{suite['title']}@{suite['suite']['version']}"
 
 
-def entry(results: Mapping[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
-    """A results file, with its built suite, as kept in a method's headway; values that do not fit are reported."""
+IMAGES = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+BIG_IMAGE = 5_000_000           # bytes; larger images are written in, with a warning
+
+
+def keys(k: Any, where: str) -> dict[str, str | int | float | bool]:
+    """Free-form labels to group or pair by: names -> strings, numbers or booleans."""
+    assert isinstance(k, Mapping), f"{where}: keys are a mapping of names to values, not {type(k).__name__}"
+    for name, v in k.items():
+        assert isinstance(name, str) and isinstance(v, (str, int, float, bool)), \
+            f"{where}: key {name!r}: {v!r} is not a string, number or boolean"
+    return dict(k)
+
+
+def entry(results: Mapping[str, Any], suite: dict[str, Any], base: Path | None = None) -> dict[str, Any]:
+    """A results file, with its built suite, as kept in a method's headway; values that do not fit are reported.
+    base: the directory that figures' images are relative to (the results file's)."""
     meta = suite["suite"]
     datasets = {d["key"]: d for d in meta["datasets"]}
     metrics = {m["key"]: m for m in meta["metrics"]}
-    warnings = []
+    warnings: list[str] = []
+    reps = _replicates(results.get("replicates"), datasets, warnings)
     values: dict[str, dict[str, list[float]]] = {}
+    ids: dict[str, dict[str, list[str]]] = {}
     for dk, by_metric in results.get("values", {}).items():
         if dk not in datasets:
             warnings.append(f"dataset {dk!r} is not in the suite; left out")
@@ -175,7 +234,12 @@ def entry(results: Mapping[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
                 warnings.append(f"metric {mk!r} is not in the suite; left out")
                 continue
             vals = [vals] if isinstance(vals, (int, float)) else list(vals)
-            clean = [float(v) for v in vals if isinstance(v, (int, float)) and math.isfinite(v)]
+            named = reps.get(dk)
+            if named is not None and len(named) != len(vals):
+                warnings.append(f"{dk}/{mk}: {len(vals)} values but {len(named)} replicate ids; left unpaired")
+                named = None
+            keep = [n for n, v in enumerate(vals) if isinstance(v, (int, float)) and math.isfinite(v)]
+            clean = [float(vals[n]) for n in keep]
             if len(clean) < len(vals):
                 warnings.append(f"{dk}/{mk}: {len(vals) - len(clean)} values not finite numbers; left out")
             rng = metrics[mk]["range"]
@@ -183,8 +247,81 @@ def entry(results: Mapping[str, Any], suite: dict[str, Any]) -> dict[str, Any]:
                 warnings.append(f"{dk}/{mk}: values outside the metric's range {rng}")
             if clean:
                 values.setdefault(dk, {})[mk] = clean
+                if named is not None:
+                    ids.setdefault(dk, {})[mk] = [named[n] for n in keep]
+    figures = _figures(results.get("figures", {}), datasets, {f["key"] for f in meta.get("figures", [])}, reps,
+                       base or Path.cwd(), warnings)
     return {"id": suite_id(suite), "suite": suite, "values": values, "run": results.get("run", {}),
-            "warnings": warnings}
+            "warnings": warnings} | ({"replicates": ids} if ids else {}) | ({"figures": figures} if figures else {})
+
+
+def _replicates(r: Any, datasets: Mapping[str, Any], warnings: list[str]) -> dict[str, list[str]]:
+    """The replicate ids, as given (a list, or {dataset: list}) -> dataset -> ids."""
+    if r is None:
+        return {}
+    by = {dk: r for dk in datasets} if isinstance(r, (list, tuple)) else dict(r)
+    out = {}
+    for dk, names in by.items():
+        if dk not in datasets:
+            warnings.append(f"replicates: dataset {dk!r} is not in the suite; left out")
+            continue
+        names = [str(n) for n in names]
+        if len(set(names)) < len(names):
+            warnings.append(f"replicates of {dk}: ids repeat; left unpaired")
+            continue
+        out[dk] = names
+    return out
+
+
+def _figures(given: Mapping[str, Any], datasets: Mapping[str, Any], declared: set[str],
+             reps: Mapping[str, list[str]], base: Path, warnings: list[str]) -> dict[str, dict[str, list[dict[str, Any]]]]:
+    """The figures, as given -> dataset -> figure -> images, each written in as a data URL (its path kept)."""
+    out: dict[str, dict[str, list[dict[str, Any]]]] = {}
+    for dk, by_figure in given.items():
+        if dk not in datasets:
+            warnings.append(f"figures: dataset {dk!r} is not in the suite; left out")
+            continue
+        for fk, items in by_figure.items():
+            if fk not in declared:
+                warnings.append(f"figure {fk!r} is not in the suite; left out")
+                continue
+            for n, item in enumerate([items] if isinstance(items, Mapping) else items):
+                image = _image(item, f"figure {fk} on {dk}" + (f", image {n + 1}" if not isinstance(items, Mapping)
+                                                                 else ""), reps.get(dk), base, warnings)
+                if image:
+                    out.setdefault(dk, {}).setdefault(fk, []).append(image)
+    return out
+
+
+def _image(item: Any, where: str, reps: list[str] | None, base: Path, warnings: list[str]) -> dict[str, Any] | None:
+    if not isinstance(item, Mapping) or ("image" in item) == ("url" in item):
+        warnings.append(f"{where}: needs an image or a url (not both); left out")
+        return None
+    e: dict[str, Any] = {"caption": str(item.get("caption", ""))}
+    if item.get("replicate") is not None:
+        e["replicate"] = str(item["replicate"])
+        if reps is not None and e["replicate"] not in reps:
+            warnings.append(f"{where}: replicate {e['replicate']!r} is not among the replicate ids")
+    try:
+        e["keys"] = keys(item.get("keys", {}), where)
+    except AssertionError as err:
+        warnings.append(f"{err}; keys left out")
+        e["keys"] = {}
+    if "url" in item:
+        e["src"] = e["url"] = str(item["url"])
+        return e
+    path = (base / str(item["image"])).resolve()
+    if path.suffix.lower() not in IMAGES or not path.is_file():
+        warnings.append(f"{where}: {path} is not an image file ({', '.join(sorted(IMAGES))}); left out")
+        return None
+    data = path.read_bytes()
+    if len(data) > BIG_IMAGE:
+        warnings.append(f"{where}: {path.name} is {len(data) / 1e6:.1f} MB; written in all the same "
+                        "(give a url to link it instead)")
+    kind = "image/svg+xml" if path.suffix.lower() == ".svg" else mimetypes.guess_type(path.name)[0]
+    e["src"] = f"data:{kind};base64,{b64encode(data).decode()}"
+    e["path"] = str(path)
+    return e
 
 
 def attach(d: dict[str, Any], results: dict[str, Any]) -> dict[str, Any]:

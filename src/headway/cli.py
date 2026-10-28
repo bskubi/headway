@@ -1,9 +1,13 @@
 """headway check <spec module>     the spec against itself and the code; exit 1 on errors
 headway build <spec module> -o out.html [--collapse GROUP] [--hide GROUP] [--json out.json] [--no-verify]
-                                   [--offline] [--compare [NAME=]VERSION ...]
+                                   [--offline] [--compare [NAME=]VERSION ...] [--results RESULTS.json ...]
+                                   [--name NAME] [--key NAME=VALUE ...]
 headway serve <spec module> [--port 8765] [--open] [--collapse GROUP] [--hide GROUP] [--no-verify]
                                    [--compare [NAME=]VERSION ...]
                                    the viewer, rebuilt live as the spec and the code change
+headway serve [--port 8765] [--open]
+                                   with no spec: a home page listing the specs and built headways under the
+                                   current directory, to serve a spec live, open a headway, or compare several
 headway diff VERSION VERSION [VERSION ...] [--wording]
                                    what changed from each version to the next
 headway attach VERSION RESULTS.json [-o OUT]
@@ -68,8 +72,11 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--name", help="what to call this version in a comparison (e.g. v2, a tag, an experiment)")
     b.add_argument("--compare", action="append", default=[], metavar="[NAME=]VERSION",
                    help="another version (a --json file or a built page) to show in a lane of its own (repeatable)")
+    b.add_argument("--key", action="append", default=[], metavar="NAME=VALUE",
+                   help="a label of this version to group or pair versions by: a hyperparameter, a variant "
+                        "(repeatable; numbers and true/false are read as such)")
     s = sub.add_parser("serve", help="serve the viewer and rebuild it when the spec or the code changes")
-    s.add_argument("spec")
+    s.add_argument("spec", nargs="?", help="the spec to serve live; without it, a home page for the current directory")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open it in the browser")
     s.add_argument("--collapse", action="append", default=[], help="a group to show collapsed (repeatable)")
@@ -118,6 +125,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if a.command == "serve":
         from headway.serve import Server
+        if a.spec is None:
+            from headway.home import Home
+            if a.compare:
+                p.error("serve: --compare needs a spec (from the home page, tick the versions to compare instead)")
+            Home(os.getcwd(), [*(["--no-verify"] if a.no_verify else []), *([f"--editor={a.editor}"] if a.editor else [])]
+                 ).run(a.port, a.open)
+            return 0
         build_args = [*(f"--collapse={c}" for c in a.collapse), *(f"--hide={h}" for h in a.hide),
                       *([f"--editor={a.editor}"] if a.editor else [])]
         Server(a.spec, build_args + (["--no-verify"] if a.no_verify else []), compare=compared).run(a.port, a.open)
@@ -127,8 +141,18 @@ def main(argv: list[str] | None = None) -> int:
         report = check(api.load(a.spec), run_verifiers=not a.no_verify)
         say(report.text())
         return 0 if report.ok else 1
+    keys = {}
+    for kv in a.key:
+        k, eq, v = kv.partition("=")
+        if not eq or not k:
+            p.error(f"--key {kv}: not NAME=VALUE")
+        try:
+            parsed = json.loads(v)
+        except ValueError:
+            parsed = v
+        keys[k] = parsed if isinstance(parsed, (int, float, bool)) else v
     api.build(a.spec, a.out, json=a.json, name=a.name, results=a.results, compare=a.compare, collapse=a.collapse,
-              hide=a.hide, verify=not a.no_verify, offline=a.offline, editor=a.editor, log=say)
+              hide=a.hide, keys=keys, verify=not a.no_verify, offline=a.offline, editor=a.editor, log=say)
     return 0
 
 

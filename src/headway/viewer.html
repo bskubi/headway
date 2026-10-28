@@ -231,6 +231,19 @@ td.cell .dl { display: block; font-size: 10.5px; font-weight: 400; }
 .dl.good { color: var(--ok); } .dl.bad { color: var(--bad); } .dl.same { color: var(--muted); }
 td.cell.missing { background: repeating-linear-gradient(45deg, transparent 0 5px, var(--grid) 5px 10px); color: var(--muted); font-weight: 400; }
 #detail .strip { width: 100%; height: auto; display: block; margin: 4px 0 10px; }
+#detail .ev { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin: 4px 0 14px; }
+#detail .ev.big { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+table.heat td.fig { padding: 3px; min-width: 0; }
+table.heat td.fig img { display: block; height: 46px; width: auto; max-width: 96px; margin: 0 auto; border-radius: 3px; border: 1px solid var(--border); background: #fff; }
+table.heat td.fig .more { font-size: 11px; color: var(--muted); }
+#detail .ev figure { margin: 0; font-size: 12px; min-width: 0; }
+#detail .ev img { width: 100%; height: auto; display: block; border: 1px solid var(--border); border-radius: 4px; background: #fff; cursor: zoom-in; }
+#detail .ev figure.on img { outline: 2px solid var(--accent); outline-offset: 1px; }
+#detail .ev figcaption { margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
+#detail .ev figcaption b { color: var(--fg); font-weight: 600; }
+#lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.78); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; cursor: zoom-out; }
+#lightbox img { max-width: 100%; max-height: calc(100% - 48px); object-fit: contain; background: #fff; border-radius: 4px; }
+#lightbox div { color: #eee; font-size: 13px; text-align: center; }
 #detail .strip text { font-size: 11px; fill: var(--fg); }
 #detail .strip .mu { fill: var(--muted); }
 #detail .strip circle { fill: var(--accent); fill-opacity: .55; }
@@ -329,7 +342,7 @@ table.heat th[data-ds] { cursor: pointer; }
 </div>
 <div class="split h" id="hsplit" title="drag to resize the legend; double-click to collapse it"><button id="htog"></button></div>
 <section id="legend">
-  <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table></div>
+  <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table><h2 id="fighead" hidden>Figures</h2><table id="figures"></table></div>
   <div><h2>Equations</h2><div id="equations"></div></div>
 </section>
 </div>
@@ -818,7 +831,7 @@ const whereHTML = (o, edit = "") => !o.where?.length ? "" : `<div class="whr">${
 const declHTML = (d) => d && D.snapshot ? `<div class="decl">declared at ${esc(d.relpath)}:${d.line}, in this version</div>` : d ? `<div class="decl"><a href="${editorURL(d.file, d.line, d.col)}" title="open the spec at this declaration">✎ declared at ${esc(d.relpath)}:${d.line}</a>${d.function !== "<module>" ? ` · in <code>${esc(d.function)}()</code>, which may declare more than this` : ""}</div>` : "";
 function showDetail(sel) {
   const el = $("detail");
-  document.querySelectorAll("#datasets tr.sel").forEach((tr) => tr.classList.remove("sel"));
+  document.querySelectorAll("#datasets tr.sel, #figures tr.sel").forEach((tr) => tr.classList.remove("sel"));
   if (sel && !(sel.type === "op" ? OP : sel.type === "sym" ? SYM : GRP)[sel.key]) sel = state.sel = null;   // gone in a rebuild
   if (!sel) {
     el.innerHTML = `<p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p>` + askHTML(SPEC);
@@ -1220,6 +1233,10 @@ function buildLegend() {
   $("dshead").hidden = !ds.length;
   $("datasets").innerHTML = ds.map((d) => `<tr data-ds="${esc(d.key)}"><td><span class="name">${esc(d.name)}</span>${d.heldout ? `<div class="d">held out</div>` : ""}</td><td>${d.desc ? `<div class="d">${rich(d.desc)}</div>` : ""}${valuesText(d, D) ? `<div class="d">${valuesText(d, D)}</div>` : ""}</td><td class="act">${pen(d.decl, "desc", "the dataset")}</td></tr>`).join("");
   document.querySelectorAll("#datasets tr").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest(".pen")) showDataset(tr.dataset.ds); }));
+  const figs = D.suite?.figures ?? [];
+  $("fighead").hidden = !figs.length;
+  $("figures").innerHTML = figs.map((f) => `<tr data-fig="${esc(f.key)}"><td><span class="name">${esc(f.name)}</span></td><td>${f.desc ? `<div class="d">${rich(f.desc)}</div>` : ""}</td><td class="act">${pen(f.decl, "desc", "the figure")}</td></tr>`).join("");
+  document.querySelectorAll("#figures tr").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest(".pen")) showFigure(tr.dataset.fig); }));
   let last = null, h = "";
   for (const k of ORDER) {
     const o = OP[k];
@@ -1584,8 +1601,11 @@ function renderResults() {
   const objectives = meta.objectives.map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
   const value = (row, dk, mk) => { const v = row.r?.values[dk]?.[mk]; return v?.length ? v : null; };
   // columns: objectives, then metric x dataset, grouped by metric or by dataset
-  const groups = rs.by === "metric" ? metrics.map((m) => ({head: m, cols: datasets.map((d) => ({m, d}))}))
-    : datasets.map((d) => ({head: d, cols: metrics.map((m) => ({m, d}))}));
+  // figures: columns of images before the metrics, never shaded, sorted or ranked
+  const figures = meta.figures ?? [];
+  const groups = rs.by === "metric" ? [...figures.map((f) => ({head: f, fig: true, cols: datasets.map((d) => ({f, d}))})),
+    ...metrics.map((m) => ({head: m, cols: datasets.map((d) => ({m, d}))}))]
+    : datasets.map((d) => ({head: d, cols: [...figures.map((f) => ({f, d})), ...metrics.map((m) => ({m, d}))]}));
   const cols = groups.flatMap((g) => g.cols);
   // rows in lane order, or sorted by the chosen column
   let order = rows.map((_, n) => n);
@@ -1610,11 +1630,13 @@ function renderResults() {
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
     objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}" title="${esc(o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
     (objectives.length ? `<th rowspan="2"></th>` : "") +
-    groups.map((g) => `<th class="grp" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
-    `</tr><tr>` + cols.map(({m, d}) => `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}">${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
+    groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
+      : `<th class="grp" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
+    `</tr><tr>` + cols.map(({m, f, d}) => f ? `<th class="sub" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.desc ?? "")}">${rs.by === "metric" ? esc(d.name) : `${esc(f.name)}<span class="dir">▣</span>`}</th>`
+      : `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}">${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
   for (const n of order) {
     const row = rows[n], rr = ref(row.lane);
-    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${row.r ? "" : " · no results on this suite"}">${esc(row.lane.name)}</th>`;
+    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}">${esc(row.lane.name)}</th>`;
     for (const ob of objectives) {
       const v = ob.scores[n], g = v === null ? null : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : 1 - (v - 1) / Math.max(1, ob.scores.filter((x) => x !== null).length - 1);
       const rv = rr ? ob.scores[rows.indexOf(rr)] : null;
@@ -1622,12 +1644,18 @@ function renderResults() {
         : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${rs.delta ? deltaHTML(v, rv, ob.o.how === "rank" ? "lower" : "higher") : ""}</td>`;
     }
     if (objectives.length) h += `<td class="gap"></td>`;
-    for (const {m, d} of cols) {
+    for (const {m, f, d} of cols) {
+      if (f) {
+        const imgs = row.r?.figures?.[d.key]?.[f.key];
+        h += imgs?.length ? `<td class="cell fig${focused("figure", f.key, d.key) ? " sel" : ""}" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.name)} on ${esc(d.name)}: ${imgs.length} image${imgs.length > 1 ? "s" : ""}; click to compare the versions'"><img src="${esc(imgs[0].src)}" alt="" loading="lazy">${imgs.length > 1 ? `<span class="more">+${imgs.length - 1}</span>` : ""}</td>`
+          : `<td class="cell missing" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="no image">–</td>`;
+        continue;
+      }
       const v = value(row, d.key, m.key);
       if (!v) { h += `<td class="cell missing" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" title="not run">–</td>`; continue; }
       const column = rows.map((x) => { const q = value(x, d.key, m.key); return q ? mean(q) : null; });
-      const rv = rr && value(rr, d.key, m.key);
-      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${v.map(fmt).join(", ")}">` +
+      const rv = rr && value(rr, d.key, m.key), ids = row.r.replicates?.[d.key]?.[m.key];
+      h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x)).join(", "))}">` +
         `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${rs.delta && rv ? deltaHTML(mean(v), mean(rv), m.better) : ""}</td>`;
     }
     h += `</tr>`;
@@ -1644,7 +1672,7 @@ function renderResults() {
   if ($("rheld")) $("rheld").onchange = (e) => { rs.heldout = e.target.checked; saveRs(); renderResults(); };
   const pick = (focus) => {
     const again = rs.focus && JSON.stringify(rs.focus) === JSON.stringify(focus);
-    if (again && focus.kind !== "lane") rs.sort = rs.sort && JSON.stringify(rs.sort) === JSON.stringify(focus) ? null : focus;
+    if (again && focus.kind !== "lane" && focus.kind !== "figure") rs.sort = rs.sort && JSON.stringify(rs.sort) === JSON.stringify(focus) ? null : focus;
     rs.focus = focus;
     renderResults();
     showResultDetail();
@@ -1652,6 +1680,7 @@ function renderResults() {
   el.querySelectorAll("[data-obj]").forEach((c) => c.addEventListener("click", () => pick({kind: "objective", key: c.dataset.obj})));
   el.querySelectorAll("[data-metric]").forEach((c) => c.addEventListener("click", () => pick({kind: "metric", key: c.dataset.metric, dataset: c.dataset.dataset ?? null})));
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => pick({kind: "dataset", key: c.dataset.ds})));
+  el.querySelectorAll("[data-fig]").forEach((c) => c.addEventListener("click", () => pick({kind: "figure", key: c.dataset.fig, dataset: c.dataset.dataset ?? null})));
   el.querySelectorAll("th.row").forEach((c) => c.addEventListener("click", () => {
     const lane = LANES.find((l) => l.id === +c.dataset.lane);
     setActive(lane);
@@ -1662,7 +1691,7 @@ function renderResults() {
 // the side panel in the Results view: what a metric or objective is, and the values' spread
 function showResultDetail() {
   const el = $("detail"), sn = suiteNow(), f = rs.focus;
-  if (!sn || !f) { el.innerHTML = `<p class="empty">Click a metric, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
+  if (!sn || !f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
   const {meta, suite} = sn;
   const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
@@ -1675,7 +1704,7 @@ function showResultDetail() {
     if (m.source) h += `<p class="empty">Source: ${rich(m.source)}</p>`;
     h += `<h3>Values${f.dataset ? "" : ", by dataset"}</h3>`;
     for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
-      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null})));
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key]})));
     if (op) {
       if (op.verified !== null) h += `<h3>Equation check</h3><div class="status ${op.verified ? "ok" : "bad"}">${op.verified ? "✓ " : "✗ "}${esc(op.verify_msg.split("\n")[0])}</div>`;
       h += `<h3>Code</h3>${codeHTML(op.code) || "<span class='empty'>no reference</span>"}`;
@@ -1683,10 +1712,19 @@ function showResultDetail() {
   } else if (f.kind === "dataset") {
     const d = meta.datasets.find((x) => x.key === f.key);
     const strips = meta.metrics.map((m) => {
-      const sy = suite.symbols.find((x) => x.key === m.key), v = rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null}));
+      const sy = suite.symbols.find((x) => x.key === m.key), v = rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key]}));
       return `<div class="eqlbl">${tex(sy?.tex ?? m.key)} ${esc(sy?.name ?? m.key)}, ${m.better} is better</div>` + (v.some((x) => x.v) ? stripHTML(m, v) : `<p class="empty">no version was run on it</p>`);
     }).join("");
-    h += datasetHTML(d, suite, meta, `<h3>Results on it</h3>${strips}`);
+    h += datasetHTML(d, suite, meta, `<h3>Results on it</h3>${strips}` + figuresHTML(d.key, rows, meta));
+  } else if (f.kind === "figure") {
+    const fg = (meta.figures ?? []).find((x) => x.key === f.key);
+    h += `<h2>${esc(fg.name)}${pen(fg.decl, "name", "the name")}</h2><div class="crumb">figure · to look at, not ranked · ${esc(suite.title)}</div>` + declHTML(fg.decl);
+    if (fg.desc) h += `<p>${rich(fg.desc)}${pen(fg.decl, "desc", "the description")}</p>`;
+    if (fg.source) h += `<p class="empty">Source: ${rich(fg.source)}</p>`;
+    h += `<h3>The versions${f.dataset ? "" : ", by dataset"}</h3>${FIGURE_NOTE}`;
+    for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + figureGrid(d.key, fg, rows, true);
+    if (fg.code?.length) h += `<h3>Code${pen(fg.decl, "code", "the code references")}</h3>${codeHTML(fg.code)}`;
   } else if (f.kind === "objective") {
     const o = meta.objectives.find((x) => x.key === f.key), {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
     h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${o.how === "mean" ? "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute)" : "a weighted mean rank, 1 is best (relative: it depends on which versions are compared)"}</div>`;
@@ -1699,7 +1737,11 @@ function showResultDetail() {
     const lane = LANES.find((l) => l.id === f.key) ?? active, ref = refOf(lane), r = resultsOf(lane, sn.id);
     h += `<h2>${esc(lane.name)}</h2><div class="crumb">${esc(laneMeta(lane))}</div>`;
     h += `<p><button id="togarph">Show it in the graph</button></p>`;
+    const keys = Object.entries(lane.D.keys ?? {});
+    if (keys.length) h += `<h3>Keys</h3><table class="wts">${keys.map(([k, v]) => `<tr><td>${esc(k)}</td><td><code>${esc(String(v))}</code></td></tr>`).join("")}</table>`;
     if (r?.run && Object.keys(r.run).length) h += `<h3>The run</h3><pre class="status">${esc(JSON.stringify(r.run, null, 1))}</pre>`;
+    let first = true;                                     // the note under the first heading only
+    for (const d of datasets) { const e = figuresHTML(d.key, [{lane, r}], meta, `Figures on ${d.name}`, first); if (e) { h += e; first = false; } }
     if (ref && current) {
       const lines = summaryLinesFor(lane, ref).filter((l) => l.startsWith("- "));
       h += `<h3>What changed from ${esc(ref.name)}</h3>` + (lines.length ? `<ul>${lines.map((l) => `<li>${esc(l.slice(2))}</li>`).join("")}</ul>` : `<p class="empty">nothing in the spec</p>`);
@@ -1709,6 +1751,7 @@ function showResultDetail() {
   el.innerHTML = h;
   el.scrollTop = 0;
   $("togarph")?.addEventListener("click", () => setView("graph"));
+  wireImages(el);
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => { rs.focus = {kind: "dataset", key: c.dataset.ds}; renderResults(); showResultDetail(); }));
   wireResultsAsk();
 }
@@ -1747,12 +1790,57 @@ function showDataset(key) {
   select(null);
   $("detail").innerHTML = datasetHTML(d, D, D.suite);
   $("detail").scrollTop = 0;
-  document.querySelectorAll("#datasets tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.ds === key));
+  document.querySelectorAll("#datasets tr, #figures tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.ds === key));
+}
+// a figure in the graph view of a suite: what it shows and where it is drawn (the images are in the methods' results)
+function showFigure(key) {
+  const f = D.suite?.figures?.find((x) => x.key === key);
+  if (!f) return;
+  select(null);
+  let h = `<h2>${esc(f.name)}${pen(f.decl, "name", "the name")}</h2><div class="crumb">figure · to look at, not ranked · ${esc(D.title)}</div>` + declHTML(f.decl);
+  if (f.desc) h += `<p>${rich(f.desc)}${pen(f.decl, "desc", "the description")}</p>`;
+  if (f.source) h += `<p class="empty">Source: ${rich(f.source)}</p>`;
+  h += `<p class="empty">The benchmark draws it for each dataset. Each method's images are in its headway's results: a column of thumbnails in the Results view, beside the metrics.</p>`;
+  if (f.code?.length) h += `<h3>Code${pen(f.decl, "code", "the code references")}</h3>${codeHTML(f.code)}`;
+  $("detail").innerHTML = h;
+  $("detail").scrollTop = 0;
+  document.querySelectorAll("#datasets tr, #figures tr").forEach((tr) => tr.classList.toggle("sel", tr.dataset.fig === key));
 }
 const datasetLines = (d, suite) => [`- ${d.name} (\`${d.key}\`)${d.heldout ? ", held out" : ""}: ${d.desc}`,
   ...(Object.keys(d.values ?? {}).length ? [`  settings: ${Object.entries(d.values).map(([k, v]) => `${suite.symbols.find((x) => x.key === k)?.name ?? k} (\`${k}\`) = ${v}`).join(", ")}`] : []),
   ...Object.entries(d.facts ?? {}).map(([k, v]) => `  ${k}: ${v}`), ...(d.source ? [`  source: ${d.source}`] : []),
   ...(d.code?.length ? [`  code: ${d.code.map((c) => c.ref).join(", ")}`] : [])];
+
+// a version's keys: free-form labels (a hyperparameter, a variant) given when it was built
+const keysText = (k) => Object.entries(k ?? {}).map(([n, v]) => `${n}=${v}`).join(", ");
+// the images the versions' benchmark made on a dataset, side by side by title: to look at, not ranked
+const FIGURE_NOTE = `<p class="empty">Made by the benchmark, to look at; not ranked. Click one to enlarge it.</p>`;
+// a figure on a dataset: every version's images side by side
+function figureGrid(dk, fg, rows, big = false) {
+  const items = rows.flatMap(({lane, r}) => (r?.figures?.[dk]?.[fg.key] ?? []).map((e) => ({lane, e})));
+  if (!items.length) return `<p class="empty">no version has it</p>`;
+  return `<div class="ev${big ? " big" : ""}">` + items.map(({lane, e}) =>
+    `<figure class="${lane === active && rows.length > 1 ? "on" : ""}"><img src="${esc(e.src)}" alt="${esc(fg.name)}" loading="lazy"><figcaption><b>${esc(lane.name)}</b>${e.replicate ? ` · ${esc(e.replicate)}` : ""}${e.caption ? `<br>${esc(e.caption)}` : ""}${keysText(e.keys) ? `<br>${esc(keysText(e.keys))}` : ""}</figcaption></figure>`).join("") + `</div>`;
+}
+// every figure the versions have on a dataset (for the dataset's and a version's panels)
+function figuresHTML(dk, rows, meta, head = "Figures", note = true) {
+  const figs = (meta.figures ?? []).filter((fg) => rows.some(({r}) => r?.figures?.[dk]?.[fg.key]?.length));
+  if (!figs.length) return "";
+  return `<h3>${esc(head)}</h3>${note ? FIGURE_NOTE : ""}` + figs.map((fg) => `<div class="eqlbl">${esc(fg.name)}</div>${figureGrid(dk, fg, rows)}`).join("");
+}
+// click an image for it at full size; a click or Escape closes it
+function wireImages(el) {
+  el.querySelectorAll(".ev img").forEach((img) => img.addEventListener("click", () => {
+    const box = document.createElement("div"), big = img.cloneNode(), cap = document.createElement("div");
+    big.removeAttribute("loading");
+    cap.textContent = `${img.alt} · ${img.closest("figure").querySelector("figcaption").innerText.replace(/\n/g, " · ")}`;
+    box.id = "lightbox";
+    box.append(big, cap);
+    box.addEventListener("click", () => box.remove());
+    document.body.append(box);
+  }));
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("lightbox")?.remove(); });
 
 // the replicates of each version, one row each, on the metric's scale
 function stripHTML(m, rows) {
@@ -1770,7 +1858,7 @@ function stripHTML(m, rows) {
     const y = top + k * rowH + rowH / 2;
     g += `<text x="${left - 8}" y="${y + 4}" text-anchor="end"${row.lane === active ? ' font-weight="700"' : ""}>${esc(row.lane.name)}</text>`;
     if (!row.v) { g += `<text x="${left}" y="${y + 4}" class="mu">not run</text>`; return; }
-    row.v.forEach((v) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y}" r="3.4"><title>${fmt(v)}</title></circle>`; });
+    row.v.forEach((v, n) => { g += `<circle cx="${x(v).toFixed(1)}" cy="${y}" r="3.4"><title>${row.ids ? esc(row.ids[n]) + ": " : ""}${fmt(v)}</title></circle>`; });
     const mu = x(mean(row.v));
     g += `<line class="mean" x1="${mu}" x2="${mu}" y1="${y - 7}" y2="${y + 7}"><title>mean ${fmt(mean(row.v))}</title></line>`;
   });
@@ -1818,11 +1906,12 @@ function resultsPrompt(question) {
   const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
   const sym = (k) => suite.symbols.find((x) => x.key === k), op = (k) => suite.ops.find((x) => x.key === k);
   const about = !f || f.kind === "lane" ? "the results as a whole" : f.kind === "dataset" ? `the results on the dataset "${meta.datasets.find((d) => d.key === f.key)?.name}"` : f.kind === "objective" ? `the objective "${meta.objectives.find((o) => o.key === f.key)?.name}"`
+    : f.kind === "figure" ? `the figure "${(meta.figures ?? []).find((x) => x.key === f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`
     : `the metric "${sym(f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`;
   const L = [`I am comparing versions of the method "${own.D.title}" on the benchmark "${suite.title}" (version ${meta.version}), and want to understand ${about}.`, "",
     "My question:", question || "<your question here>", "", "How to answer: " + formatText(), "",
     "Context: each version's computation is described by a headway spec (a Python module of steps with equations, inputs, outputs and references into the code); the benchmark is a headway suite, whose metrics are declared the same way. The results were computed by the benchmark, outside headway; each value below is the mean over replicates ± their standard deviation (n).", ""];
-  L.push(`The versions, in order: ${rows.map(({lane}) => `"${lane.name}" (${laneMeta(lane)})`).join("; ")}.`, "");
+  L.push(`The versions, in order: ${rows.map(({lane}) => `"${lane.name}" (${laneMeta(lane)}${keysText(lane.D.keys) ? `; keys: ${keysText(lane.D.keys)}` : ""})`).join("; ")}.`, "");
   const metricLines = (m) => {
     const s = sym(m.key), o = op(m.key);
     return [`- ${s?.name} (\`${m.key}\`, $${s?.tex}$), ${m.better} is better${m.range ? `, from ${m.range[0]} to ${m.range[1]}` : ""}: ${s?.desc ?? ""}`,
@@ -1830,18 +1919,27 @@ function resultsPrompt(question) {
   };
   const shown = f?.kind === "metric" ? meta.metrics.filter((m) => m.key === f.key) : meta.metrics;
   L.push("The metrics:", ...shown.flatMap(metricLines), "");
-  const datasets = meta.datasets.filter((d) => (rs.heldout || !d.heldout) && (f?.kind === "metric" && f.dataset ? d.key === f.dataset : f?.kind === "dataset" ? d.key === f.key : true));
+  const datasets = meta.datasets.filter((d) => (rs.heldout || !d.heldout) && ((f?.kind === "metric" || f?.kind === "figure") && f.dataset ? d.key === f.dataset : f?.kind === "dataset" ? d.key === f.key : true));
   L.push("The datasets:", ...datasets.flatMap((d) => datasetLines(d, suite)), "");
   const steps = datasets.some((d) => Object.keys(d.values ?? {}).length) ? dataSteps(suite, meta) : [];
   if (steps.length) L.push("How the datasets are made (the suite's steps; the datasets differ in the settings above):", ...steps.map((o) => `- ${o.label}: ${o.tex}${o.where?.length ? `, where ${o.where.map(([t, def]) => `${t}: ${def}`).join("; ")}` : ""}`), "");
   L.push("The results:");
   for (const m of shown) for (const d of datasets)
-    L.push(`- ${sym(m.key)?.name} on ${d.name}: ` + rows.map(({lane, r}) => { const v = r?.values[d.key]?.[m.key]; return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length})` : "not run"}`; }).join("; "));
+    L.push(`- ${sym(m.key)?.name} on ${d.name}: ` + rows.map(({lane, r}) => {
+      const v = r?.values[d.key]?.[m.key], ids = r?.replicates?.[d.key]?.[m.key];
+      return `${lane.name} ${v?.length ? `${fmt(mean(v))} ± ${fmt(sd(v))} (${v.length}${ids ? `: ${v.map((x, k) => `${ids[k]} ${fmt(x)}`).join(", ")}` : ""})` : "not run"}`;
+    }).join("; "));
+  if (rows.some(({r}) => r?.replicates)) L.push("(Values listed by replicate id are paired across versions by that id: the same seed or fold.)");
+  const figs = (meta.figures ?? []).filter((fg) => f?.kind !== "figure" || fg.key === f.key);
+  const images = figs.flatMap((fg) => datasets.flatMap((d) => rows.flatMap(({lane, r}) => (r?.figures?.[d.key]?.[fg.key] ?? []).map((e) =>
+    `- ${fg.name}, ${lane.name} on ${d.name}: ${e.path ?? e.url}${e.replicate ? `, replicate ${e.replicate}` : ""}${e.caption ? ` (${e.caption})` : ""}${keysText(e.keys) ? `; ${keysText(e.keys)}` : ""}`))));
   for (const o of meta.objectives) {
     const {scores} = objScores(rows.map((x) => x.r), o, meta);
     L.push(`- objective ${o.name} (${o.how === "mean" ? "a weighted mean of the range-scaled metrics, 1 is best" : "a weighted mean rank, 1 is best"}): ` + rows.map(({lane}, n) => `${lane.name} ${scores[n] === null ? "incomplete" : fmt(scores[n])}`).join("; "));
   }
   L.push("");
+  if (images.length) L.push("The figures: images the benchmark made, to look at, not ranked (open the files to see them).",
+    ...figs.map((fg) => `- ${fg.name} (\`${fg.key}\`): ${fg.desc ?? ""}${fg.code?.length ? ` Drawn by: ${fg.code.map((c) => c.ref).join(", ")}` : ""}`), "The images:", ...images, "");
   if (current) for (const lane of LANES) {
     const ref = refOf(lane);
     if (!ref) continue;

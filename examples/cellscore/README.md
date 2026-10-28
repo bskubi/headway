@@ -31,4 +31,9 @@ the noisy dataset, and only v1 and v4 on the held-out one. What the results show
 since it shifts every cell's score alike; size factors (v3) help most, above all with uneven depth; weighting (v4)
 helps on the noisy module. The datasets are simulated by the suite's own steps (module on or off, rates, counts);
 each dataset is those steps with its values of their settings, taken from `bench/cellscore_bench/data.py`.
+The replicates are named by seed, so the versions' values pair up. The suite also declares a figure, "score against
+depth" (seed 0: each cell's score against its sequencing depth, drawn into `results/figs/`): in the Results view it
+is a column beside the metrics, a thumbnail per version and dataset; click it to see the versions' images side by
+side, large. Each version is labelled with keys
+saying which options it has (`centered`, `weighted`).
 The tests (`tests/test_headway.py`) build the four versions and check the comparison.

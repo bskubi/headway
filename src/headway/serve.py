@@ -19,7 +19,7 @@ import tempfile
 import threading
 import time
 import webbrowser
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
@@ -132,84 +132,95 @@ class Server:
         return {"version": self.version, "ok": not self.error, "error": self.error}
 
     # ---------- serving ----------
-    def handler(self) -> type[BaseHTTPRequestHandler]:
+    def get(self, h: Handler, path: str) -> None:
+        """Answer a GET of `path` (the page, its data, the build state, the stream of rebuilds)."""
+        if path == "/":
+            h.send(_waiting(self.error) if self.data is None else page.html(self.data), "text/html")
+        elif path == "/data.json":
+            h.send(json.dumps(self.data), "application/json")
+        elif path == "/state.json":
+            h.send(json.dumps(self.state()), "application/json")
+        elif path == "/events":
+            self.events(h)
+        else:
+            h.send("not found", "text/plain", 404)
+
+    def events(self, h: Handler) -> None:
+        # server-sent events: the build state now, then on every rebuild (and a heartbeat)
+        h.send_response(200)
+        h.send_header("Content-Type", "text/event-stream")
+        h.send_header("Cache-Control", "no-store")
+        h.end_headers()
+        version = -1
+        try:
+            while not self.stopping:
+                with self.changed:
+                    if self.version == version:
+                        self.changed.wait(15)
+                    state = self.state()
+                if state["version"] != version:
+                    version = state["version"]
+                    h.wfile.write(f"data: {json.dumps(state)}\n\n".encode())
+                else:
+                    h.wfile.write(b": still here\n\n")
+                h.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def handler(self) -> type[Handler]:
         server = self
 
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, *args: Any) -> None:
-                pass
-
-            def send(self, body: str, kind: str, status: int = 200) -> None:
-                raw = body.encode()
-                self.send_response(status)
-                self.send_header("Content-Type", kind + "; charset=utf-8")
-                self.send_header("Content-Length", str(len(raw)))
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                self.wfile.write(raw)
-
+        class One(Handler):
             def do_GET(self) -> None:
-                path = self.path.split("?")[0]
-                if path == "/":
-                    if server.data is None:
-                        self.send(_waiting(server.error), "text/html")
-                    else:
-                        self.send(page.html(server.data), "text/html")
-                elif path == "/data.json":
-                    self.send(json.dumps(server.data), "application/json")
-                elif path == "/state.json":
-                    self.send(json.dumps(server.state()), "application/json")
-                elif path == "/events":
-                    self.events()
-                else:
-                    self.send("not found", "text/plain", 404)
+                server.get(self, self.path.split("?")[0])
+        return One
 
-            def events(self) -> None:
-                # server-sent events: the build state now, then on every rebuild (and a heartbeat)
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream")
-                self.send_header("Cache-Control", "no-store")
-                self.end_headers()
-                version = -1
-                try:
-                    while not server.stopping:
-                        with server.changed:
-                            if server.version == version:
-                                server.changed.wait(15)
-                            state = server.state()
-                        if state["version"] != version:
-                            version = state["version"]
-                            self.wfile.write(f"data: {json.dumps(state)}\n\n".encode())
-                        else:
-                            self.wfile.write(b": still here\n\n")
-                        self.wfile.flush()
-                except (BrokenPipeError, ConnectionResetError):
-                    pass
-
-        return Handler
+    def start(self) -> None:
+        """The first build, then watching for changes (in a thread)."""
+        self.rebuild()
+        threading.Thread(target=self.watch, daemon=True).start()
 
     def run(self, port: int = 8765, open_browser: bool = False) -> None:
-        self.rebuild()
-        httpd = ThreadingHTTPServer(("127.0.0.1", port), self.handler())
-        httpd.daemon_threads = True
-        threading.Thread(target=self.watch, daemon=True).start()
-        url = f"http://127.0.0.1:{httpd.server_port}/"
-        print(f"serving {self.spec} at {url} (watching {len(self.watched())} files; ctrl-c to stop)", file=sys.stderr)
-        if open_browser:
-            webbrowser.open(url)
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            pass
-        finally:
-            self.close()
-            httpd.server_close()
+        self.start()
+        run(self.handler(), port, open_browser, f"serving {self.spec} at {{url}} (watching {len(self.watched())} "
+            "files; ctrl-c to stop)", self.close)
 
     def close(self) -> None:
         self.stopping = True
         with self.changed:
             self.changed.notify_all()
         shutil.rmtree(self.pycache, ignore_errors=True)
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *args: Any) -> None:
+        pass
+
+    def send(self, body: str | bytes, kind: str, status: int = 200) -> None:
+        raw = body.encode() if isinstance(body, str) else body
+        self.send_response(status)
+        self.send_header("Content-Type", kind + "; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(raw)
+
+
+def run(handler: type[Handler], port: int, open_browser: bool, message: str, close: Callable[[], None]) -> None:
+    """Serve on 127.0.0.1 until ctrl-c; `message` is printed with {url} filled in."""
+    httpd = ThreadingHTTPServer(("127.0.0.1", port), handler)
+    httpd.daemon_threads = True
+    url = f"http://127.0.0.1:{httpd.server_port}/"
+    print(message.format(url=url), file=sys.stderr)
+    if open_browser:
+        webbrowser.open(url)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        close()
+        httpd.server_close()
 
 
 def _waiting(error: str) -> str:

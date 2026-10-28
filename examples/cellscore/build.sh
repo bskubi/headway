@@ -8,7 +8,8 @@ PY=${PYTHON:-python}
 export PYTHONPATH="$PWD/bench${PYTHONPATH:+:$PYTHONPATH}"     # the benchmark suite, cellscore_bench
 $PY bench/run.py                       # results/vN.json and headways/vN.{html,json}, through headway's Python API
 cd v4
-$PY -m headway.cli build cellscore.graphspec --name v4 --results ../results/v4.json -o ../compare.html \
+$PY -m headway.cli build cellscore.graphspec --name v4 --key centered=true --key weighted=true \
+  --results ../results/v4.json -o ../compare.html \
   --compare ../headways/v1.json --compare ../headways/v2.json --compare ../headways/v3.json
 cd ..
 $PY -m headway.cli build cellscore_bench.suite -o suite.html                 # the benchmark's own headway

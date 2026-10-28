@@ -100,7 +100,8 @@ def structure(g: Headway, report: Report) -> None:
 def references(g: Headway, report: Report) -> None:
     owners = [(f"op {o.key}", o.code) for o in g.ops.values()] + \
              [(f"symbol {s.key}", s.code) for s in g.symbols.values()] + \
-             [(f"dataset {d.key}", d.code) for d in getattr(g, "datasets", {}).values()]     # a Suite's
+             [(f"dataset {d.key}", d.code) for d in getattr(g, "datasets", {}).values()] + \
+             [(f"figure {f.key}", f.code) for f in getattr(g, "figures", {}).values()]       # a Suite's
     for owner, refs in owners:
         for ref in refs:
             if ref in report.locations:

@@ -78,6 +78,10 @@ B.metric("split", r"r_{AB}", "split agreement",
          "Whether the score depends on which of the module's genes are used: 1 is not at all.",
          equation=r"r_{AB} = \operatorname{corr}(S^A, S^B)", inputs=[SA, SB], better="higher", range=(-1, 1),
          code="cellscore_bench.metrics:split_agreement")
+B.figure("score_depth", "score against depth",
+         "Each cell's score against its sequencing depth, for one replicate (seed 0), the module's cells in red. A good "
+         "score keeps red above grey at every depth and does not slope with depth: what separation and depth "
+         "dependence measure, seen.", code="cellscore_bench.figures:score_vs_depth")
 
 B.objective("overall", "overall", "Separation counts twice; each metric scaled by its range so that 1 is best, "
             "averaged over the development datasets.", metrics={"auroc": 2, "depth_dep": 1, "split": 1},
