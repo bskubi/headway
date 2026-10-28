@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "headway"
-version = "0.4.0"
+version = "0.5.0"
 description = "Compare computational graphs and benchmarking results for methods development"
 readme = "README.md"
 license = "MIT"
