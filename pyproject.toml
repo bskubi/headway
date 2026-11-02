@@ -20,7 +20,7 @@ classifiers = [
     "Topic :: Software Development :: Documentation",
 ]
 requires-python = ">=3.12"
-dependencies = ["numpy>=1.26", "tree-sitter-language-pack>=1.22"]
+dependencies = ["numpy>=1.26", "tree-sitter-language-pack>=1.22", "beniget>=0.4", "mypy>=1.10", "docstring_parser>=0.16"]
 
 [project.urls]
 Homepage = "https://github.com/bskubi/headway"
@@ -28,7 +28,7 @@ Guide = "https://github.com/bskubi/headway/blob/main/src/headway/GUIDE.md"
 Issues = "https://github.com/bskubi/headway/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8"]
+test = ["pytest>=8", "jaxtyping>=0.2.30", "scipy>=1.11", "polars>=1.0"]
 
 [project.scripts]
 headway = "headway.cli:main"
@@ -38,3 +38,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 headway = ["viewer.html", "GUIDE.md"]
+
+[[tool.mypy.overrides]]
+module = ["torch", "torch.*", "polars", "polars.*", "scipy", "scipy.*", "joblib", "joblib.*"]
+ignore_missing_imports = true
