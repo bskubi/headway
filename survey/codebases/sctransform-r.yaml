@@ -1,0 +1,38 @@
+id: sctransform-r
+name: sctransform (R)
+url: https://github.com/satijalab/sctransform
+commit: 49e35b5
+read: 2026-10-29
+families: [count-glm, normalization, single-cell]
+implements:
+  - method: sctransform
+    relation: original
+    paper: Hafemeister, Satija (2019), Genome Biology 20:296; Choudhary, Satija (2022), Genome Biology 23:27
+languages: {R: 10 files, C++: 1 file (utilities)}
+computation: other-language           # the method is in R
+dependencies: [MASS, Matrix, Rcpp, glmGamPoi (optional), future.apply]
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: regularization
+    where: R/vst.R:reg_model_pars
+    note: bw.SJ(genes_log_gmean_step1) * bw_adjust, then ksmooth(kernel "normal") per parameter.
+
+traits:
+  r-semantics: {}
+  option-strings: {evidence: "method 'poisson', 'qpoisson', 'nb_theta_given', 'nb_fast', 'nb', 'glmGamPoi', 'offset', ..."}
+  optional-dependency-paths: {where: R/vst.R, evidence: "requireNamespace('glmGamPoi') and getNamespaceVersion('glmGamPoi') >= '1.2' (a string comparison of versions) choose the path."}
+  smoothers: {evidence: "bw.SJ and ksmooth."}
+  empirical-bayes: {}
+  per-item-parallel: {evidence: "future.apply over genes."}
+
+findings:
+  - Confirms the pysctransform finding against the original. R uses Sheather-Jones bandwidth and Nadaraya-Watson
+    ksmooth; the Python port's default uses ISJ and local-linear kernel regression.
+  - Which path runs depends on whether glmGamPoi is installed and on a string comparison of its version.
+related:
+  - {id: pysctransform, relation: "Python port; its default regularization differs"}

@@ -1,0 +1,43 @@
+id: deseq2-r
+name: DESeq2 (R, Bioconductor)
+url: https://github.com/thelovelab/DESeq2
+commit: 76c5f85
+read: 2026-10-29
+families: [count-glm, differential-expression]
+implements:
+  - method: DESeq2
+    relation: original
+    paper: Love, Huber, Anders (2014), Genome Biology 15:550
+languages: {R: 15 files, C++: 1 file (RcppArmadillo)}
+computation: mixed                    # IRLS, dispersion fits and grid in C++; orchestration, priors, trend, tests in R
+dependencies: [S4Vectors, SummarizedExperiment, BiocGenerics, Rcpp, RcppArmadillo, locfit, ggplot2]
+
+environment:
+  installs: null                      # not installed (R packages not yet set up under ~/targets)
+tests:
+  framework: testthat
+  result: null
+
+steps:
+  - name: as in pydeseq2
+    where: R/core.R, R/fitNbinomGLMs.R, src/DESeq2.cpp (fitBeta, fitDisp, fitDispGrid)
+    note: IRLS for all genes in C++; rows that do not converge refitted with R's optim (useOptim).
+
+traits:
+  r-semantics: {evidence: "S4 classes (DESeqDataSet extends RangedSummarizedExperiment); results stored with attr(object, ...) and mcols(object)$..."}
+  object-slots: {evidence: "mcols(dds)$dispGeneEst, assays(dds)[['mu']], attr(dds, 'betaPrior')."}
+  compiled-kernels: {where: src/DESeq2.cpp}
+  fallback-cascade: {evidence: "C++ IRLS, then optim for rows not converged."}
+  optimizer-closures: {evidence: "optim on R closures."}
+  option-strings: {}
+  empirical-bayes: {}
+  formula-design: {evidence: "design formulas, model.matrix, contrasts."}
+  contrasts: {}
+
+findings:
+  - The numerical core of the original is C++, not R. An R reader would show DESeq2's orchestration and priors;
+    its IRLS is as opaque in R as in any compiled extension. The Python ports (pydeseq2, inmoose) are where its
+    whole method is readable.
+related:
+  - {id: pydeseq2, relation: "Python reimplementation"}
+  - {id: inmoose, relation: "Python port"}

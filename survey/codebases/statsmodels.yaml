@@ -1,0 +1,73 @@
+id: statsmodels
+name: statsmodels (GLM and count models only)
+url: https://github.com/statsmodels/statsmodels
+commit: 19b7dbf
+read: 2026-10-29
+scope: statsmodels/genmod (generalized_linear_model.py, families/), statsmodels/discrete (discrete_model.py,
+  count_model.py)
+families: [count-glm, general-statistics]
+implements:
+  - method: GLMs (Poisson, Gaussian, gamma, binomial, inverse Gaussian, negative binomial with fixed alpha, Tweedie)
+    relation: original
+  - method: count models (Poisson, NB1/NB2/geometric, generalized Poisson, zero-inflated variants)
+    relation: original
+languages: {python: 1258 files, cython: 7 files, R: 44 files (test references)}
+computation: python                   # for the parts read
+dependencies: [numpy, scipy, pandas, patsy]
+
+environment:
+  venv: ~/targets/statsmodels/.venv
+  installs: true
+  notes: an editable install (meson-python) rebuilds at import and needs ninja on PATH; installed non-editable.
+    Its tests assert numpy's global random state is unchanged, so pytest-randomly makes every test error.
+tests:
+  framework: pytest
+  reference: R and Stata results stored as Python modules (results/ folders); 44 R scripts that produced them.
+  result: 2338 passed, 50 skipped, 46 xfailed (genmod and discrete tests)
+  runtime: 70 s
+
+steps:
+  - name: GLM fit by IRLS
+    where: genmod/generalized_linear_model.py:GLM._fit_irls
+    note: working response and weights from family.link.deriv and family.weights; a WLS fit per iteration
+      (_MinimalWLS); scale re-estimated each iteration; then a full WLS for the covariance.
+  - name: count-model likelihood fit
+    where: discrete/discrete_model.py:NegativeBinomial.fit, base/model.py:LikelihoodModel.fit
+    note: start from a Poisson fit and a moment estimate of alpha; optimize the log-likelihood (newton, bfgs, nm,
+      ...) with score and Hessian methods bound at construction.
+
+traits:
+  unnamed-axes: {}
+  object-slots: {evidence: "Model and Results objects; self.weights, self.scale, self.mu reassigned inside _fit_irls."}
+  mode-flags: {where: discrete/discrete_model.py:NegativeBinomial, evidence: "_transparams: whether params[-1] is alpha or log alpha; set True during fit, False after; the exp applied afterwards only for some methods."}
+  method-binding: {where: discrete/discrete_model.py:NegativeBinomial.__init__, evidence: "self.hessian = self._hessian_nb2; self.score = self._score_nbin; self.loglikeobs = self._ll_nb2 by loglike_method."}
+  polymorphic-model: {where: genmod/families, evidence: "Family objects with Link objects; variance functions (varfuncs.py)."}
+  option-strings: {evidence: "method='newton'/'bfgs'/..., loglike_method='nb2'/'nb1'/'geometric', wls_method."}
+  optimizer-closures: {where: base/optimizer.py (not yet read)}
+  hand-gradients: {evidence: "score and hessian per model, analytic; numerical (approx_fprime) where missing."}
+  parameter-packing: {where: discrete/discrete_model.py, evidence: "params = (beta, alpha or log alpha); params[:-1], params[-1]."}
+  complex-step: {where: discrete_model.py:_ll_nbin, evidence: "loggamma if params are complex (for complex-step derivatives), gammaln otherwise."}
+  special-functions: {}
+  convergence-tolerances: {}
+  formula-design: {evidence: "patsy formulas through from_formula."}
+  input-guards: {evidence: "perfect-separation warnings, validation helpers (float_like, string_like)."}
+  reference-fixtures: {where: "*/tests/results"}
+
+headway:
+  lint:
+    genmod/generalized_linear_model.py: 0.58
+    genmod/families/family.py: 0.92
+    genmod/families/links.py: 0.83
+    genmod/families/varfuncs.py: 0.85
+    discrete/discrete_model.py: 0.77
+    discrete/count_model.py: 0.63
+  traced: 2026-10-29, test_glm -k "Poisson or NegativeBinomial"; 77 of 119 traced functions agreed (families'
+    loglike_obs, deviance, variance functions, ...).
+  paths: _fit_irls ran out its loop without converging in 19 of 52 calls, exactly the calls with maxiter=3 (its
+    warm start for Newton); seen from paths and options together.
+
+findings:
+  - The negative binomial's parameter vector packs coefficients and alpha (or log alpha, by a flag that changes
+    mid-fit); what params[-1] means depends on when it is read.
+  - The likelihood for NB2 is written once (_ll_nbin with Q) for NB1, NB2 and geometric; the variance function
+    is chosen by an exponent, a compact form the math could show directly.

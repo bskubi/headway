@@ -1,0 +1,68 @@
+id: batchglm
+name: batchglm
+url: https://github.com/theislab/batchglm
+commit: b893fd0
+read: 2026-10-29
+families: [count-glm]
+implements:
+  - method: location-scale GLMs fitted for many genes at once (negative binomial, normal, Poisson, beta), with
+      separate designs for the mean and the dispersion
+    relation: original
+languages: {python: method in Python}
+computation: python                   # numpy and dask; an earlier TensorFlow backend was removed
+dependencies: [numpy, scipy, dask, sparse, pandas, patsy]
+last-commit: 2022-10-08
+
+environment:
+  venv: ~/targets/batchglm/.venv (Python 3.9)
+  installs: true
+  notes: requires Python < 3.10; needs numpy < 2 (binary incompatibility) and matplotlib < 3.9.
+tests:
+  framework: pytest
+  result: 17 passed
+  runtime: 30 s
+
+steps:
+  - name: model
+    where: models/glm_nb/model.py, models/base_glm/model.py
+    note: a linear predictor for the mean (design_loc, link log) and one for the dispersion (design_scale), with
+      constraints between coefficients.
+  - name: derivatives
+    where: train/numpy/glm_nb/model_container.py
+    note: log-likelihood, Jacobians, Fisher information and Hessian weights as lazy properties over all genes,
+      with _j variants for a subset of genes.
+  - name: training
+    where: train/numpy/base_glm/estimator.py, training_strategies.py
+    note: IRLS-like Fisher scoring for the mean coefficients over all genes at once; the dispersion by Brent's
+      method per gene (scipy.optimize.brent) every few steps; sequences of settings as named strategies.
+
+traits:
+  unnamed-axes: {}
+  sparse-matrices: {evidence: "sparse.COO and scipy csr inputs, densified per gene for scipy.optimize."}
+  deferred-arrays: {evidence: "every model quantity returns numpy or dask arrays."}
+  batched-masked-loop: {evidence: "all genes fitted together; converged genes tracked and excluded from updates."}
+  mutable-state-object: {evidence: "model containers whose parameter arrays are updated in place each step."}
+  polymorphic-model: {evidence: "a model class per noise model (glm_nb, glm_norm, glm_poisson, glm_beta) under base_glm."}
+  option-strings: {evidence: "TrainingStrategies enum of dicts (method_scale 'brent', update_scale_freq 5, ftol_scale 1e-6)."}
+  optimizer-closures: {evidence: "scipy.optimize.brent on a closure of the per-gene likelihood."}
+  hand-gradients: {evidence: "analytic Jacobians, Fisher information and Hessians for each noise model."}
+  parameter-packing: {evidence: "loc and scale coefficients in one parameter matrix, split by index."}
+  formula-design: {evidence: "patsy designs for location and scale; constraint matrices."}
+  special-functions: {}
+  convergence-tolerances: {}
+  dependency-drift: {evidence: "unmaintained since 2022; Python 3.12 cannot build it."}
+
+headway:
+  lint:
+    models/glm_nb/model.py: 0.62
+    models/glm_nb/utils.py: 0.71
+    train/numpy/glm_nb/model_container.py: 0.77
+    train/numpy/base_glm/estimator.py: 0.51
+    train/numpy/base_glm/model_container.py: 0.13
+
+findings:
+  - The model's derivatives are written as lazy properties of a container rather than as functions of
+    parameters; the math is there but spread over dozens of properties that refer to each other.
+  - Location-scale NB (dispersion with its own design) is a model the DESeq2/edgeR family does not have.
+related:
+  - {id: diffxpy, relation: "its fitting backend"}

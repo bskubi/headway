@@ -1,0 +1,80 @@
+id: pysctransform
+name: pySCTransform
+url: https://github.com/saketkc/pySCTransform
+commit: ec1216e
+read: 2026-10-29
+families: [count-glm, normalization, single-cell]
+implements:
+  - method: sctransform (v1 and v2 "flavors"), regularized negative binomial regression per gene, Pearson
+      residuals as normalized values
+    relation: port
+    original: sctransform (R), by the same group
+    paper: Hafemeister, Satija (2019), Genome Biology 20:296; Choudhary, Satija (2022), Genome Biology 23:27
+languages: {python: 7 files}
+computation: python                   # plus R through rpy2 when useR=True
+dependencies: [numpy, scipy, pandas, statsmodels, patsy, KDEpy, joblib, jax (optional), rpy2 (optional)]
+
+environment:
+  venv: ~/targets/pySCTransform/.venv
+  installs: true
+tests:
+  result: none (no tests directory; notebooks only)
+
+steps:
+  - name: gene and cell attributes
+    where: pysctransform.py:make_cell_attr, row_gmean
+    note: log10 UMI per cell, geometric mean per gene (with an epsilon).
+  - name: per-gene NB fits on a subset of genes (step 1)
+    where: pysctransform.py:get_model_params_pergene, get_model_params_allgene, fit.py, fit_glmgp.py, jax_bfgs.py
+    note: Poisson GLM for the coefficients, then theta by one of several estimators (method theta_ml, alpha_lbfgs,
+      theta_lbfgs, sm_nb, glmgp, offset, fix-slope); in parallel over genes.
+  - name: regularization
+    where: pysctransform.py:get_regularized_params, r_bw.py
+    note: each parameter smoothed against the gene mean across genes; outlier genes removed first (robust
+      z-scores in bins). With useR, R's bw.SJ bandwidth and ksmooth (normal kernel); without, KDEpy's ISJ
+      bandwidth and statsmodels' local-linear KernelReg.
+  - name: residuals
+    where: pysctransform.py:get_residuals, pearson_residual, deviance_residual
+    note: Pearson (or deviance) residuals under the regularized model, clipped (at sqrt(n/30) for "seurat").
+  - name: correction
+    where: pysctransform.py:correct
+    note: corrected counts from the model with latent variables set to their medians.
+
+traits:
+  unnamed-axes: {}
+  sparse-matrices: {evidence: "csr_matrix counts; sparse_var."}
+  per-item-parallel: {evidence: "joblib and concurrent.futures over genes."}
+  array-type-dispatch: {evidence: "row_gmean and row_gmean_sparse."}
+  option-strings: {evidence: "method (seven estimators of theta), theta_regularization 'od_factor'/'theta', residual_type, res_clip_range, vst_flavor 'v2'."}
+  optional-dependency-paths: {where: r_bw.py, pysctransform.py:get_regularized_params, evidence: "useR picks R (rpy2) or Python; jax_bfgs only if jax is installed."}
+  variant-paths-differ: {where: pysctransform.py:get_regularized_params, evidence: "useR=False is not the R original's smoother: ISJ bandwidth (KDEpy) instead of Sheather-Jones (bw.SJ), local-linear kernel regression instead of a Nadaraya-Watson ksmooth."}
+  foreign-runtime-calls: {where: r_bw.py, evidence: "stats.bw_SJ, stats.ksmooth, base.order through rpy2."}
+  optimizer-closures: {where: fit.py:alpha_lbfgs, theta_lbfgs, jax_bfgs.py}
+  autodiff: {where: jax_bfgs.py, evidence: "jax.scipy.optimize.minimize (BFGS) on a jitted NB likelihood; gradients by JAX."}
+  hand-gradients: {where: fit.py:theta_ml, evidence: "Newton on theta with the score and Hessian (MASS's theta.ml)."}
+  smoothers: {evidence: "kernel density bandwidth (ISJ, SJ), kernel regression, ksmooth."}
+  empirical-bayes: {evidence: "parameters regularized by smoothing across genes (not a prior, but the same role)."}
+  order-statistics: {evidence: "median, MAD for outlier genes; robust_scale_binned."}
+  clamps-and-constants: {evidence: "clip residuals at sqrt(n/30) or sqrt(n); gmean_eps 1; bw_adjust 3; outlier threshold 10."}
+  formula-design: {evidence: "patsy dmatrix from a design string '~ log10_umi'."}
+  dataframe-labels: {evidence: "model parameters held in pandas DataFrames indexed by gene."}
+  special-functions: {evidence: "digamma, trigamma, gammaln."}
+  ported-from: {}
+  no-tests: {}
+
+headway:
+  lint:
+    pysctransform.py: 0.59
+    fit.py: 0.84
+    fit_glmgp.py: 0.17
+    jax_bfgs.py: 0.58
+    r_bw.py: 0.38
+
+findings:
+  - The Python path's regularization is not the R original's (different bandwidth selector and kernel smoother);
+    the same function gives different normalized values depending on whether rpy2 is installed and useR is set.
+  - Seven estimators of theta behind one option; which one a published analysis used is a configuration fact.
+  - No tests; checks would have to come from examples and simulated data.
+related:
+  - {id: scanpy, relation: "scanpy's normalize_pearson_residuals is the analytic special case (theta fixed, no regression)"}
+  - {id: statsmodels, relation: "uses its NB model and KernelReg"}

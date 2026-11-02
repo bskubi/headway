@@ -1,0 +1,65 @@
+id: glmpca-py
+name: glmpca (Python)
+url: https://github.com/willtownes/glmpca-py
+commit: 1cec00e
+read: 2026-10-29
+families: [count-glm, factor-models, embedding]
+implements:
+  - method: GLM-PCA (Poisson, negative binomial, binomial approximation to the multinomial, Bernoulli)
+    relation: port
+    original: glmpca (R), same author
+    paper: Townes, Hicks, Aryee, Irizarry (2019), Genome Biology 20:295; Townes (2019), arXiv:1907.02647
+languages: {python: 1 file of method}
+computation: python
+dependencies: [numpy, scipy, statsmodels]
+last-commit: 2021-02-01
+
+environment:
+  venv: ~/targets/glmpca-py/.venv
+  installs: true
+tests:
+  framework: pytest (file named glmpca_tests.py, so not collected by default)
+  result: 12 passed
+  runtime: 19 s
+  reference: none; checks of shapes, convergence and behavior.
+
+steps:
+  - name: initialization
+    where: glmpca.py:glmpca_init, glmpca
+    note: intercepts from row means and size factors; factors and loadings drawn as N(0, 1e-5/K) noise.
+  - name: fit
+    where: glmpca.py:glmpca
+    note: one Fisher-scoring step per column of the loadings, then per column of the factors, each with an L2
+      penalty on the latent columns only; the NB theta re-estimated by Newton steps each iteration
+      (est_nb_theta); stops when the relative change in deviance is below eps after 5 iterations.
+  - name: orthogonalization
+    where: glmpca.py:ortho
+    note: factors and loadings rotated (QR of the loadings, SVD) so the factors are orthogonal, ordered by
+      variance; the covariate coefficients adjusted.
+
+traits:
+  unnamed-axes: {evidence: "J features x N observations by convention; the R original's orientation kept."}
+  parameter-packing: {where: glmpca.py:glmpca, evidence: "U = [1, X, factors] and V = [intercepts, coefX, Z, loadings]; column index sets lid, uid, vid select the blocks."}
+  in-place-updates: {evidence: "V[:, k] += grads / infos; U[:, k] += ...; column by column."}
+  polymorphic-model: {evidence: "GlmpcaFamily wraps a statsmodels family object (its link and variance)."}
+  option-strings: {evidence: "fam 'poi'/'nb'/'mult'/'bern'; ctl dictionary."}
+  hand-gradients: {evidence: "infograd per family: gradient and Fisher information of the deviance."}
+  convergence-tolerances: {evidence: "eps 1e-4 on relative deviance change, maxIter 1000, at least 5 iterations."}
+  special-functions: {evidence: "digamma, trigamma (polygamma) in the theta update."}
+  randomness: {evidence: "np.random.randn from numpy's global state, no seed argument: two runs differ unless the caller seeds numpy."}
+  ported-from: {evidence: "R idioms kept as helpers: rowSums, colMeans, crossprod, tcrossprod, ncol, nrow."}
+  input-guards: {}
+
+headway:
+  lint:
+    glmpca.py: 0.84
+  traced: 2026-10-29; est_nb_theta 16/16 and ortho 20/20 agreed; glmpca_init and mat_binom_dev not yet.
+
+findings:
+  - A factor model for counts fitted by coordinate-wise Fisher scoring, close to methembed's family (PCA on
+    transformed counts); a natural comparison for methembed's embedding step.
+  - Results depend on numpy's global random state, not on an argument.
+  - Reads as R written in Python (crossprod, rowSums), which is a reading problem for headway only in that its
+    helpers need translations or inlining.
+related:
+  - {id: statsmodels, relation: "uses its GLM families"}

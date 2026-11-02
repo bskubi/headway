@@ -1,0 +1,40 @@
+id: hmmlearn
+name: hmmlearn
+url: https://github.com/hmmlearn/hmmlearn
+commit: e01a10e
+read: 2026-10-29
+families: [hidden-markov-models, dynamic-programming]
+implements:
+  - method: HMMs (Gaussian, GMM, categorical, multinomial, Poisson emissions), Baum-Welch and variational
+      Bayes, Viterbi
+    relation: original
+languages: {python: method in Python, C++: 1 file (pybind11, 334 lines)}
+computation: mixed                    # forward, backward, xi sums and Viterbi in C++; E and M steps in Python
+dependencies: [numpy, scipy, scikit-learn]
+last-commit: 2024-10-31
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: E step
+    where: src/hmmlearn/base.py:_do_estep, ext/_hmmc.cpp
+    note: forward-backward in log space or with scaling factors (implementation="log" or "scaling").
+  - name: M step
+    where: src/hmmlearn/base.py:_do_mstep, hmm.py
+    note: expected counts to start, transition and emission parameters, per emission family.
+
+traits:
+  recurrences: {where: ext/_hmmc.cpp, evidence: "forward_log, backward_log, forward_scaling, backward_scaling, viterbi."}
+  compiled-kernels: {where: ext/_hmmc.cpp}
+  duplicate-implementations: {evidence: "log-space and scaling forward-backward, chosen by an option."}
+  polymorphic-model: {evidence: "an HMM class per emission family."}
+  library-estimators: {evidence: "scikit-learn estimator API; k-means initialization."}
+  option-strings: {evidence: "implementation, params and init_params as letter strings ('stmc')."}
+  randomness: {evidence: "random_state for initialization."}
+
+findings:
+  - The recurrences are in C++ and the expectation sums in Python; the two implementations of forward-backward
+    are a ready-made consistency check.

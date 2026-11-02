@@ -1,0 +1,56 @@
+{
+ "run": "pytest -q tests -p no:cacheprovider",
+ "when": "2026-10-29T04:41",
+ "checks": {
+  "mlp.steps:forward": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 50,
+    "passed": 50,
+    "worst": 9.5367431640625e-07,
+    "detail": "largest difference 9.5e-07 (allowed: 1e-05 \u00d7 the largest value + 1e-05 \u00d7 the value)"
+   }
+  ],
+  "mlp.steps:loss": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 50,
+    "passed": 50,
+    "worst": 5.960464477539063e-08,
+    "detail": "largest difference 6e-08 (allowed: 1e-05 \u00d7 the largest value + 1e-05 \u00d7 the value)"
+   }
+  ],
+  "mlp.steps:train": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "mlp.steps:probabilities": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 1.1920928955078125e-07,
+    "detail": "largest difference 1.2e-07 (allowed: 1e-05 \u00d7 the largest value + 1e-05 \u00d7 the value)"
+   }
+  ],
+  "mlp.steps:MLP.forward": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 8.940696716308594e-08,
+    "detail": "largest difference 8.9e-08 (allowed: 1e-05 \u00d7 the largest value + 1e-05 \u00d7 the value)"
+   }
+  ]
+ }
+}

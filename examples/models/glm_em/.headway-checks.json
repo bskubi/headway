@@ -1,0 +1,112 @@
+{
+ "run": "pytest -q tests -p no:cacheprovider",
+ "when": "2026-10-29T04:43",
+ "checks": {
+  "glm_em.steps:irls": [
+   {
+    "kind": "minimizes",
+    "target": "glm_em.steps:penalized_nll",
+    "calls": 4,
+    "passed": 4,
+    "worst": 2.2353019495326857e-07,
+    "detail": "slope 2.2e-07 along directions that keep the constraints, relative (at most 1e-06); 0 of 8 nearby points give a smaller value"
+   },
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 4,
+    "passed": 4,
+    "worst": 3.219646771412954e-15,
+    "detail": "largest difference 3.2e-15 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:em": [
+   {
+    "kind": "maximizes",
+    "target": "glm_em.steps:mixture_log_likelihood",
+    "calls": 1,
+    "passed": 1,
+    "worst": 1.3071249559305247e-08,
+    "detail": "slope 1.3e-08 along directions that keep the constraints, relative (at most 1e-05); 0 of 8 nearby points give a larger value"
+   },
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 1.3877787807814457e-17,
+    "detail": "largest difference 1.4e-17 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:simulate": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:size_factors": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 2,
+    "passed": 2,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:nb_log_likelihood": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 15,
+    "passed": 15,
+    "worst": 1.2079226507921703e-13,
+    "detail": "largest difference 1.2e-13 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:penalized_nll": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 4,
+    "passed": 4,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:de_fit": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:mixture_log_likelihood": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ],
+  "glm_em.steps:weights_sum_to_one": [
+   {
+    "kind": "math",
+    "target": "",
+    "calls": 1,
+    "passed": 1,
+    "worst": 0.0,
+    "detail": "largest difference 0 (allowed: 1e-06 \u00d7 the largest value + 1e-06 \u00d7 the value)"
+   }
+  ]
+ }
+}

@@ -1,0 +1,84 @@
+id: methscan
+name: MethSCAn (formerly scbs)
+url: https://github.com/anders-biostat/MethSCAn
+commit: 72f38fb
+read: 2026-10-29
+families: [single-cell, methylation, embedding, differential-methylation]
+implements:
+  - method: variably methylated regions (VMRs) and shrunken mean residuals per cell and region, as an input to
+      PCA; differentially methylated regions by Welch t in sliding windows with a permutation FDR
+    relation: original
+    paper: Kremer, Kuijper, et al. (2024), Nature Methods 21:1295 (MethSCAn)
+languages: {python: 11 files}
+computation: python                   # numba-compiled Python kernels
+dependencies: [numpy, scipy, numba, pandas, click]
+last-commit: 2024-10-29
+
+environment:
+  venv: ~/targets/MethSCAn/.venv (Python 3.11)
+  installs: true
+  notes: pins numpy<2 and pandas<2; pandas 1.5 has no wheels for Python 3.12 (a source build fails), so 3.11.
+tests:
+  framework: pytest (tests/test_cli.py etc. run the CLI stages on tests/data)
+  result: 22 passed
+  runtime: 51 s
+
+steps:
+  - name: prepare
+    where: prepare.py
+    note: per-cell coverage files into one CSR matrix per chromosome (CpG positions x cells), saved as npz;
+      1 methylated, -1 unmethylated, 0 not observed.
+  - name: smooth
+    where: smooth.py:Smoother
+    note: each CpG's methylation fraction across cells, smoothed along the chromosome with a tricube kernel of
+      a fixed width (1000 bp by default), optionally weighted by log1p of coverage.
+  - name: scan
+    where: scan.py, numerics.py:_calc_mean_shrunken_residuals
+    note: in sliding windows, each cell's shrunken mean residual (sum over its covered CpGs of the call minus the
+      smoothed value, over the count plus 1); the variance of these across cells; windows above the 98th
+      percentile of variance merged into VMRs (with gap bridging).
+  - name: matrix
+    where: matrix.py
+    note: the cells x VMRs matrix of shrunken mean residuals and methylation fractions (dense or sparse files).
+  - name: diff
+    where: diff.py
+    note: Welch t per window between two groups of cells; DMRs as runs of windows over a threshold; FDR from the
+      same scan on permuted group labels.
+
+traits:
+  unnamed-axes: {}
+  sparse-matrices: {evidence: "scipy CSR per chromosome."}
+  manual-sparse-traversal: {where: numerics.py, matrix.py, prepare.py, evidence: "numba loops over data/indices/indptr compute per-cell sums over covered CpGs in a window."}
+  sentinel-encodings: {evidence: "1 methylated, -1 unmethylated, 0 (unstored) not observed."}
+  jit-python-kernels: {evidence: "numba njit, prange with parallel=True."}
+  smoothers: {where: smooth.py, evidence: "tricube kernel smoothing along the genome."}
+  empirical-bayes: {evidence: "the residual's denominator n + 1 shrinks cells with few covered CpGs toward 0."}
+  order-statistics: {evidence: "nanquantile of window variances for the VMR threshold."}
+  resampling-inference: {where: diff.py, evidence: "permuted cell-group labels; the FDR as the ratio of permuted to real discoveries above each threshold."}
+  randomness: {where: diff.py, evidence: "np.random.permutation."}
+  import-side-effects: {where: diff.py, smooth.py, evidence: "np.random.seed(5) at module import (reseeds numpy's global generator for the whole process); np.seterr(divide='ignore', invalid='ignore') at import."}
+  staged-on-disk: {evidence: "prepare, smooth, scan, matrix, diff are separate CLI commands passing npz and text files."}
+  file-io-in-method: {}
+  nan-semantics: {evidence: "NaN for cells without coverage in a window; nanvar across cells."}
+  clamps-and-constants: {evidence: "bandwidth 1000, step 10, var_threshold 0.02 (98th percentile), shrinkage_factor 1, min_cells."}
+  docs-disagree: {where: diff.py:calc_fdr, evidence: "described as Benjamini-Hochberg; computes a permutation estimate of the FDR (with a running minimum)."}
+  option-strings: {}
+  dependency-drift: {evidence: "numpy<2, pandas<2 pinned; Python 3.12 cannot install it from wheels."}
+
+headway:
+  lint:
+    numerics.py: 0.59
+    smooth.py: 0.49
+    scan.py: 0.46
+    diff.py: 0.72
+    matrix.py: 0.38
+
+findings:
+  - The closest published relative of methembed's round 0, per-cell shrunken summaries of sparse methylation
+    calls over regions, then PCA. Its shrinkage is a fixed +1 in the denominator.
+  - The math is short (a sum over covered CpGs in a window, divided by n + 1), but written as pointer walking over
+    CSR internals, which no static reading will recover; this is where a stated meaning checked on traced calls
+    is needed.
+  - Importing the package reseeds numpy's global random generator.
+related:
+  - {id: allcools, relation: "same data type; a different per-cell shrinkage (beta prior per cell)"}

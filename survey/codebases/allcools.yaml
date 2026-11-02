@@ -1,0 +1,82 @@
+id: allcools
+name: ALLCools
+url: https://github.com/lhqing/ALLCools
+commit: c9f7be2
+read: 2026-10-29
+scope: mcds/utilities.py (posterior mC fraction), mcds/mcds.py, clustering/ (PCA, LSI, consensus clustering, feature
+  enrichment), dmr/rms_test.py
+families: [single-cell, methylation, embedding, clustering, differential-methylation]
+implements:
+  - method: single-cell methylation analysis on cell x region count tensors (MCDS), posterior methylation
+      fractions, highly variable features, PCA, consensus clustering, DMR calling by a root-mean-square
+      permutation test (after methylpy)
+    relation: original
+    paper: Liu, Zhou, et al. (2021), Nature 598:120 (snmC-seq2 atlas; ALLCools); methylpy for the RMS test
+languages: {python: 24.6k lines}
+computation: python
+dependencies: [numpy, scipy, pandas, xarray, dask, zarr, anndata, scanpy, scikit-learn, pybedtools, rpy2 (optional)]
+last-commit: 2025-02-21
+
+environment:
+  venv: ~/targets/ALLCools/.venv
+  installs: true
+tests:
+  framework: pytest (tests/test_basics.py)
+  result: 1 passed (one test of the whole package; the methods are untested)
+
+steps:
+  - name: count tensors
+    where: count_matrix/, mcds/mcds.py
+    note: per-cell ALLC files to cell x region x {mc, cov} arrays in zarr (MCDS, an xarray Dataset).
+  - name: posterior methylation fractions
+    where: mcds/utilities.py:calculate_posterior_mc_frac
+    note: per cell, a beta prior fitted by moments to the cell's raw fractions over regions; the posterior mean
+      (mc + a)/(cov + a + b); optionally divided by the cell's prior mean and clipped at 10.
+  - name: features and embedding
+    where: mcds/mcds.py:calculate_hvf_svr, clustering/balanced_pca.py, clustering/lsi.py
+    note: highly variable features by support vector regression of dispersion on mean; PCA (balanced across
+      groups); LSI for binarized data.
+  - name: clustering
+    where: clustering/ConsensusClustering.py
+    note: Leiden over many resolutions and seeds, consensus by a supervised classifier's agreement.
+  - name: DMRs
+    where: dmr/call_dms.py, dmr/rms_test.py
+    note: a contingency table of methylated and unmethylated counts per sample; the root-mean-square deviation
+      from expected counts; its p-value by permuting counts, stopped early once enough permutations exceed it.
+
+traits:
+  named-axes: {where: mcds/, evidence: "xarray DataArrays with dims (cell, region type), reductions by dim=var_dim."}
+  array-type-dispatch: {where: mcds/utilities.py:calculate_posterior_mc_frac, evidence: "numpy branch (axis=1, [:, None]) and xarray branch (dim=var_dim), the same formula twice."}
+  deferred-arrays: {evidence: "dask-backed xarray; calculate_posterior_mc_frac_lazy writes chunks to disk."}
+  object-slots: {evidence: "AnnData and MCDS (xarray Dataset) slots."}
+  empirical-bayes: {evidence: "a per-cell beta prior by the method of moments, then posterior fractions."}
+  library-estimators: {evidence: "scikit-learn SVR for HVF, PCA, TruncatedSVD, classifiers in consensus clustering; Leiden through scanpy."}
+  resampling-inference: {where: dmr/rms_test.py, evidence: "permutation p-value with early stopping at n_permute * min_pvalue exceedances."}
+  randomness: {evidence: "np.random.choice in permutation tables, unseeded; random seeds per clustering run."}
+  foreign-runtime-calls: {where: clustering/pvclust.py, rutilities.py}
+  runtime-installs: {where: clustering/rutilities.py, evidence: "install_packages and devtools.install_github at runtime, unpinned."}
+  staged-on-disk: {evidence: "ALLC files, then MCDS zarr stores, then AnnData; DMR calling by chunks written to disk."}
+  file-io-in-method: {}
+  nan-semantics: {evidence: "raw fractions NaN where coverage is 0; nanmean/nanvar for the prior."}
+  clamps-and-constants: {evidence: "clip_norm_value 10, min_pvalue 0.034, n_permute 3000/10000."}
+  option-strings: {}
+  dataframe-labels: {}
+  thin-tests: {}
+
+headway:
+  lint:
+    mcds/utilities.py: 0.46
+    dmr/rms_test.py: 0.71
+    clustering/balanced_pca.py: 0.49
+    clustering/lsi.py: 0.43
+    clustering/ConsensusClustering.py: 0.39
+    clustering/feature_selection/feature_enrichment.py: 0.37
+
+findings:
+  - The first codebase in the survey with named index sets (xarray dims) in its method; an xarray table would let
+    headway read its sums by name.
+  - Its per-cell shrinkage (a beta prior by moments) is a direct comparison for methembed's round 0 and MethSCAn's
+    +1 shrinkage.
+  - Installs R packages from CRAN and GitHub at runtime, unpinned.
+related:
+  - {id: methscan, relation: "same data type; a different per-cell shrinkage"}

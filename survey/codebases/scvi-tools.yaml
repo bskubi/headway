@@ -1,0 +1,43 @@
+id: scvi-tools
+name: scvi-tools
+url: https://github.com/scverse/scvi-tools
+commit: 38b216a
+read: 2026-10-29
+scope: module/_vae.py, distributions/, train/
+families: [single-cell, deep-generative, embedding, count-models]
+implements:
+  - method: scVI and relatives (variational autoencoders with NB/ZINB/Poisson likelihoods, batch covariates)
+    relation: original
+    paper: Lopez, Regier, et al. (2018), Nature Methods 15:1053; Gayoso, Lopez, et al. (2022), Nature
+      Biotechnology 40:163
+languages: {python: method in Python}
+computation: python                   # PyTorch (also JAX and MLX modules)
+dependencies: [torch, lightning, pyro-ppl, jax (optional), mlx (optional), anndata, numpy]
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: model
+    where: module/_vae.py:inference, generative, loss
+    note: an encoder for z and the library size; a decoder giving NB/ZINB parameters per gene; the dispersion per
+      gene, gene-batch or gene-label; the loss as reconstruction plus KL terms with warmup.
+  - name: training
+    where: train/_trainingplans.py, train/_trainer.py
+    note: PyTorch Lightning's loop with Adam, KL warmup, early stopping.
+
+traits:
+  declared-model: {where: module/_vae.py, evidence: "generative() returns torch distribution objects; loss() combines their log-probabilities and KL divergences."}
+  framework-controlled-loop: {evidence: "Lightning Trainer with callbacks."}
+  autodiff: {}
+  option-strings: {evidence: "gene_likelihood 'zinb'/'nb'/'poisson'/'normal'; dispersion 'gene'/'gene-batch'/'gene-label'; batch_representation."}
+  backend-switch: {evidence: "torch modules, plus JAX and MLX variants of the VAE."}
+  object-slots: {evidence: "AnnData registered through setup_anndata; a registry of fields."}
+  randomness: {evidence: "sampling of z in training; minibatches."}
+
+findings:
+  - The model's math is in one readable place (generative and loss), written in torch; headway's torch table
+    covers much of it already. The training is a framework's loop; what matters for a reader is the objective
+    and the optimizer's settings, not the steps.

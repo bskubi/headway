@@ -1,0 +1,36 @@
+id: methylseq
+name: nf-core/methylseq
+url: https://github.com/nf-core/methylseq
+commit: b6aa88e
+read: 2026-10-29
+families: [workflow, methylation, alignment]
+implements:
+  - method: bisulfite and EM-seq processing (trimming, alignment with Bismark or bwa-meth, deduplication,
+      methylation extraction with Bismark or MethylDackel, QC)
+    relation: original
+languages: {nextflow: workflow, tools: Perl (Bismark), C (MethylDackel, samtools), Python (bwa-meth)}
+computation: other-language           # every computation is an external tool in a container
+dependencies: [nextflow, containers for each tool]
+
+environment:
+  installs: null
+tests:
+  framework: nf-test
+  result: null
+
+steps:
+  - name: workflow
+    where: workflows/methylseq/main.nf, modules/nf-core/*
+    note: a DAG of processes, each a containerized command line with arguments from params and task.ext.args.
+
+traits:
+  external-tools: {}
+  staged-on-disk: {}
+  resource-dependent-arguments: {where: modules/nf-core/bismark/methylationextractor/main.nf, evidence: "--multicore from task.cpus, --buffer_size from task.memory."}
+  native-provenance: {evidence: "versions.yml per module, ro-crate-metadata.json, Nextflow trace and reports."}
+  option-strings: {evidence: "aligner 'bismark'/'bwameth'; tool arguments as strings."}
+
+findings:
+  - Nothing to read as math at this level; the workflow is a graph of tools whose versions, containers and
+    arguments are recorded by the workflow manager itself. Headway's graph maps onto the DAG; the math is inside
+    the tools.

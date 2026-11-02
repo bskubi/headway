@@ -1,0 +1,46 @@
+id: pertpy-sccoda
+name: pertpy (scCODA only)
+url: https://github.com/scverse/pertpy
+commit: 9b5c53b
+read: 2026-10-29
+scope: src/pertpy/tools/_coda/_sccoda.py, _base_coda.py
+families: [compositional-models, bayesian, single-cell]
+implements:
+  - method: scCODA (Bayesian Dirichlet-multinomial regression of cell-type counts with a spike-and-slab prior on
+      effects and a reference cell type)
+    relation: reimplementation
+    original: sccoda (TensorFlow Probability)
+    paper: Büttner, Ostner, et al. (2021), Nature Communications 12:6876
+languages: {python: method in Python}
+computation: python                   # NumPyro on JAX
+dependencies: [numpyro, jax, anndata, arviz]
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: model
+    where: _sccoda.py:model
+    note: plates covs, ct, ctnb, sample; sigma_d ~ HalfCauchy(1); b_offset, ind_raw ~ N(0, 1); ind = sigmoid(50
+      ind_raw); alpha ~ N(0, 5); beta with a zero column at the reference; counts ~ DirichletMultinomial(exp(alpha +
+      X beta), n_total).
+  - name: inference
+    where: _base_coda.py
+    note: NUTS (or HMC) through numpyro's MCMC; the random key drawn from numpy's default generator if none is
+      given.
+
+traits:
+  declared-model: {where: _sccoda.py:model, evidence: "numpyro.sample with distributions; numpyro.plate names the index sets; numpyro.deterministic names derived values."}
+  named-axes: {evidence: "plates 'covs', 'ct', 'sample'."}
+  framework-controlled-loop: {evidence: "numpyro MCMC with NUTS."}
+  randomness: {evidence: "rng_key from np.random.default_rng() when not given."}
+  clamps-and-constants: {evidence: "jnp.nan_to_num on the concentrations (non-finite values replaced silently); the factor 50 in the relaxed spike-and-slab."}
+  object-slots: {evidence: "sample_adata.obsm['covariate_matrix']."}
+
+findings:
+  - The easiest kind of code for headway so far. The model is declared, its index sets are named by plates, and
+    every sample statement is a ∼ line; numpyro's own trace handler gives every site's shape and plates.
+  - The "spike-and-slab" is a continuous relaxation, sigmoid(50 × N(0,1)), not a discrete indicator; and
+    non-finite concentrations are replaced silently.

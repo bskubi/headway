@@ -1,0 +1,39 @@
+id: hich
+name: hich (the user's)
+url: local ~/hich
+commit: null
+read: 2026-10-29
+families: [workflow, methylation, chromatin-conformation, single-cell]
+implements:
+  - method: Hi-C and methylation processing (alignment, contacts, methylation calls filtered and counted into
+      sites, per-cell outputs in amethyst, bedGraph, scool)
+    relation: original
+languages: {nextflow: workflow, python: 4.8k lines, SQL: 655 lines (DuckDB), awk: 1 file}
+computation: mixed                    # alnbase (Rust) queries, then DuckDB SQL for filters and counts
+dependencies: [nextflow, alnbase, duckdb, samtools, hictk]
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: methylation calls to sites
+    where: sql/meth_common.sql, meth_amethyst.sql, meth_bedgraph.sql, meth_cellinfo.sql, filtered_meth.sql
+    note: every alnbase hit filtered (duplicates, QC fail, MAPQ, base quality, trimmed ends, contigs, mask), reads
+      dropped by a CH conversion filter (at least min_ch_calls CH calls, more than max_ch_fraction methylated),
+      then counted per site and cell.
+
+traits:
+  declarative-queries: {where: sql/, evidence: "the filters and counts that define the methylation data are SQL (DuckDB); the calls themselves are alnbase TOML queries."}
+  external-tools: {}
+  staged-on-disk: {}
+  native-provenance: {}
+  clamps-and-constants: {evidence: "min_mapq 30, min_base_quality 20, max_ch_fraction 0.5, min_ch_calls 3."}
+
+findings:
+  - Here SQL is the computation. It defines which calls become methembed's input data, the kind of filtering a
+    regulated lab is asked about first. The survey's statistical packages had no SQL; the processing upstream of
+    them does.
+related:
+  - {id: alnbase, relation: "its methylation calls come from alnbase queries"}

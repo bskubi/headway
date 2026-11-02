@@ -1,0 +1,115 @@
+id: pydeseq2
+name: PyDESeq2
+url: https://github.com/owkin/PyDESeq2
+commit: 2ca3b74
+read: 2026-10-29
+families: [count-glm, differential-expression]
+implements:
+  - method: DESeq2
+    relation: reimplementation        # original | port | reimplementation
+    original: DESeq2 (R, Bioconductor)
+    paper: Love, Huber, Anders (2014), Genome Biology 15:550
+languages: {python: 23 files}
+computation: python                   # where the method computes: python | compiled | mixed | other-language
+dependencies: [numpy, scipy, pandas, anndata, scikit-learn, formulaic, joblib]
+
+environment:
+  venv: ~/targets/pydeseq2/.venv
+  installs: true
+  notes: pandas 3 makes test_zero_genes fail (a deprecation warning raised as an error); passes with pandas<3.
+tests:
+  framework: pytest
+  result: 65 passed
+  runtime: 100 s
+  reference: R DESeq2's outputs as CSV (tests/data/<design>/r_test_*.csv) for size factors, dispersions, results,
+    outliers, LFC shrinkage; designs single_factor, multi_factor, continuous, wide, large_counts.
+
+steps:                                # the method, in the order it runs (DeseqDataSet.deseq2)
+  - name: size factors
+    where: dds.py:fit_size_factors, preprocessing.py:deseq2_norm_fit
+    note: median of ratios to the geometric mean; alternatives poscounts and an iterative fit (_fit_iterate_size_factors).
+  - name: gene-wise dispersions
+    where: dds.py:fit_genewise_dispersions, dispersions.py:fit_alpha_mle, fit_moments_dispersions
+    note: method-of-moments start; mu from a linear model if the design has as many groups as coefficients, else
+      IRLS with the rough dispersions; then the dispersion's MLE with a Cox-Reid adjustment (L-BFGS-B, grid search
+      if it fails).
+  - name: dispersion trend
+    where: dds.py:_fit_parametric_dispersion_trend, default_inference.py:dispersion_trend_gamma_glm
+    note: a gamma GLM a0 + a1/mean fitted by L-BFGS-B, refitted after dropping genes far from the curve (ratio
+      outside [1e-4, 15]) until the coefficients settle; a mean if it fails.
+  - name: dispersion prior
+    where: dds.py:fit_dispersion_prior, stats.py:mean_absolute_deviation
+    note: the prior variance from the MAD of log residuals, minus the expected sampling variance (trigamma).
+  - name: MAP dispersions
+    where: dds.py:fit_MAP_dispersions
+    note: fit_alpha_mle again, with the log-normal prior around the trend.
+  - name: log fold changes
+    where: dds.py:fit_LFC, glm.py:irls_solver
+    note: IRLS with a 1e-6 ridge; L-BFGS-B if |beta| > 30 or 250 iterations; grid search if that fails and p <= 2.
+  - name: Cook's distances and outliers
+    where: dds.py:calculate_cooks, cooks_outlier, _replace_outliers, _refit_without_outliers
+    note: hat diagonals from IRLS; outlier counts replaced by trimmed means and refitted when there are >= 7
+      replicates.
+  - name: Wald test
+    where: ds.py:run_wald_test, glm.py:wald_test
+  - name: independent filtering and p-value adjustment
+    where: ds.py:_independent_filtering, _p_value_adjustment
+    note: Benjamini-Hochberg over the base-mean threshold that maximizes rejections (lowess-smoothed).
+  - name: LFC shrinkage
+    where: ds.py:lfc_shrink, distributions.py:nbinomGLM
+    note: apeGLM-style Cauchy prior, fitted with L-BFGS-B on closures f, df, ddf.
+  - name: variance-stabilizing transform
+    where: dds.py:vst, vst_fit, vst_transform
+
+traits:
+  unnamed-axes: {where: everywhere, evidence: "No annotations of index sets; counts is samples x genes by convention."}
+  per-item-parallel: {where: default_inference.py, evidence: "irls, alpha_mle, wald_test: joblib Parallel(delayed(f)(counts[:, i], ...) for i in range(n_genes))."}
+  object-slots: {where: dds.py, ds.py, evidence: "DeseqDataSet subclasses AnnData; steps read and write self.obs/var/obsm/layers/uns (e.g. self.var['genewise_dispersions'])."}
+  in-place-updates: {where: dds.py, evidence: "self.layers[name][:, non_zero] = ...; pandas drop(inplace=True) in the trend refit."}
+  option-strings: {where: dds.py, evidence: "fit_type parametric/mean, size_factors_fit_type ratio/poscounts/iterative, optimizer BFGS/L-BFGS-B."}
+  polymorphic-model: {where: inference.py, default_inference.py, evidence: "An Inference ABC with a DefaultInference backend: the numerics are reached through an object chosen at construction."}
+  optimizer-closures: {where: glm.py:irls_solver, dispersions.py:fit_alpha_mle, default_inference.py:dispersion_trend_gamma_glm, distributions.py:nbinomGLM}
+  hand-gradients: {where: same as optimizer-closures, evidence: "jac=df/dloss/grad written by hand, including the Cox-Reid term's derivative."}
+  data-dependent-path: {where: dds.py:fit_genewise_dispersions, evidence: "mu from a linear model when the design has as many distinct rows as coefficients, from IRLS otherwise."}
+  fallback-cascade: {where: glm.py:irls_solver, dispersions.py:fit_alpha_mle, dds.py:_fit_parametric_dispersion_trend}
+  clamps-and-constants: {evidence: "min_mu 0.5, |beta| <= 30, ridge 1e-6, +0.1 in the initial log, dispersions clipped to [min_disp, max_disp], 1.51/2.04/1.86 scale factors in trimmed variances."}
+  convergence-tolerances: {evidence: "beta_tol 1e-8 on relative deviance change; 250 iterations; trend refit until squared log-ratio change < 1e-6."}
+  grid-search: {where: grid_search.py}
+  order-statistics: {where: stats.py, dispersions.py, evidence: "trimmed_mean (sort, take), median, MAD, trimmed_cell_variance by group."}
+  special-functions: {evidence: "gammaln, polygamma/trigamma, norm.ppf (MAD's 0.75 quantile)."}
+  smoothers: {where: stats.py:lowess, evidence: "lowess for independent filtering."}
+  empirical-bayes: {evidence: "dispersion prior around the trend; LFC shrinkage."}
+  formula-design: {where: dds.py, evidence: "formulaic design from a formula string, reference levels; contrasts by names."}
+  contrasts: {where: ds.py:_build_contrast_vector}
+  dataframe-labels: {evidence: "pandas for counts and metadata in, results out; converted to numpy before fitting ('for speed')."}
+  dynamic-dimensions: {where: dds.py:_fit_parametric_dispersion_trend, evidence: "genes dropped from the trend fit each round (ratio outside [1e-4, 15])."}
+  input-guards: {evidence: "all-zero genes excluded; rank-deficient designs; NaN covariates in the trend."}
+  nan-semantics: {evidence: "NaN for all-zero genes kept in results; nanmean in the trend loss."}
+  reference-fixtures: {where: tests/data}
+  dependency-drift: {evidence: "pandas 3."}
+
+headway:
+  lint:                               # share of expressions written as math, static, per file (see survey.py)
+    glm.py: 0.80
+    dispersions.py: 0.55
+    stats.py: 0.79
+    distributions.py: 0.88
+    grid_search.py: 0.62
+    dds.py: 0.60
+    ds.py: 0.59
+  rendered:
+    - irls_solver: the loop, fallback branches and starting value come through (R⁻¹Qᵀy); every product is ⊙ or
+        positional for want of index sets; minimize(...) shown by name; typing.cast shown.
+    - fit_alpha_mle: mostly "not written" (the closures passed to minimize).
+    - mean_absolute_deviation: ppf(0.75) where Φ⁻¹(0.75) is meant.
+  traced: 2026-10-29, tests/test_pydeseq2.py; 25 of 64 traced functions' math agreed on every recorded call
+    (irls_solver, fit_alpha_mle with its L-BFGS-B rerun, nb_nll, trimmed_mean, MAD, wald_test but lessAbs, ...);
+    the rest use pandas beyond headway's tables.
+  paths: irls_solver 511 calls, all plain IRLS (the optimizer and grid fallbacks never ran in the tests).
+
+findings:
+  - The fitting cascade (IRLS, then L-BFGS-B, then grid search) is in the code and not the paper; which genes took
+    which path is not recorded in the results (only a converged flag).
+  - The per-gene IRLS here and inmoose's batched one (deseq2_cpp.py:fitBeta) are two ports of one C++ routine.
+related:
+  - {id: inmoose, relation: "same method (DESeq2), independent port"}

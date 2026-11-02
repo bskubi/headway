@@ -1,0 +1,361 @@
+# The properties of a codebase that matter for writing its method as checked math: the vocabulary the records in
+# codebases/ refer to. A record names a trait by its id and gives its evidence (where, and what).
+#
+#   headway: what headway does with it now
+#     handled   written as math (or checked) as it is
+#     partial   some forms handled, others not (see needs)
+#     missing   not handled: shown by name, "not written", or wrong without help
+#     n/a       nothing to handle (a fact about the codebase, e.g. how it is tested)
+#   needs: what handling it would take
+#
+# To rename, split or merge a trait: change it here, then `uv run survey.py rename OLD NEW` (or edit the records), and
+# `uv run survey.py check` to find records that still use the old id.
+
+arrays:
+  unnamed-axes:
+    description: Arrays carry no names for their index sets (no jaxtyping, no xarray); which axis is samples,
+      genes or coefficients is known only from docstrings, variable names or shapes at runtime.
+    headway: partial
+    needs: Index sets inferred from traced runs (sizes matched to the sets they belong to, several sizes of
+      generated data to separate sets of equal size), or from shape asserts and docstrings.
+  named-axes:
+    description: Arrays carry names for their index sets (xarray DataArrays with dims, or jaxtyping annotations),
+      used in the computation (mean(dim="cell")).
+    headway: partial
+    needs: An xarray table (dims as index sets; reductions over named dims); jaxtyping is read already.
+  shape-asserts:
+    description: The code asserts array shapes (assert x.shape == (n, p)), stating index sets without naming them
+      as such.
+    headway: missing
+    needs: Read shape asserts as declarations of index sets.
+  per-item-parallel:
+    description: The method runs independently per item (gene, cell) through joblib/multiprocessing
+      (Parallel(delayed(f)(x[:, i]) for i in ...)), then stacks the results.
+    headway: missing
+    needs: A parallel map over an index set read as a family over it (f applied per gene).
+  batched-masked-loop:
+    description: A per-item iterative fit vectorized over all items at once, with a mask of the items still
+      iterating (items drop out as they converge).
+    headway: partial
+    needs: Written as a loop over the batch; its equality with the per-item fit checked by the evaluator, or
+      recognized as a family of per-item loops.
+  sparse-matrices:
+    description: Sparse or structured matrices (scipy.sparse, tabmat's categorical/split matrices) in the method.
+    headway: missing
+    needs: Sparse arrays as arrays with a known meaning (the same math), and their libraries' tables.
+  manual-sparse-traversal:
+    description: Loops over a sparse matrix's internals (CSR data, indices, indptr) that compute sums or means
+      over the stored entries.
+    headway: missing
+    needs: Recognized as a sum over the stored entries of a row or window, or given a stated meaning checked on
+      traced calls.
+  sentinel-encodings:
+    description: Values encoded by convention (1 methylated, -1 unmethylated, 0 not observed in a sparse matrix;
+      numbers held as strings with "nan").
+    headway: missing
+    needs: The encoding stated, so the math reads in what the values mean.
+  array-type-dispatch:
+    description: The same step written separately for dense, sparse or lazy arrays (isinstance branches,
+      functools.singledispatch), the math the same in each branch (or meant to be).
+    headway: missing
+    needs: Branches on an array's type read as one computation; their agreement checked on traced calls.
+  deferred-arrays:
+    description: Lazy arrays (dask) whose computation is built as a graph and run later.
+    headway: missing
+  dynamic-dimensions:
+    description: An index set changes size during fitting (factors dropped when they explain too little, genes
+      removed from a trend fit).
+    headway: missing
+    needs: Index sets indexed by iteration, or the final set recorded from a trace.
+
+state:
+  object-slots:
+    description: The method's values live in slots of a container object (AnnData's var/obs/obsm/layers/uns,
+      self.x) that its steps read and write, rather than passing between functions.
+    headway: missing
+    needs: Slots read as named variables, a new version at each assignment, so that the steps' graph is the slots'
+      data flow.
+  mutable-state-object:
+    description: An iterative solver keeps its state in an object whose fields are reassigned each iteration
+      (state.coef, state.eta = ...).
+    headway: missing
+    needs: Fields as loop-carried variables.
+  model-graph-objects:
+    description: The model is a graph of node objects (variational nodes with Markov blankets) assembled at
+      runtime, each node's update written in its class; the math is spread across classes.
+    headway: missing
+    needs: The assembled graph taken from a trace; each node's update written as math; the model's joint
+      distribution assembled from the nodes.
+  declared-model:
+    description: The model is declared as such in a probabilistic programming language (numpyro/pyro sample
+      statements with named plates, a generative() method returning distributions, Stan), separate from its
+      inference.
+    headway: partial
+    needs: Tables for the PPLs (sample as ∼, plates as named index sets, deterministic as definitions); the
+      library's own trace handlers as the source of shapes.
+  framework-controlled-loop:
+    description: Fitting runs inside a framework's loop (PyTorch Lightning, a sampler's NUTS kernel), the code
+      supplying the objective, model and settings through hooks.
+    headway: missing
+    needs: The objective and the optimizer or sampler's settings as math (argmin of the loss by Adam with its
+      settings; posterior samples by NUTS); traces sampled, not every step recorded.
+  mode-flags:
+    description: A hidden flag on an object changes what a value means or which code runs, and is switched during
+      a computation.
+    headway: missing
+    needs: The flag's value at each call taken from a trace; the math shown for the mode that ran.
+  precision-choices:
+    description: Results depend on dtype choices made by the code (casting to float32, accumulating in float32).
+    headway: partial
+    needs: The dtypes of a traced run recorded; tolerances that follow them (as headway trace does for float32).
+  in-place-updates:
+    description: Arrays changed in place (x[mask] = v, x += v, out= arguments, pandas inplace=True).
+    headway: partial
+    needs: In-place updates of parts written as functional updates (a value with a part replaced).
+
+configuration:
+  polymorphic-model:
+    description: The model's formulas come from objects chosen at runtime (a family, a link, a distribution class)
+      whose methods give the variance, deviance, gradient.
+    headway: missing
+    needs: The classes that ran taken from a trace, and the math shown for them (specialization).
+  option-strings:
+    description: String or enum options choose between algorithms or models (fit_type="parametric"/"mean",
+      method="nb2", optimizer="L-BFGS-B").
+    headway: partial
+    needs: The options' values from a trace, and the math shown for the branch they choose (the others listed).
+  method-binding:
+    description: Methods bound at construction from options (self.loglike = self._ll_nb2), so which function a
+      call runs is decided by the constructor.
+    headway: missing
+    needs: The binding resolved from a trace.
+  optional-dependency-paths:
+    description: Which code runs depends on what is installed (an optional package used if present, a fallback
+      otherwise).
+    headway: missing
+    needs: The installed environment recorded with a trace; the path taken shown.
+  backend-switch:
+    description: A global flag or setting swaps the array backend (numpy or cupy, CPU or GPU) under the same
+      code.
+    headway: missing
+  runtime-installs:
+    description: The code installs packages at runtime (R packages from CRAN or GitHub through rpy2), unpinned.
+    headway: n/a
+  data-dependent-path:
+    description: The algorithm is chosen by a property of the data (a singular design, as many groups as
+      coefficients, a sparse input), not by an option.
+    headway: handled
+    needs: Written as cases; which path ran recorded from traces.
+  variant-paths-differ:
+    description: Alternative paths offered for one step compute different things (a different bandwidth selector
+      or smoother when R is absent; a fast path that is not the general path's formula).
+    headway: n/a
+    needs: The variants checked against each other on the same inputs; differences reported as findings.
+
+fitting:
+  optimizer-closures:
+    description: Objectives passed as closures or lambdas to a library optimizer (scipy.optimize.minimize, fmin_l_bfgs_b),
+      with bounds or constraints.
+    headway: missing
+    needs: An argmin/argmax term with its bounds, the closure written as a function of its argument; the result
+      checked as a (local) optimum on traced calls.
+  hand-gradients:
+    description: Hand-derived gradients or Hessians passed to optimizers (jac=, hess=) or used in Newton steps.
+    headway: missing
+    needs: The gradient checked against the objective (automatic or numerical differentiation) on traced calls.
+  autodiff:
+    description: Gradients from automatic differentiation (JAX, PyTorch), with jit compilation.
+    headway: partial
+    needs: grad as an operator over the objective (as for torch.autograd.grad); a JAX table.
+  fallback-cascade:
+    description: A fit falls back to other algorithms when one fails (IRLS, then L-BFGS-B, then grid search; a
+      parametric trend, then a mean).
+    headway: handled
+    needs: Written as cases already; the count of items that took each path recorded from traces.
+  clamps-and-constants:
+    description: Values clamped to bounds (mu >= 0.5, |beta| <= 30), small offsets (+0.1, 1e-8), ridges, and
+      numeric constants without stated derivation (1.51, 2.04).
+    headway: handled
+    needs: Shown as they are. Whether any clamp was active on the data is a trace fact worth recording.
+  convergence-tolerances:
+    description: Stopping rules and iteration limits that shape the result (relative deviance change below 1e-8,
+      max 250 iterations).
+    headway: handled
+  parameter-packing:
+    description: Several parameters packed into one vector for an optimizer (coefficients and a dispersion, or its
+      log), unpacked by position (params[:-1], params[-1]); or into column blocks of one matrix addressed by index
+      ranges (intercepts, covariate coefficients and factors side by side).
+    headway: missing
+    needs: The vector's parts named (β, log α) where it is packed, so the objective reads in them.
+  grid-search:
+    description: Optimization by evaluating an objective on a grid (as a fallback or the method).
+    headway: partial
+    needs: argmin over a finite set.
+  recurrences:
+    description: Dynamic programming over positions or time (forward-backward, Viterbi, alignment), each step's
+      values defined from the previous step's.
+    headway: partial
+    needs: Recurrences written as such (α_t from α_{t-1}), not only as loops; the scaled and log-space variants
+      as one recurrence.
+
+statistics:
+  order-statistics:
+    description: Medians, quantiles, trimmed means, MADs, ranks and sorting.
+    headway: partial
+    needs: Primitives for order statistics (median, quantile, trimmed mean, rank) as math.
+  special-functions:
+    description: gammaln, digamma, trigamma, polygamma, xlogy, normal quantiles, incomplete beta.
+    headway: partial
+    needs: Table entries for the ones missing (norm.ppf as Φ⁻¹, ...).
+  special-inverses:
+    description: Inverses of special functions solved numerically (trigammaInverse by Newton).
+    headway: missing
+    needs: A named operator with its defining equation (the y with trigamma(y) = x), its solver checked against it.
+  smoothers:
+    description: Splines, lowess/loess, local regression, interpolation, moving averages.
+    headway: missing
+    needs: Named operators with references; their inputs and outputs traced.
+  resampling-inference:
+    description: Inference by permutation or bootstrap (permutation FDR, permutation tests with early stopping).
+    headway: missing
+    needs: The resampling scheme as math (the statistic, the permuted labels, the p-value or FDR as a ratio of
+      counts); random draws handled as draws.
+  library-estimators:
+    description: Steps delegated to a library estimator object (scikit-learn TfidfTransformer, TruncatedSVD, PCA,
+      KMeans) whose defaults define the math.
+    headway: missing
+    needs: Tables for the estimators, with their defaults (smooth_idf, norm, svd_solver) in the math.
+  empirical-bayes:
+    description: Priors estimated from all items and used to shrink each item's estimate (dispersion shrinkage,
+      moderated variances, LFC shrinkage).
+    headway: partial
+    needs: The two-level structure (a prior fitted across items, a posterior per item) shown as such.
+  complex-step:
+    description: Code written to accept complex inputs for complex-step numerical derivatives.
+    headway: missing
+
+model-specification:
+  formula-design:
+    description: Design matrices built from model formulas (formulaic, patsy, R-style "~ condition + batch"), with
+      categorical encodings and reference levels.
+    headway: missing
+    needs: A term for a formula's design matrix (its columns named, the reference level stated).
+  contrasts:
+    description: Contrasts or coefficients chosen by name for tests (contrast=["condition", "B", "A"]).
+    headway: missing
+
+data:
+  dataframe-labels:
+    description: pandas/polars/AnnData used to carry labels (gene and sample names) and results, not to compute.
+    headway: partial
+  dataframe-computation:
+    description: The method computes with dataframe operations (group_by, joins, window functions).
+    headway: partial
+    needs: Tables in the calculus (polars started; pandas not).
+  sql:
+    description: The method computes in SQL.
+    headway: missing
+  file-io-in-method:
+    description: The method's computation reads or writes files midway (not only at its ends).
+    headway: n/a
+  staged-on-disk:
+    description: The method runs as separate stages (CLI commands) that pass intermediate results through files
+      (npz, zarr, MCDS).
+    headway: missing
+    needs: Traces across processes, joined by the files passed between stages.
+  external-tools:
+    description: Steps are command-line tools in other languages (Perl, C, Rust), run by a workflow manager in
+      containers, communicating through files.
+    headway: missing
+    needs: The workflow's DAG as steps, each tool's version and arguments as its settings; checks at file
+      boundaries only.
+  declarative-queries:
+    description: Computation stated declaratively (SQL over tables, a query DSL of patterns in TOML) and run by
+      an engine.
+    headway: missing
+    needs: A reader for the query language (SQL's filters, joins, group-bys as tables and sums, the DSL's
+      patterns as conditions); the engine's output checked against the reading on traced inputs.
+  resource-dependent-arguments:
+    description: Arguments derived from the resources available (threads from task.cpus, buffer sizes from
+      memory), meant not to change results.
+    headway: n/a
+    needs: Recorded with the environment; results compared across resources where it matters.
+
+implementation:
+  compiled-kernels:
+    description: Parts of the method compiled (Cython, C/C++, Rust, Fortran, numba).
+    headway: missing
+    needs: Their stated meaning checked on traced calls at the Python boundary; a Cython subset could be read.
+  compiled-with-python-reference:
+    description: Compiled kernels that have a Python (or numpy) version of the same formula in the codebase.
+    headway: missing
+    needs: The two checked against each other on traced calls.
+  jit-python-kernels:
+    description: Kernels compiled from Python source at runtime (numba njit/prange, jax.jit), so their source
+      is readable as Python.
+    headway: partial
+    needs: The numba and JAX tables; prange loops read as families.
+  foreign-runtime-calls:
+    description: The method calls another language's runtime midway (R through rpy2).
+    headway: missing
+    needs: The call's inputs and outputs traced at the boundary, with a stated meaning.
+  duplicate-implementations:
+    description: The same formula or step implemented more than once in the codebase (a fast path and a general
+      path; per item and batched).
+    headway: n/a
+  ported-from:
+    description: A port of a method from another language (R, C++), often function by function with the original's
+      names.
+    headway: n/a
+  r-semantics:
+    description: R code (copy-on-modify, 1-based indices, recycling, attributes set with attr(), S4 slots,
+      non-standard evaluation).
+    headway: missing
+    needs: An R reader and an R tracer at function boundaries writing the neutral trace format.
+  native-provenance:
+    description: The tool records its own provenance (Nextflow trace and versions.yml per module, RO-Crate
+      metadata, PPL trace handlers).
+    headway: n/a
+    needs: Read rather than duplicated.
+  input-guards:
+    description: Much of the code handles degenerate inputs (n = 0, all zeros, non-finite values) and warns.
+    headway: handled
+  docs-disagree:
+    description: Docstrings or names disagree with the code (a default stated differently; a procedure called
+      Benjamini-Hochberg that is a permutation estimate).
+    headway: n/a
+  nan-semantics:
+    description: Results depend on NaN/NA handling (nanmean, pd.NA, masks of finite values).
+    headway: partial
+    needs: NaN-aware reductions as math (a mean over the finite values).
+  randomness:
+    description: The method draws random numbers (initialization, subsampling, permutation).
+    headway: partial
+  import-side-effects:
+    description: Importing a module changes global state that other code depends on (np.random.seed at import,
+      np.seterr, warnings filters, thread settings).
+    headway: n/a
+    needs: Global state recorded with a trace.
+
+testing:
+  reference-fixtures:
+    description: Tests compare against outputs of another implementation stored as files (R's results as CSV).
+    headway: n/a
+  golden-master:
+    description: Tests compare against the codebase's own earlier outputs.
+    headway: n/a
+  ported-tests:
+    description: The test suite is a port of the original implementation's tests.
+    headway: n/a
+  dependency-drift:
+    description: The code or its tests break with current versions of its dependencies (no lockfile, or
+      unpinned).
+    headway: n/a
+  thin-tests:
+    description: A test suite that does not exercise the method (loading and entry points only).
+    headway: n/a
+    needs: Runs generated from examples and simulated data, as for no-tests.
+  no-tests:
+    description: No test suite (notebooks or examples only).
+    headway: n/a
+    needs: Tests generated from examples and simulated data, so traces exist to check against.

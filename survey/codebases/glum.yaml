@@ -1,0 +1,78 @@
+id: glum
+name: glum
+url: https://github.com/Quantco/glum
+commit: afe04f6
+read: 2026-10-29
+families: [count-glm, penalized-regression]
+implements:
+  - method: GLMs with elastic-net penalties (Tweedie, normal, Poisson, gamma, inverse Gaussian, binomial,
+      negative binomial, generalized hyperbolic secant; identity, log, logit, cloglog, Tweedie links)
+    relation: original
+    paper: solver after Yuan, Ho, Lin (2012), JMLR 13:1999 (improved GLMNET)
+languages: {python: 55 files, cython: 2 files}
+computation: mixed                    # per-family gradient/Hessian/deviance kernels and coordinate descent in Cython
+dependencies: [numpy, scipy, scikit-learn, tabmat, formulaic, narwhals, numexpr, pandas]
+
+environment:
+  venv: ~/targets/glum/.venv
+  installs: true
+  notes: the tests need packages not in its install requirements (polars, attrs, git_root, statsmodels, click,
+    psutil).
+tests:
+  framework: pytest
+  reference: golden-master results stored in the repo (tests/glm/golden_master), checked against glmnet in places.
+  result: 2108 passed, 31 failed
+  runtime: 35 s (2 workers)
+  failures: 28 from polars 2.0 (get_categories removed) and formulaic API changes; 3 numerical
+    (test_offset_solution_matches_weights_solution, rtol 1e-7).
+
+steps:
+  - name: design
+    where: _glm.py, _formula.py
+    note: formulaic formulas or arrays into tabmat matrices (dense, sparse, categorical, split); optional
+      standardization.
+  - name: family and link
+    where: _distribution.py, _link.py
+    note: an ExponentialDispersionModel subclass and a Link object give variance, deviance and their derivatives.
+  - name: fit
+    where: _solvers.py:_irls_solver, _cd_fast.pyx, _lbfgs_solver, _trust_constr_solver
+    note: IRLS on a quadratic approximation, inner solve by coordinate descent (L1) or least squares (L2), active
+      sets, line search; or L-BFGS, or trust-constr for constraints.
+  - name: regularization path and cross-validation
+    where: _glm_cv.py
+  - name: dispersion and standard errors
+    where: _distribution.py:dispersion, _glm.py (covariance, sandwich)
+
+traits:
+  unnamed-axes: {}
+  sparse-matrices: {where: tabmat throughout}
+  mutable-state-object: {where: _solvers.py:IRLSState, evidence: "state.coef, state.eta, state.mu, state.active_set reassigned each iteration."}
+  polymorphic-model: {where: _distribution.py, _link.py, evidence: "family and link objects; isinstance(link, LogLink) picks a Cython fast path."}
+  option-strings: {evidence: "solver='irls-cd'/'irls-ls'/'lbfgs'/'trust-constr', family='poisson', link='log'."}
+  optimizer-closures: {where: _solvers.py:_lbfgs_solver, _trust_constr_solver}
+  hand-gradients: {evidence: "gradients and Hessians by family, in Python and in Cython."}
+  convergence-tolerances: {}
+  clamps-and-constants: {}
+  special-functions: {evidence: "xlogy, gammaln."}
+  formula-design: {where: _formula.py}
+  in-place-updates: {evidence: "Cython kernels write into out arrays (eta_out, mu_out, gradient_rows_out)."}
+  compiled-kernels: {where: _functions.pyx, _cd_fast.pyx, evidence: "prange loops over rows: deviance, rowwise gradient/Hessian per family-link pair; coordinate descent."}
+  compiled-with-python-reference: {where: _distribution.py, evidence: "unit_deviance etc. in Python next to the Cython fast paths for (Poisson, log), (gamma, log), ..."}
+  duplicate-implementations: {evidence: "fast paths per family-link pair and the general path."}
+  input-guards: {where: _validation.py}
+  golden-master: {where: tests/glm/golden_master}
+  dependency-drift: {evidence: "polars 2.0 and formulaic changes break 28 tests."}
+
+headway:
+  lint:
+    _distribution.py: 0.62
+    _link.py: 0.90
+    _solvers.py: 0.68
+    _glm.py: 0.61
+    _linalg.py: 0.50
+
+findings:
+  - The math is written twice by design (Python general path, Cython fast path per family-link pair); the pair is a
+    ready-made consistency check.
+  - The objective is stated in the solver's docstring (F = ½ deviance + ½ wᵀP₂w + ‖P₁w‖₁), which the code's math
+    could be checked against.

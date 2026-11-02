@@ -1,0 +1,78 @@
+id: scanpy
+name: scanpy (count-model and differential-expression parts only)
+url: https://github.com/scverse/scanpy
+commit: 45a5607
+read: 2026-10-29
+scope: preprocessing/_simple.py (regress_out), preprocessing/_normalization.py, preprocessing/_highly_variable_genes.py,
+  experimental/pp/_normalization.py (Pearson residuals), tools/_rank_genes_groups.py
+families: [single-cell, normalization, differential-expression, count-glm]
+implements:
+  - method: analytic Pearson residuals (NB with fixed theta, rank-one mean)
+    relation: original
+    paper: Lause, Berens, Kobak (2021), Genome Biology 22:258
+  - method: regress_out (per-gene linear regression on cell covariates)
+    relation: original
+  - method: highly variable genes (seurat, cell_ranger, seurat_v3, pearson_residuals flavors)
+    relation: reimplementation
+    original: Seurat (R) and Cell Ranger
+  - method: rank_genes_groups (t-test, Welch, Wilcoxon, logistic regression)
+    relation: original
+languages: {python: method in Python; numba kernels}
+computation: python                   # numba-compiled Python kernels
+dependencies: [numpy, scipy, pandas, anndata, numba, scikit-learn, statsmodels, dask (optional), fast-array-utils]
+
+environment:
+  venv: ~/targets/scanpy/.venv (Python 3.13)
+  installs: true
+  notes: a shallow clone has no tags, so its version (from the VCS) breaks its own dependency resolution; installed
+    with SETUPTOOLS_SCM_PRETEND_VERSION. Its test extra requires Python 3.13.
+tests:
+  framework: pytest
+  reference: stored expected results (tests/_data) for some functions.
+  result: 843 passed, 562 skipped, 1 failed (test_set_numba_threads_from_settings, which needs more than the one
+    numba thread the run allowed)
+  scope: test_preprocessing, test_normalization, test_highly_variable_genes, test_rank_genes_groups
+  runtime: 82 s (2 workers)
+
+steps:
+  - name: Pearson residuals
+    where: experimental/pp/_normalization.py:_pearson_residuals
+    note: "mu = (cell sums)(gene sums)/total; (x - mu)/sqrt(mu + mu²/theta), clipped at sqrt(n)."
+  - name: regress_out
+    where: preprocessing/_simple.py:regress_out, numpy_regress_out, _regress_out_chunk
+    note: continuous regressors with a nonsingular Gram matrix (det != 0) go to a numpy least-squares path
+      (numba residuals); categorical ones, or a singular Gram matrix, to a statsmodels GLM per gene, in chunks in
+      parallel. A categorical key becomes one regressor per gene (its category's mean), not indicator columns.
+
+traits:
+  unnamed-axes: {}
+  sparse-matrices: {evidence: "CSBase (scipy sparse) throughout."}
+  array-type-dispatch: {evidence: "isinstance(x, CSBase) branches with the same math; functools.singledispatch in 28 places; dask variants."}
+  deferred-arrays: {evidence: "dask arrays in normalization, HVG and PCA."}
+  object-slots: {evidence: "AnnData in, results written to adata.X/obs/var/uns/layers (copy=False by default)."}
+  in-place-updates: {evidence: "numba get_resid writes data[i] -= ...; adata.X replaced."}
+  data-dependent-path: {where: preprocessing/_simple.py:regress_out, evidence: "np.linalg.det(regressors.T @ regressors) != 0 (an exact test of a float) chooses between two implementations of the regression."}
+  precision-choices: {where: preprocessing/_simple.py:regress_out, evidence: "integer counts cast to float32 (itemsize <= 4) or float64 before regressing."}
+  per-item-parallel: {evidence: "joblib over chunks of genes in regress_out."}
+  jit-python-kernels: {evidence: "numba njit with prange (_create_regressor_categorical, get_resid)."}
+  option-strings: {evidence: "flavor, method ('t-test', 'wilcoxon', 'logreg'), corr_method."}
+  clamps-and-constants: {evidence: "clip at sqrt(n_cells)."}
+  order-statistics: {evidence: "ranks for Wilcoxon."}
+  library-estimators: {evidence: "rank_genes_groups method='logreg' fits scikit-learn LogisticRegression; PCA through scikit-learn or arpack."}
+  input-guards: {}
+
+headway:
+  lint:
+    experimental/pp/_normalization.py: 0.54
+    preprocessing/_simple.py: 0.56
+    preprocessing/_normalization.py: 0.50
+    preprocessing/_highly_variable_genes.py: 0.42
+    tools/_rank_genes_groups.py: 0.56
+
+findings:
+  - regress_out picks its implementation by an exact determinant test; near-singular designs go to the fast path.
+    The two paths should agree (both least squares), which is checkable.
+  - The analytic Pearson residuals are a few lines of clean math, the kind headway should show perfectly once the
+    sparse and dense branches are read as one.
+related:
+  - {id: pysctransform, relation: "the regularized-regression method its analytic residuals simplify"}

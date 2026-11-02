@@ -1,0 +1,55 @@
+id: harmonypy
+name: harmonypy
+url: https://github.com/slowkow/harmonypy
+commit: 462d6de
+read: 2026-10-29
+families: [single-cell, batch-correction, embedding]
+implements:
+  - method: Harmony (soft k-means clustering with diversity penalties, then a ridge correction per cluster,
+      iterated) and LISI
+    relation: port
+    original: harmony (R with C++/Armadillo); version 2.1 reproduces arma::kmeans arithmetic and tie-breaking
+    paper: Korsunsky, Millard, et al. (2019), Nature Methods 16:1289
+languages: {python: 2 files (wrapper), C++: 2 files (1.7k lines, nanobind bindings)}
+computation: compiled                 # the whole method is in C++ since 2.x; Python converts inputs and reads results
+dependencies: [numpy, nanobind (build), scikit-learn (LISI)]
+last-commit: 2026-10-21
+
+environment:
+  venv: ~/targets/harmonypy/.venv
+  installs: true
+  notes: the C++ extension builds on install; LISI's tests need pandas, undeclared.
+tests:
+  framework: pytest
+  reference: R Harmony's output (data/*_harmonized.tsv.gz, scripts/generate_harmony2_reference.R).
+  result: 121 passed
+  runtime: 2 s
+
+steps:
+  - name: inputs
+    where: harmony.py:run_harmony
+    note: PCs and batch labels factorized; theta, lambda, sigma per covariate.
+  - name: Harmony
+    where: src/harmony.cpp
+    note: k-means start, then rounds of soft cluster assignment with a diversity penalty and a ridge regression
+      correction per cluster, until the objective converges.
+
+traits:
+  unnamed-axes: {}
+  compiled-kernels: {where: src/harmony.cpp}
+  per-item-parallel: {evidence: "a thread pool in C++; results stated identical for any number of threads."}
+  randomness: {evidence: "k-means start with a seed."}
+  option-strings: {}
+  reference-fixtures: {where: data/, scripts/generate_harmony2_reference.R}
+  ported-from: {evidence: "reproduces R harmony's C++ (Armadillo) arithmetic."}
+
+headway:
+  lint:
+    harmony.py: 0.63
+    lisi.py: 0.50
+
+findings:
+  - The method moved entirely into C++ in version 2 (earlier versions were numpy); at the Python boundary it is a
+    black box, checkable only against a stated meaning or against its numpy predecessor from the git history.
+  - Its changelog documents numerical choices (tie-breaking, one pass per cell) that a reader of the paper would
+    not know.

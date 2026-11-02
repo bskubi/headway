@@ -1,0 +1,35 @@
+id: alnbase
+name: alnbase (the user's)
+url: local ~/alnbase
+commit: null
+read: 2026-10-29
+families: [alignment-queries, methylation]
+implements:
+  - method: queries over aligned reads as patterns of read and reference bases (a TOML DSL), with methylation
+      calls defined as queries and validated against MethylDackel
+    relation: original
+languages: {rust: 27.7k lines, python: alnbase_agg, TOML: query files}
+computation: other-language           # a Rust engine runs declarative queries
+dependencies: [rust crates, arrow]
+
+environment:
+  installs: null
+tests:
+  result: null
+
+steps:
+  - name: methylation call
+    where: query/extract/methyldackel.toml (copied as hich/assets/query/ctot.toml)
+    note: a reference C with a read C is methylated, with a read T unmethylated; the context from the next
+      reference bases (G is CpG, else the base after decides CHG or CHH).
+
+traits:
+  declarative-queries: {where: query/, evidence: "patterns of read and reference bases in TOML; the engine finds every match."}
+  external-tools: {}
+  reference-fixtures: {evidence: "validated against MethylDackel (alnbase-validation)."}
+
+findings:
+  - Its method is already declarative and documented against another tool; a reading of the DSL as conditions
+    would be its math, checked against the engine's output on traced inputs.
+related:
+  - {id: hich, relation: "used by it"}

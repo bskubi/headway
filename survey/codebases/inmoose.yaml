@@ -1,0 +1,100 @@
+id: inmoose
+name: InMoose
+url: https://github.com/epigenelabs/inmoose
+commit: 4c14ed5
+read: 2026-10-29
+families: [count-glm, differential-expression, batch-correction, linear-models]
+implements:
+  - method: DESeq2
+    relation: port
+    original: DESeq2 (R and its C++ core), function by function with the original's names
+    paper: Love, Huber, Anders (2014), Genome Biology 15:550
+  - method: edgeR (part)
+    relation: port
+    original: edgeR (R and C++); edgepy has the GLM, QL, exact-test and Cox-Reid dispersion functions, but no
+      calcNormFactors (TMM) or estimateDisp found
+    paper: Robinson, McCarthy, Smyth (2010), Bioinformatics 26:139; Lun, Chen, Smyth (2016) for QL
+  - method: limma (part)
+    relation: port
+    original: limma (R); lmFit, eBayes, squeezeVar, fitFDist, topTable, contrasts; no voom found
+    paper: Smyth (2004), SAGMB 3:3; Ritchie et al. (2015), NAR 43:e47
+  - method: ComBat and ComBat-seq
+    relation: port
+    original: sva (R)
+    paper: Johnson, Li, Rabinovic (2007), Biostatistics 8:118; Zhang, Parmigiani, Johnson (2020), NAR Genom Bioinform
+  - method: Splatter simulation
+    relation: port
+    original: splatter (R); sim/splat.py
+    paper: Zappia, Phipson, Oshlack (2017), Genome Biology 18:174
+languages: {python: 169 files, cython: 2 files}
+computation: mixed                    # edgepy's deviance, adjusted profile likelihood, one-group fit, interpolation in Cython
+dependencies: [numpy, scipy, pandas, patsy, statsmodels, anndata]
+
+environment:
+  venv: ~/targets/inmoose/.venv
+  installs: true
+  notes: with pandas 3, 14 tests fail ("assignment destination is read-only", pandas 3's copy-on-write handing out
+    read-only arrays that the code writes into); all pass with pandas<3.
+tests:
+  framework: pytest (unittest classes)
+  reference: tests ported from the R packages' testthat suites (test file names match DESeq2's), with R's expected
+    values inlined.
+  result: 141 passed, 9 skipped
+  runtime: 337 s
+
+steps:
+  - name: DESeq2 (as in pydeseq2)
+    where: deseq2/core.py, dispersions.py, fitNbinomGLMs.py, deseq2_cpp.py, wald.py, results.py
+    note: the C++ routines ported to numpy, vectorized over genes (fitBeta, fitDisp, fitDispGrid).
+  - name: edgeR GLM
+    where: edgepy/glmFit.py, mglmLevenberg.py, glm_levenberg.py, glmQLFit.py, estimateGLMCommonDisp.py,
+      estimateGLMTagwiseDisp.py, dispCoxReidInterpolateTagwise.py, adjustedProfileLik.py
+    note: tagwise dispersions by a weighted likelihood on a grid, interpolated (maximizeInterpolant, Cython).
+  - name: limma
+    where: limma/lmfit.py, ebayes.py, squeezeVar.py, fitFDist.py
+    note: moderated variances from a scaled F fitted by moments of log variances (digamma/trigamma; trigammaInverse
+      by Newton; natural splines on a covariate).
+
+traits:
+  unnamed-axes: {evidence: "No annotations; but see shape-asserts."}
+  shape-asserts: {where: deseq2/deseq2_cpp.py, evidence: "assert w_vec.shape == (y_m, idx_n), beta_hat.shape == (idx_n, x_p), throughout fitBeta."}
+  batched-masked-loop: {where: deseq2/deseq2_cpp.py:fitBeta, evidence: "IRLS over all genes at once, idx a mask of the genes still iterating, shrunk when |beta| > 30."}
+  in-place-updates: {evidence: "beta_mat[idx, :] = ...; mu_hat[:, idx] = ...; covariate[np.isneginf(covariate)] = ... (changes the caller's array)."}
+  option-strings: {evidence: "useQR, useWeights, fitType, test='Wald'/'LRT'."}
+  fallback-cascade: {where: deseq2/dispersions.py, evidence: "line search on the dispersion, then a grid (fitDispGrid)."}
+  clamps-and-constants: {evidence: "large = 30.0, minmu, 1e-5*median floor on variances, low_value 1e-10 in Cython."}
+  grid-search: {where: deseq2_cpp.py:fitDispGrid, edgepy/maximizeInterpolant}
+  order-statistics: {evidence: "trim_mean, quantile, median, argsort."}
+  special-functions: {evidence: "digamma, polygamma, gammaln; nbinom logpmf in Cython."}
+  special-inverses: {where: limma/fitFDist.py:trigammaInverse}
+  smoothers: {evidence: "natural splines (limma fitFDist), movingAverageByCol, interpolation."}
+  empirical-bayes: {evidence: "limma eBayes, edgeR tagwise dispersions toward a common/trended value, DESeq2 priors."}
+  formula-design: {evidence: "patsy model matrices."}
+  contrasts: {where: limma/contrasts.py}
+  dataframe-labels: {}
+  compiled-kernels: {where: edgepy/edgepy_cpp/edgepy_cpp.pyx, utils/_stats.pyx, evidence: "unit deviance, adjusted profile likelihood, one-group NB fit, interpolation, nbinom logpmf."}
+  ported-from: {evidence: "R and C++ function names kept (glmFit, mglmLevenberg, fitBeta)."}
+  input-guards: {evidence: "fitFDist: n = 0, n = 1, non-finite df1, infinite covariates, more than half the variances zero."}
+  nan-semantics: {evidence: "nansum, isfinite masks."}
+  ported-tests: {where: tests/deseq2, tests/edgepy, tests/limma}
+  dependency-drift: {evidence: "pandas 3 (copy-on-write) breaks 14 tests."}
+
+headway:
+  lint:
+    deseq2/deseq2_cpp.py: 0.78
+    deseq2/fitNbinomGLMs.py: 0.71
+    deseq2/dispersions.py: 0.72
+    edgepy/glmFit.py: 0.61
+    edgepy/adjustedProfileLik.py: 0.14   # calls into Cython
+    limma/ebayes.py: 0.82
+    limma/fitFDist.py: 0.79
+    limma/lmfit.py: 0.68
+
+findings:
+  - Two DESeq2s in one survey (this port and pydeseq2), the same routine per gene there and batched with a mask
+    here.
+  - Coverage of edgeR and limma is partial (no TMM, no voom, no estimateDisp found), which matters for a
+    side-by-side of the three standard methods.
+  - Shape asserts make the index sets nearly explicit; a reader of them would name most of fitBeta's axes.
+related:
+  - {id: pydeseq2, relation: "same method (DESeq2), independent port"}

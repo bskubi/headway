@@ -11,3 +11,5 @@ examples/cellscore/results/
 examples/cellscore/compare.html
 examples/cellscore/suite.html
 examples/pipeline/pipeline.html
+# pages built from the model examples (they hold local file paths)
+examples/models/*.html

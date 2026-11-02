@@ -1,0 +1,63 @@
+id: diffxpy
+name: diffxpy
+url: https://github.com/theislab/diffxpy
+commit: 9d91d6c
+read: 2026-10-29
+families: [differential-expression, single-cell, count-glm]
+implements:
+  - method: differential expression tests for single-cell data, (Wald, likelihood ratio, t-test, rank test,
+      pairwise, versus rest, partitions, continuous covariates by splines)
+    relation: original
+languages: {python: method in Python}
+computation: python                   # fitting delegated to batchglm
+dependencies: [batchglm, numpy, scipy, pandas, patsy, anndata, dask]
+
+environment:
+  venv: ~/targets/diffxpy/.venv (Python 3.9)
+  installs: true
+  notes: versioneer's setup fails on Python 3.12. Neither batchglm's latest commit (removed batchglm.api.models
+    and batchglm.data) nor its stated minimum 0.7.4 (lacks api.models.numpy.glm_norm) matches diffxpy's latest
+    commit; pandas 3 also breaks it. Not brought to a working state.
+tests:
+  framework: pytest (diffxpy/unit_test)
+  result: 16 passed, 52 failed with batchglm 0.7.4; all 20 modules fail to import with batchglm's latest commit
+
+steps:
+  - name: design and constraints
+    where: testing/tests.py:_fit, testing/utils.py
+    note: patsy designs for location and scale from formulas or sample descriptions; spline bases (patsy bs/cr)
+      for continuous covariates.
+  - name: fit
+    where: testing/tests.py:_fit
+    note: batchglm estimators, one per model (full and reduced for LRT).
+  - name: tests
+    where: stats/stats.py, testing/det.py
+    note: Wald (chi-square from the Fisher information), LRT, Welch t from moments, Mann-Whitney U, hypergeometric;
+      BH correction; result objects with summaries and plots.
+
+traits:
+  unnamed-axes: {}
+  object-slots: {evidence: "DifferentialExpressionTest result classes with lazily computed properties (pval, qval, log_fold_change)."}
+  polymorphic-model: {evidence: "noise_model 'nb'/'norm'/'poisson' chooses batchglm's model."}
+  option-strings: {evidence: "test 'wald'/'lrt'/'t-test'/'rank', noise_model, spline basis type."}
+  formula-design: {evidence: "patsy formulas for loc and scale; as_numeric; constraints."}
+  contrasts: {}
+  smoothers: {evidence: "spline bases for continuous_1d tests."}
+  order-statistics: {evidence: "ranks in Mann-Whitney U."}
+  dataframe-labels: {}
+  dependency-drift: {evidence: "versioneer and Python 3.12; batchglm's API changed under it (no version of batchglm satisfies diffxpy's latest commit)."}
+
+headway:
+  lint:
+    testing/det.py: 0.54
+    testing/tests.py: 0.50
+    testing/utils.py: 0.63
+    stats/stats.py: 0.65
+
+findings:
+  - Its latest commit cannot be run with any batchglm release or commit tried; a published analysis that used it
+    is reproducible only with its exact pairing of versions, which nothing records.
+  - Most of diffxpy is result objects and API dispatch; the statistics are short functions in stats/stats.py,
+    which are clean candidates for math (Wald, LRT, Welch t, Mann-Whitney).
+related:
+  - {id: batchglm, relation: "fitting backend"}

@@ -1,0 +1,63 @@
+id: mofapy2
+name: mofapy2 (MOFA+)
+url: https://github.com/bioFAM/mofapy2
+commit: 90418e5
+read: 2026-10-29
+families: [factor-models, multi-omics, embedding]
+implements:
+  - method: MOFA+ (group factor analysis across views and groups with ARD and spike-and-slab priors, fitted by
+      variational inference, stochastic VI optionally; MEFISTO with Gaussian-process priors on factors)
+    relation: original
+    paper: Argelaguet, Arnol, et al. (2020), Genome Biology 21:111; Velten, Braunger, et al. (2022), Nature
+      Methods 19:179 (MEFISTO)
+languages: {python: 12.7k lines}
+computation: python
+dependencies: [numpy, scipy, pandas, h5py, scikit-learn, anndata, cupy (optional)]
+last-commit: 2026-08-26
+
+environment:
+  venv: ~/targets/mofapy2/.venv
+  installs: true
+tests:
+  framework: pytest (tests/test_anndata.py, test_entry_point.py)
+  result: 1 passed, 1 skipped (the fitting itself is not tested)
+
+steps:
+  - name: build the model
+    where: build_model/, run/entry_point.py
+    note: nodes chosen by options (likelihoods per view, priors on weights and factors, groups) and connected
+      into a BayesNet.
+  - name: variational updates
+    where: core/nodes/*.py, core/BayesNet.py:iterate
+    note: each node's variational parameters updated in turn from its Markov blanket's expectations; the ELBO
+      computed every few iterations; factors explaining too little variance dropped during training.
+  - name: non-Gaussian likelihoods
+    where: core/nodes/nongaussian_nodes.py
+    note: Poisson and Bernoulli views by local bounds (pseudo-data).
+
+traits:
+  unnamed-axes: {}
+  model-graph-objects: {where: core/nodes, core/BayesNet.py}
+  mutable-state-object: {evidence: "Q['mean'] and Q['var'] replaced in each node's updateParameters."}
+  dynamic-dimensions: {where: core/BayesNet.py, evidence: "factors removed during training (start_drop, freq_drop, min_r2); dim['K'] decreases."}
+  backend-switch: {where: core/gpu_utils.py, evidence: "gpu_mode global; log, exp, sum, square through cupy or numpy."}
+  randomness: {evidence: "np.random.choice among factors to drop; random initializations."}
+  option-strings: {evidence: "likelihoods 'gaussian'/'poisson'/'bernoulli', ard and spike-slab switches, convergence_mode."}
+  empirical-bayes: {evidence: "ARD priors learned from all features."}
+  special-functions: {evidence: "digamma and gammaln in the ELBO terms."}
+  convergence-tolerances: {}
+  file-io-in-method: {evidence: "results to HDF5 at the end."}
+  thin-tests: {}
+
+headway:
+  lint:
+    core/nodes/Z_nodes.py: 0.64
+    core/nodes/W_nodes.py: 0.69
+    core/nodes/Tau_nodes.py: 0.65
+    core/nodes/Alpha_nodes.py: 0.76
+    core/BayesNet.py: 0.63
+
+findings:
+  - The model exists only as an assembled graph of node objects; its joint distribution is written nowhere in the
+    code. Showing it means assembling it from a run.
+  - The number of factors changes during fitting, so the factor index set is a result, not an input.

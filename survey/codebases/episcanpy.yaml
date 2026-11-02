@@ -1,0 +1,62 @@
+id: episcanpy
+name: epiScanpy
+url: https://github.com/colomemaria/epiScanpy
+commit: 9606066
+read: 2026-10-29
+scope: tools/_lsi.py, tools/_impute_meth.py, tools/_features_selection.py, preprocessing/_readimpute.py
+families: [single-cell, methylation, chromatin-accessibility, embedding]
+implements:
+  - method: scanpy-style analysis of single-cell ATAC and methylation (feature matrices, TF-IDF and LSI, feature
+      selection by variability, imputation of missing methylation)
+    relation: original
+    paper: Danese, Richter, et al. (2021), Nature Communications 12:5228
+languages: {python: 15.9k lines, R: 1 notes file}
+computation: python                   # mostly scikit-learn and scanpy calls
+dependencies: [scanpy, anndata, numpy, pandas, scikit-learn, pysam, bamnostic, kneed, tbb]
+last-commit: 2024-12-05
+
+environment:
+  venv: ~/targets/epiScanpy/.venv
+  installs: true
+  notes: its imports need anndata 0.11 exactly (both anndata.read, removed later, and anndata.io, added in 0.11),
+    hence scanpy 1.11 and zarr<3; none of this is pinned.
+tests:
+  framework: pytest (tests/)
+  result: 2 passed (loading only)
+
+steps:
+  - name: feature matrices
+    where: count_matrix/, functions/_extract_meth.py
+    note: per-cell methylation levels over windows or genes, and ATAC counts.
+  - name: missing methylation
+    where: tools/_impute_meth.py, preprocessing/_readimpute.py
+    note: a feature's missing values replaced by the mean of its observed values (as strings compared to "nan").
+  - name: TF-IDF and LSI
+    where: tools/_lsi.py
+    note: scikit-learn's TfidfTransformer and TruncatedSVD with their defaults.
+
+traits:
+  unnamed-axes: {}
+  object-slots: {evidence: "AnnData layers, obsm, uns."}
+  library-estimators: {where: tools/_lsi.py, evidence: "TfidfTransformer(norm=...), TruncatedSVD(algorithm='arpack'); the math is scikit-learn's (smooth_idf, sublinear_tf defaults)."}
+  sentinel-encodings: {where: tools/_impute_meth.py, evidence: "values held as strings; missing as the string 'nan'."}
+  nan-semantics: {evidence: "mean imputation of missing methylation."}
+  docs-disagree: {where: tools/_lsi.py:tfidf, evidence: "docstring says default='l2'; the signature's default is norm='l1'."}
+  randomness: {evidence: "random_state=42 fixed in lsi."}
+  option-strings: {}
+  dependency-drift: {evidence: "needs anndata 0.11 exactly, scanpy 1.11, zarr<3; unpinned."}
+  thin-tests: {}
+
+headway:
+  lint:
+    tools/_lsi.py: 0.40
+    tools/_impute_meth.py: 0.40
+    tools/_features_selection.py: 0.67
+    preprocessing/_readimpute.py: 0.37
+
+findings:
+  - Little of the method is its own code; it is scanpy and scikit-learn with settings. Handling it is mostly a
+    matter of tables for those libraries' estimators.
+  - Missing methylation is imputed by a feature mean, a strong assumption made silently by a "read" function.
+related:
+  - {id: scanpy, relation: "built on it"}
