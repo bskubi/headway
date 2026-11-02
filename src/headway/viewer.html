@@ -16,7 +16,7 @@
   --accent: #2f5fd0; --accent-soft: #e5ecfb; --edge: #9a978f;
   --input: #2f7d6d; --input-bg: #e3f2ee; --value: #4a4a50; --value-bg: #ffffff;
   --output: #8a4fbf; --output-bg: #f1e8fa; --setting: #a8650b; --setting-bg: #fbf0dd; --constant: #69707c; --constant-bg: #eef0f3;
-  --op-bg: #f3f1ec; --group-bg: rgba(47, 95, 208, 0.035); --ok: #23863a; --bad: #c4352b;
+  --op-bg: #f3f1ec; --group-bg: rgba(47, 95, 208, 0.035); --ok: #23863a; --bad: #c4352b; --find: #d6336c;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -24,7 +24,7 @@
     --accent: #7ea2ff; --accent-soft: #263255; --edge: #6d6c69;
     --input: #6cc4b0; --input-bg: #1c302b; --value: #d4d2cc; --value-bg: #232328;
     --output: #c39af0; --output-bg: #2c2238; --setting: #e4aa55; --setting-bg: #33281a; --constant: #a3abb8; --constant-bg: #272a30;
-    --op-bg: #2a2a2f; --group-bg: rgba(126, 162, 255, 0.05); --ok: #5cc173; --bad: #f07167;
+    --op-bg: #2a2a2f; --group-bg: rgba(126, 162, 255, 0.05); --ok: #5cc173; --bad: #f07167; --find: #f783ac;
   }
 }
 * { box-sizing: border-box; }
@@ -111,6 +111,7 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 #detail .decl a { color: var(--muted); text-decoration: none; }
 #detail .decl a:hover { color: var(--accent); text-decoration: underline; }
 #live { font-size: 12px; color: var(--muted); }
+#redraft { font-size: 11.5px; padding: 0 7px; line-height: 1.5; }
 #live.on::before { content: "●"; color: var(--ok); margin-right: 4px; }
 #live.off::before { content: "●"; color: var(--bad); margin-right: 4px; }
 @media (max-width: 760px) {
@@ -136,6 +137,10 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 .n.op .ok { color: var(--ok); font-weight: 700; margin-left: 5px; }
 .n.op .bad { color: var(--bad); font-weight: 700; margin-left: 5px; }
 .n.op .per, .n.cg .per { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+.n.op.conditional { border-style: dashed; }
+.edge.control path { stroke-dasharray: 2 3; }
+.n.op .cond { color: var(--muted); font-weight: 400; font-size: 11px; font-style: italic; margin-left: 6px; }
+
 .n.cg { background: var(--group-bg); border: 1.5px solid var(--accent); border-radius: 8px; font-weight: 600; color: var(--accent); }
 .n.cg .sub { font-weight: 400; color: var(--muted); font-size: 11px; }
 .n.stack { box-shadow: 3px 3px 0 -1.5px var(--bg), 3px 3px 0 0 var(--edge), 6px 6px 0 -1.5px var(--bg), 6px 6px 0 0 var(--edge); }
@@ -145,6 +150,15 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 .node.sel .n.stack::after { content: ""; position: absolute; inset: -6px -12px -12px -6px; border: 2.5px solid var(--accent); border-radius: 9px; pointer-events: none; }
 .node.sel .n.stack.sym::after { border-radius: 999px; }
 .node.dim, .edge.dim { opacity: 0.28; }
+/* find: a box over each match, as thick on screen at any zoom: an exact match solid, a partial one dashed */
+#findlayer rect { fill: var(--find); fill-opacity: 0.1; stroke: var(--find); stroke-width: 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+#findlayer rect.part { fill-opacity: 0.04; stroke-width: 2; stroke-dasharray: 6 4; }
+#findlayer rect.at { fill-opacity: 0.22; }
+.node.unfound, .edge.unfound { opacity: 0.22; }
+#gbar #find { user-select: text; -webkit-user-select: text; cursor: text; font: inherit; font-size: 12px; padding: 3px 8px; width: 150px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); }
+#gbar #findcount { font-size: 11.5px; color: var(--muted); display: inline-flex; gap: 4px; align-items: center; white-space: nowrap; background: var(--panel); padding: 1px 5px; border-radius: 5px; }
+#gbar #findnav button { padding: 1px 7px; font-size: 13px; line-height: 1.2; }
+
 .edge path { fill: none; stroke: var(--edge); stroke-width: 1.3; }
 .edge.hl path { stroke: var(--accent); stroke-width: 2; }
 .grp rect { fill: var(--group-bg); stroke: var(--border); stroke-width: 1.2; rx: 10; }
@@ -177,6 +191,22 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 #detail .ask details pre { white-space: pre-wrap; font-size: 11.5px; max-height: 22em; overflow: auto; background: var(--bg);
   border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--fg); }
 #detail .crumb { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+#detail .when { font-size: 13px; margin: -2px 0 10px; padding: 6px 10px; border-left: 3px dashed var(--muted); background: var(--bg); border-radius: 0 6px 6px 0; }
+#detail .when .k { color: var(--muted); }
+#detail .when .about { font-size: 12px; margin-top: 4px; }
+#detail .eq.spec .def { margin-top: 6px; }
+#detail .eq.spec .about { font-size: 12.5px; margin: 4px 0 2px; }
+#detail .status { font-size: 12.5px; margin: 6px 0 2px; }
+.origin { color: var(--muted); font-size: 12px; }
+#detail .status.failed { color: #b3261e; }
+#detail .status.unchecked { color: var(--muted); }
+#detail ul.evidence { list-style: none; padding: 0; margin: 4px 0 10px; font-size: 13px; }
+#detail ul.evidence li { margin: 4px 0; }
+#detail ul.evidence li.held { color: var(--fg); }
+#detail ul.evidence li.failed { color: #b3261e; }
+#detail ul.evidence li.unchecked { color: var(--muted); }
+#detail ul.evidence .d { color: var(--muted); font-size: 11.5px; }
+#detail .fromcode .eq .about { font-size: 12.5px; margin: 2px 0 6px; padding-left: 10px; border-left: 2px solid var(--border); }
 #detail .eq .katex-display { font-size: 0.92em; }
 #detail .eq { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; overflow-x: auto; margin: 10px 0; }
 #detail h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 16px 0 6px; }
@@ -365,6 +395,14 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
 #detail .chg .k { color: var(--muted); margin-right: 6px; }
 #detail .chg .chip.gone { text-decoration: line-through; text-decoration-color: var(--bad); }
 #detail .eq.old { opacity: .75; border-style: dashed; }
+#detail details.fromcode { margin: 6px 0 10px; }
+#detail details.fromcode .katex-display > .katex, #detail .eq.spec .katex-display > .katex { text-align: left; }      /* read from the left */
+.codedoc { color: var(--muted); font-style: italic; }
+.codedoc .from { font-style: normal; font-size: 11px; margin-left: 8px; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+#detail details.fromcode > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.cname { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+#detail details.fromcode .namesw { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 1.5; }
+#detail details.fromcode .note { color: var(--muted); font-size: 11.5px; margin: 0; }
 #detail .eqlbl { font-size: 11.5px; color: var(--muted); margin: 8px 0 -6px; }
 .code .del { background: color-mix(in srgb, var(--bad) 16%, transparent); display: inline-block; width: 100%; }
 .code .ins { background: color-mix(in srgb, var(--ok) 16%, transparent); display: inline-block; width: 100%; }
@@ -397,7 +435,7 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
 <div class="top">
   <div id="graph"><div id="gbar">
       <span class="grp"><details class="menu" id="groupsmenu"><summary title="expand, collapse, show or hide the groups">Groups ▾</summary><div><div class="mbtns"><button id="expand">Expand all</button><button id="collapse">Collapse all</button><button id="unchanged" hidden title="collapse the groups in which nothing changed, in every lane">Collapse unchanged</button></div><div id="groupslist"></div></div></details></span>
-      <span class="grp" title="what is drawn"><label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Settings &amp; constants</span></label><label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label></span>
+      <span class="grp" title="what is drawn"><label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Settings &amp; constants</span></label><label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label><label class="seg" title="On: each value as the code names it (in the graph, the legend, the panel and its From the code), instead of its symbol. The equations stay as written."><input type="checkbox" id="codenames"><span>Code names</span></label></span>
       <span class="grp seg" id="focus" title="the selection's upstream or downstream only">
         <label><input type="radio" name="focus" value="" checked><span>All</span></label>
         <label><input type="radio" name="focus" value="up"><span>Upstream</span></label>
@@ -407,6 +445,7 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
         <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
       </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
+      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this. Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed"><input type="checkbox" id="findexact"><span>Exact</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
@@ -615,6 +654,16 @@ async function libAdd(paths) {
   await window.HW.add(files);
 }
 function libWire() {
+  // served by the library: reload when headway restarts (its own code changed). A live spec's page hears it
+  // through its own stream
+  if (LIB && location.protocol.startsWith("http") && !D?.live) {
+    let boot = null;
+    new EventSource("/api/events").onmessage = (e) => {
+      const b = JSON.parse(e.data).boot;
+      if (boot && b !== boot) location.reload();
+      boot = b;
+    };
+  }
   $("libclose").onclick = closeLibrary;
   $("library").addEventListener("click", (e) => { if (e.target === $("library")) closeLibrary(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("library").hidden) closeLibrary(); });
@@ -632,16 +681,17 @@ const tex = (t, display = false) => { try { return katex.renderToString(t, {disp
 const rich = (s) => esc(s).split(/\$([^$]+)\$/).map((part, n) => n % 2 ? tex(part.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")) : part).join("");
 
 // lookups over D, remade when a live rebuild replaces it
-let SYM, OP, IDX, GRP, PRODUCER, CONSUMERS, ORDER;
+let SYM, OP, IDX, GRP, PRODUCER, CONSUMERS, CONTROLS, ORDER;
 function index() {
   SYM = Object.fromEntries(D.symbols.map((s) => [s.key, s]));
   OP = Object.fromEntries(D.ops.map((o) => [o.key, o]));
   IDX = Object.fromEntries(D.indices.map((i) => [i.key, i]));
   GRP = Object.fromEntries(D.groups.map((g) => [g.path, g]));
-  PRODUCER = {}; CONSUMERS = {};
+  PRODUCER = {}; CONSUMERS = {}; CONTROLS = {};
   for (const o of D.ops) {
     o.outputs.forEach((s) => PRODUCER[s] = o.key);
     o.inputs.forEach((s) => (CONSUMERS[s] ??= []).push(o.key));
+    (o.condition_on ?? []).forEach((s) => (CONTROLS[s] ??= []).push(o.key));      // the steps a symbol decides on
   }
   // ops in dependency order, for the equations list
   const seen = new Set();
@@ -686,7 +736,7 @@ function reach() {
 function view(keep = reach()) {
   const hiddenOp = (o) => chain(o.group).some((g) => state.hidden.has(g)) || (keep && !keep.has("o:" + o.key));
   const collapsedAt = (o) => chain(o.group).find((g) => state.collapsed.has(g));
-  const nodes = new Map(), edges = new Map();
+  const nodes = new Map(), edges = new Map(), control = new Set();
   const rep = {};
   for (const o of D.ops) {
     if (hiddenOp(o)) continue;
@@ -704,7 +754,9 @@ function view(keep = reach()) {
   for (const s of D.symbols) {
     if (PARAM(s) && !state.settings) continue;
     if (keep && !keep.has("s:" + s.key)) continue;
-    const users = (CONSUMERS[s.key] ?? []).filter((k) => rep[k]).map((k) => rep[k]);
+    const data = (CONSUMERS[s.key] ?? []).filter((k) => rep[k]).map((k) => rep[k]);
+    const decides = (CONTROLS[s.key] ?? []).filter((k) => rep[k]).map((k) => rep[k]).filter((u) => !data.includes(u));
+    const users = [...data, ...decides];
     const made = PRODUCER[s.key] && rep[PRODUCER[s.key]];
     if (!made && !users.length) continue;
     if (made && made[0] === "g" && s.role !== "output" && users.every((u) => u === made)) continue;   // inside a collapsed group
@@ -714,6 +766,7 @@ function view(keep = reach()) {
         const container = containerOf(u), id = "s:" + s.key + "@" + container;
         nodes.set(id, {id, type: "sym", key: s.key, container});
         edges.set(id + ">" + u, [id, u]);
+        if (decides.includes(u)) control.add(id + ">" + u);
       }
       continue;
     }
@@ -721,12 +774,15 @@ function view(keep = reach()) {
     const container = made ? containerOf(made) : lca(users.map(containerOf));
     nodes.set(id, {id, type: "sym", key: s.key, container});
     if (made) edges.set(made + ">" + id, [made, id]);
-    for (const u of users) if (u !== made) edges.set(id + ">" + u, [id, u]);
+    for (const u of users) if (u !== made) {
+      edges.set(id + ">" + u, [id, u]);
+      if (decides.includes(u)) control.add(id + ">" + u);        // it decides whether the step is done
+    }
   }
   // groups shown expanded: those holding a visible node
   const open = new Set();
   for (const n of nodes.values()) chain(n.container).forEach((g) => open.add(g));
-  return {nodes, edges: [...edges.values()], open, rep};
+  return {nodes, edges: [...edges.values()], open, rep, control};
 }
 
 /* ---------- node contents ---------- */
@@ -736,14 +792,16 @@ function nodeHTML(n, fill = null) {
   if (n.type === "sym") {
     const s = SYM[n.key];
     const dims = s.dims.length ? `<div class="dims">${tex(dimsTex(s))}</div>` : s.value !== null ? `<div class="dims">= ${esc(s.value)}</div>` : "";
-    return box(`sym role-${s.role}${s.per ? " stack" : ""}`, tex(s.tex) + dims);
+    return box(`sym role-${s.role}${s.per ? " stack" : ""}`, symShown(s) + dims);
   }
   if (n.type === "op") {
     const o = OP[n.key];
     // only a problem is marked: a step whose equation check fails (a passing one shows in its side panel)
     const mark = o.verified === false ? `<span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
     const per = o.per ? `<span class="per">per ${tex(IDX[o.per]?.tex ?? o.per)}</span>` : "";
-    return box(`op${o.per ? " stack" : ""}`, esc(o.label) + per + mark);
+    // a step done only under a condition: dashed, with "if" (the condition in full in its side panel)
+    const cond = o.condition ? `<span class="cond" title="only when ${esc(o.condition)}">if</span>` : "";
+    return box(`op${o.per ? " stack" : ""}${o.condition ? " conditional" : ""}`, esc(o.label) + per + cond + mark);
   }
   const g = GRP[n.key], count = opsIn(n.key).length;
   return box("cg", `⊞ ${esc(g.label)}<div class="sub">${count} step${count === 1 ? "" : "s"} · double-click to open</div>`);
@@ -800,9 +858,14 @@ function laneView(lane, lin) {
     container.set(u, G(n.container));
     (items.get(u) ?? items.set(u, []).get(u)).push({n, w, h});
   }
-  for (const [a, b] of v.edges) if (map.get(a) !== map.get(b)) edges.set(map.get(a) + ">" + map.get(b), [map.get(a), map.get(b)]);
+  const control = new Set();                             // edges from a value that decides whether a step is done
+  for (const [a, b] of v.edges) {
+    if (map.get(a) === map.get(b)) continue;
+    edges.set(map.get(a) + ">" + map.get(b), [map.get(a), map.get(b)]);
+    if (v.control.has(a + ">" + b)) control.add(map.get(a) + ">" + map.get(b));
+  }
   for (const p of v.open) groups.set(G(p), {parent: G(parent(p)), path: p, head: heads[p] ?? 60});
-  return {lane, v, map, items, container, edges, groups};
+  return {lane, v, map, items, container, edges, groups, control};
 }
 async function render(fit = false, flash = false, changed = new Set()) {
   const before = flash && current && LANES.length === 1 ? new Set(current.v.nodes.keys()) : null;
@@ -919,7 +982,8 @@ function draw() {
     for (const e of paths) {
       if (!p.edges.has(e.from + ">" + e.to)) continue;
       const d = e.parts.map((pts) => "M" + pts.map(([px, py]) => `${px + dx},${py + dy}`).join(" L")).join(" ");
-      eLayer.append(svgEl("edge", `<path d="${d}" marker-end="url(#arrow)"/>`, {from: e.from, to: e.to, lane: lane.id}));
+      const decides = p.control.has(e.from + ">" + e.to);
+      eLayer.append(svgEl(decides ? "edge control" : "edge", `<path d="${d}" marker-end="url(#arrow)"/>${decides ? "<title>decides whether the step is done</title>" : ""}`, {from: e.from, to: e.to, lane: lane.id}));
     }
   });
   use(active);
@@ -1024,7 +1088,7 @@ function fitView(readable = false) {
   });
   window.addEventListener("pointerup", () => { panned = !!drag?.moved; drag = null; g.classList.remove("panning"); });
   // a press-and-drag pans: it must not select the nodes' text or drag it, nor count as a click where it ends
-  g.addEventListener("selectstart", (e) => { if (!(e.target.parentElement ?? e.target).closest("#results")) e.preventDefault(); });
+  g.addEventListener("selectstart", (e) => { if (!(e.target.parentElement ?? e.target).closest("#results, #gbar")) e.preventDefault(); });
   g.addEventListener("dragstart", (e) => e.preventDefault());
   g.addEventListener("click", (e) => { if (panned) { panned = false; e.stopPropagation(); } }, true);
   g.addEventListener("click", (e) => { if (e.target.closest(".node, .grp, #results")) return; if (state.sel && !state.focus) select(null); });
@@ -1049,6 +1113,148 @@ function selId(sel) {
   const c = chain(OP[sel.key].group).find((g) => state.collapsed.has(g));
   return c ? "g:" + L("group", c) : "o:" + L("op", sel.key);
 }
+// "From the code": the code's names as they are, or as short symbols (remembered in this browser)
+let codeNames = (() => { try { return localStorage.getItem("headway.codeNames") === "1"; } catch { return false; } })();
+// a symbol as shown: its TeX, or with Code names on, what the code calls it
+const symShown = (s) => codeNames ? `<span class="cname">${esc(s.code_name ?? s.key)}</span>` : tex(s.tex);
+function setCodeNames(on, fromPanel = false) {
+  codeNames = on;
+  $("codenames").checked = on;
+  try { localStorage.setItem("headway.codeNames", on ? "1" : "0"); } catch {}
+  const top = $("detail").scrollTop;
+  buildLegend();
+  render();
+  if (rs.view === "results") showResultDetail(); else showDetail(state.sel);
+  const d = fromPanel && $("detail").querySelector("details.fromcode");
+  if (d) d.open = true;                                 // it was open, to be clicked
+  $("detail").scrollTop = top;
+}
+$("codenames").checked = codeNames;
+$("codenames").addEventListener("change", (e) => setCodeNames(e.target.checked));
+$("detail").addEventListener("click", (e) => {
+  if (!e.target.classList?.contains("namesw")) return;
+  e.preventDefault();                                   // a click on the summary's button: not a fold
+  setCodeNames(!codeNames, true);
+});
+
+// a description still to be written: none, or a placeholder ("TODO", as headway init leaves it)
+const noDesc = (d) => !d || /^\s*TODO\b/i.test(d);
+// a description as shown: as written; or of a placeholder, only what it says of where the thing came from, muted
+// ("TODO (an axis named in the type hints of ...)" shows "an axis named in the type hints of ..."); else nothing
+function descHTML(d, block = "p") {
+  if (!noDesc(d)) return `<${block}${block === "div" ? ' class="d"' : ""}>${rich(d)}</${block}>`;
+  const rest = String(d ?? "").replace(/^\s*TODO\b[.:]?\s*/i, "").replace(/^\((.*)\)$/s, "$1").trim();
+  return rest ? `<${block} class="${block === "div" ? "d " : ""}origin">${esc(rest)}</${block}>` : "";
+}
+
+/* ---------- find ---------- */
+// names compared without case, with "_" and spaces alike (a step's key shrunk_logits, its label "shrunk logits")
+const findNorm = (x) => String(x ?? "").toLowerCase().replace(/[_\s]+/g, " ").trim();
+function findMatches(q) {
+  // node id -> "exact" (a name is the query) or "part" (a name holds it). A match hidden in a collapsed group
+  // marks the group, with the best match inside it
+  const out = new Map();
+  if (!q) return out;
+  const grade = (...names) => { const ns = names.map(findNorm).filter(Boolean); return ns.includes(q) ? "exact" : ns.some((n) => n.includes(q)) ? "part" : null; };
+  const put = (id, g) => { if (id && g && out.get(id) !== "exact") out.set(id, g); };
+  const shown = (id) => id && document.querySelector(`#vp [data-id="${CSS.escape(id)}"], #vp [data-id^="${CSS.escape(id)}@"]`);
+  for (const o of Object.values(OP)) put(selId({type: "op", key: o.key}), grade(o.key, o.label));
+  for (const s of Object.values(SYM)) {
+    const g = grade(s.key, s.name);
+    const id = selId({type: "sym", key: s.key});
+    put(shown(id) || !PRODUCER[s.key] ? id : selId({type: "op", key: PRODUCER[s.key]}), g);    // in a collapsed group
+  }
+  for (const gr of Object.values(GRP)) put(selId({type: "group", key: gr.path}), grade(gr.label, gr.path.split("/").pop()));
+  return out;
+}
+let findAt = -1;                                        // the match jumped to (in reading order), -1 none
+function boxIn(el) {
+  // an element's box in the graph's own coordinates (a lane's nodes sit in a moved group of their own)
+  const m = $("vp").getScreenCTM().inverse().multiply(el.getScreenCTM()), b = el.getBBox();
+  const a = new DOMPoint(b.x, b.y).matrixTransform(m), c = new DOMPoint(b.x + b.width, b.y + b.height).matrixTransform(m);
+  return {x: a.x, y: a.y, w: c.x - a.x, h: c.y - a.y};
+}
+function applyFind() {
+  const q = findNorm($("find").value);
+  const found = findMatches(q);
+  const grade = (id) => found.get(id) ?? found.get(String(id).split("@")[0]);
+  $("findlayer")?.remove();
+  const layer = document.createElementNS("http://www.w3.org/2000/svg", "g");
+  layer.id = "findlayer";
+  const hits = [];
+  document.querySelectorAll("#vp .node, #vp .grp").forEach((el) => {
+    const g = q ? grade(el.dataset.id) : undefined;
+    const shown = g && (g === "exact" || !$("findexact").checked);
+    el.classList.toggle("unfound", !!q && !shown && el.classList.contains("node"));
+    if (g) hits.push([el, g]);
+  });
+  // reading order: along the layout's direction first
+  const down = state.dir === "DOWN";
+  if ($("findexact").checked) hits.splice(0, hits.length, ...hits.filter(([, g]) => g === "exact"));
+  hits.sort(([a], [b]) => { const p = boxIn(a), r = boxIn(b); return down ? p.y - r.y || p.x - r.x : p.x - r.x || p.y - r.y; });
+  if (findAt >= hits.length) findAt = -1;
+  hits.forEach(([el, g], k) => {
+    const b = boxIn(el), pad = el.classList.contains("grp") ? 0 : 4;
+    const r = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    r.setAttribute("x", b.x - pad); r.setAttribute("y", b.y - pad);
+    r.setAttribute("width", b.w + 2 * pad); r.setAttribute("height", b.h + 2 * pad); r.setAttribute("rx", 6);
+    r.setAttribute("class", (g === "part" ? "part" : "") + (k === findAt ? " at" : ""));
+    layer.append(r);
+  });
+  $("vp").append(layer);
+  document.querySelectorAll("#vp .edge").forEach((el) => el.classList.toggle("unfound", !!q));
+  const c = $("findcount");
+  c.hidden = !q;
+  $("findnav").hidden = !hits.length;
+  c.textContent = !hits.length ? "no match" : findAt >= 0 ? `${findAt + 1} of ${hits.length}` :
+    `${hits.length} match${hits.length === 1 ? "" : "es"}`;
+  return hits;
+}
+function viewBoxes(boxes, most) {
+  // the boxes in the middle of the graph's view, at most `most` times life size
+  const x0 = Math.min(...boxes.map((b) => b.x)), y0 = Math.min(...boxes.map((b) => b.y));
+  const x1 = Math.max(...boxes.map((b) => b.x + b.w)), y1 = Math.max(...boxes.map((b) => b.y + b.h));
+  const g = $("graph").getBoundingClientRect(), top = $("gbar").offsetHeight + 8;
+  T.k = Math.min(most, (g.width - 80) / Math.max(x1 - x0, 1), (g.height - top - 80) / Math.max(y1 - y0, 1));
+  T.x = (g.width - (x1 - x0) * T.k) / 2 - x0 * T.k;
+  T.y = top + (g.height - top - (y1 - y0) * T.k) / 2 - y0 * T.k;
+  applyT();
+}
+function findAll() {
+  const hits = applyFind();
+  if (!hits.length) return;
+  findAt = -1;
+  viewBoxes(hits.map(([el]) => boxIn(el)), 1.4);
+  applyFind();
+}
+function findStep(by) {
+  // to the next (by = 1) or previous (-1) match: in view, at a readable size, and selected
+  const hits = applyFind();
+  if (!hits.length) return;
+  findAt = findAt < 0 ? (by > 0 ? 0 : hits.length - 1) : (findAt + by + hits.length) % hits.length;
+  const [el] = hits[findAt];
+  viewBoxes([boxIn(el)], Math.min(1.4, Math.max(T.k, 0.9)));
+  el.dispatchEvent(new MouseEvent("click", {bubbles: true}));        // as if clicked: its panel, in its lane
+  applyFind();
+}
+$("find").addEventListener("input", () => { findAt = -1; applyFind(); });
+$("find").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    findStep(e.key === "ArrowUp" || e.key === "Enter" && e.shiftKey ? -1 : 1);
+  }
+  if (e.key === "Escape") { $("find").value = ""; findAt = -1; applyFind(); $("find").blur(); }
+});
+$("findprev").addEventListener("click", () => findStep(-1));
+$("findnext").addEventListener("click", () => findStep(1));
+$("findall").addEventListener("click", findAll);
+$("findexact").addEventListener("change", () => { findAt = -1; applyFind(); $("find").focus(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !e.target.closest?.("input, textarea, [contenteditable]") && !document.body.classList.contains("resultsview")) {
+    e.preventDefault(); $("find").focus(); $("find").select();
+  }
+});
+
 function highlight() {
   const sid = selId(state.sel);
   const is = (id) => !!sid && (id === sid || id.startsWith(sid + "@"));
@@ -1063,6 +1269,7 @@ function highlight() {
     el.classList.toggle("hl", rel.has(el.dataset.ref));
     el.classList.toggle("sel", !!state.sel && el.dataset.ref === (state.sel.type === "op" ? "o:" : state.sel.type === "sym" ? "s:" : "G:") + state.sel.key);
   });
+  applyFind();
 }
 function select(sel) {
   state.sel = sel;
@@ -1097,7 +1304,7 @@ const pen = (decl, field, what) => {
   const [line, col] = decl.fields?.[field] ?? [decl.line, decl.col];
   return `<a class="pen" href="${editorURL(decl.file, line, col)}" title="edit ${esc(what)} in the spec (${esc(decl.relpath)}:${line})">✎</a>`;
 };
-const symChip = (k) => `<span class="chip" data-go="sym:${esc(k)}">${tex(SYM[k]?.tex ?? k)}</span>`;
+const symChip = (k) => `<span class="chip" data-go="sym:${esc(k)}">${SYM[k] ? symShown(SYM[k]) : esc(k)}</span>`;
 const opChip = (k) => `<span class="chip op" data-go="op:${esc(k)}">${esc(OP[k].label)}</span>`;
 // tree-sitter's name for a language -> highlight.js's (null: shown plain)
 const HL = {snakemake: "python", nextflow: "groovy", tsx: "typescript", c_sharp: "csharp", commonlisp: "lisp"};
@@ -1133,21 +1340,51 @@ function showDetail(sel) {
   if (sel.type === "op") {
     const o = OP[sel.key];
     h += `<h2>${esc(o.label)}${pen(o.decl, "label", "the label")}</h2><div class="crumb">${esc(o.group || "top level")}${o.per ? " · once per " + tex(IDX[o.per]?.tex ?? o.per) + " (" + esc(IDX[o.per]?.name ?? "") + ")" : ""}</div>`;
-    h += declHTML(o.decl);
+    // what it is: the spec's description, else the code's own words (its docstring or comments)
+    if (!noDesc(o.desc)) h += `<p>${rich(o.desc)}${pen(o.decl, "desc", "the description")}</p>`;
+    else if (o.code_doc) h += `<p class="codedoc" title="from the code's docstring or comments, until the spec describes the step">${esc(o.code_doc)}${pen(o.decl, "desc", "the description")}</p>`;
     if (o.tex) h += `<div class="eq">${tex(o.tex, true)}${pen(o.decl, "tex", "the equation")}</div>`;
     h += whereHTML(o, pen(o.decl, "where", "the definitions"));
-    if (o.desc) h += `<p>${rich(o.desc)}${pen(o.decl, "desc", "the description")}</p>`;
+    // a specification: what the step's code says its result is (an objective it maximizes, an equation it solves),
+    // with whether the algorithm (below) bore it out on a run's calls
+    const views = o.relation_views ?? [], spec = views.filter((r) => r.tex), standsFor = views.filter((r) => !r.tex);
+    const verb = {maximizes: ["maximize", "maximizes"], minimizes: ["minimize", "minimizes"], solves: ["solve", "solves"], equals: ["give the same as", "gives the same as"], approximates: ["approximate", "approximates"]};
+    // one sentence: whether a run's traced calls bore it out (the command and when, on hover)
+    const status = (r, subject, object, one) => {
+      const e = r.evidence, [base, third] = verb[r.kind] ?? [r.kind, r.kind];
+      if (!e) return `<div class="status unchecked">○ not checked yet: whether ${subject} ${base} ${object}</div>`;
+      const ok = e.passed === e.calls, when = `checked by ${e.run}, ${e.when}`;
+      return ok ? `<div class="status held" title="${esc(when)}">✓ ${subject} ${one ? third : base} ${object} on all ${e.calls} traced calls</div>`
+        : `<div class="status failed" title="${esc(when)}">✗ ${subject} ${one ? "does" : "do"} not ${base} ${object}: on ${e.calls - e.passed} of ${e.calls} traced calls, ${esc(e.detail)}</div>`;
+    };
+    if (spec.length) {
+      h += `<h3>Specification</h3>` + spec.map((r) => `<div class="eq spec">${tex(r.block ?? r.tex, true)}${r.about ? `<div class="about">${esc(r.about)}</div>` : ""}${status(r, "the algorithm's results", "it", false)}</div>`).join("");
+    }
+    if (o.code_tex) {
+      const named = codeNames && o.code_tex_names;
+      const note = `the code of its first reference, written as math: ${named ? "its names as the code has them" : "its names as the graph's symbols, the others as short symbols"}${D.hints ? "; its type hints taken as assumptions (a number is a scalar; named axes are indices)" : ""}`;
+      // whether the math shown computes what the code does: run on a checking run's calls (headway trace)
+      const m = o.math_check, whose = m?.part ? ` (as part of <code>${esc(m.function)}</code>)` : "";
+      const mathStatus = !m ? "" : m.passed === m.calls
+        ? `<div class="status held" title="${esc(`checked by ${m.run}, ${m.when}: ${m.detail}`)}">✓ this math computes what the code computes${whose}, on all ${m.calls} traced calls</div>`
+        : `<div class="status failed" title="${esc(`checked by ${m.run}, ${m.when}`)}">✗ this math does not compute what the code computes${whose}: on ${m.calls - m.passed} of ${m.calls} traced calls, ${esc(m.detail)}</div>`;
+      h += `${spec.length ? "<h3>Algorithm</h3>" : ""}<details class="fromcode"${o.tex ? "" : " open"}><summary title="${esc(note)}">${spec.length ? "as the code computes it" : "from the code"} <button class="namesw" title="write the code's names as the code has them, or as short symbols">${named ? "short symbols" : "code names"}</button></summary><div class="eq">${tex(named ? o.code_tex_names : o.code_tex, true)}${(o.code_about ?? []).map((a) => `<div class="about">${rich(a.text)}</div>`).join("")}${mathStatus}</div></details>`;
+    }
     h += `<h3>Inputs${pen(o.decl, "inputs", "the inputs")}</h3><div class="chips">${o.inputs.map(symChip).join("") || "<span class='empty'>none</span>"}</div>`;
     h += `<h3>Outputs${pen(o.decl, "outputs", "the outputs")}</h3><div class="chips">${o.outputs.map(symChip).join("")}</div>`;
-    h += `<h3>Code${pen(o.decl, "code", "the code references")}</h3>${codeHTML(o.code) || "<span class='empty'>no reference</span>"}`;
+    // the code, and the code it stands for (a clean version of an original: whether they give the same)
+    h += `<h3>Code${pen(o.decl, "code", "the code references")}</h3>`;
+    h += standsFor.map((r) => status(r, "this code", `<code>${esc(r.target ?? "")}</code>`, true)).join("");
+    h += codeHTML(o.code) || "<span class='empty'>no reference</span>";
+    h += declHTML(o.decl);
   } else if (sel.type === "sym") {
     const s = SYM[sel.key];
-    h += `<h2>${tex(s.tex)} &nbsp;${esc(s.name)}${pen(s.decl, "tex", "the symbol")}</h2><div class="crumb">${esc(s.role)} · ${esc(s.kind)}${s.dims.length ? " · " + tex(dimsTex(s)) + " (" + esc(shapeText(s)) + ")" : ""}${s.per ? " · one per " + tex(IDX[s.per]?.tex ?? s.per) : ""}</div>`;
+    h += `<h2>${symShown(s)} &nbsp;${esc(s.name)}${pen(s.decl, "tex", "the symbol")}</h2><div class="crumb">${esc(s.role)} · ${esc(s.kind)}${s.dims.length ? " · " + tex(dimsTex(s)) + " (" + esc(shapeText(s)) + ")" : ""}${s.per ? " · one per " + tex(IDX[s.per]?.tex ?? s.per) : ""}</div>`;
     h += declHTML(s.decl);
     if (s.value !== null) h += `<p>Default: <code>${esc(s.value)}</code></p>`;
     const perDs = (D.suite?.datasets ?? []).filter((d) => d.values && s.key in d.values);
     if (perDs.length) h += `<h3>By dataset</h3><table class="wts">${perDs.map((d) => `<tr data-ds="${esc(d.key)}" style="cursor:pointer"><td>${esc(d.name)}${d.heldout ? " (held out)" : ""}</td><td><code>${esc(d.values[s.key])}</code></td></tr>`).join("")}</table>`;
-    if (s.desc) h += `<p>${rich(s.desc)}${pen(s.decl, "desc", "the description")}</p>`;
+    h += descHTML(s.desc).replace(/<\/p>$/, `${pen(s.decl, "desc", "the description")}</p>`);
     if (PRODUCER[s.key]) h += `<h3>Made by</h3><div class="chips">${opChip(PRODUCER[s.key])}</div>`;
     if (CONSUMERS[s.key]) h += `<h3>Used by</h3><div class="chips">${CONSUMERS[s.key].map(opChip).join("")}</div>`;
     if (s.code.length) h += `<h3>Code${pen(s.decl, "code", "the code references")}</h3>${codeHTML(s.code)}`;
@@ -1156,7 +1393,7 @@ function showDetail(sel) {
     const g = GRP[sel.key];
     const isOpen = !state.collapsed.has(sel.key);
     h += `<h2>${esc(g.label)}${pen(g.decl, "label", "the label")}</h2><div class="crumb">group · ${esc(sel.key)}</div>` + declHTML(g.decl);
-    if (g.desc) h += `<p>${rich(g.desc)}${pen(g.decl, "desc", "the description")}</p>`;
+    h += descHTML(g.desc).replace(/<\/p>$/, `${pen(g.decl, "desc", "the description")}</p>`);
     h += `<p><button id="gtoggle">${isOpen ? "Collapse" : "Expand"}</button> <button id="ghide">Hide</button></p>`;
     h += `<h3>Steps</h3><div class="chips">${ORDER.filter((k) => within(OP[k].group, sel.key)).map(opChip).join("")}</div>`;
   }
@@ -1177,7 +1414,7 @@ function showDetail(sel) {
   $("ghide")?.addEventListener("click", () => { state.hidden.add(sel.key); buildGroupsMenu(); select(null); render(); });
 }
 /* ---------- the selection across versions ---------- */
-const symLabel = (lane, k) => { const x = lane.D.symbols.find((y) => y.key === k); return x ? tex(x.tex) : esc(k); };
+const symLabel = (lane, k) => { const x = lane.D.symbols.find((y) => y.key === k); return x ? symShown(x) : esc(k); };
 function versionsHTML(sel) {
   if (LANES.length < 2 || !current || sel.type === "spec") return "";
   const kind = sel.type, mem = current.lin.members(kind, current.lin.of(active.id, kind, sel.key));
@@ -1506,6 +1743,7 @@ function askPrompt(sel, request) {
       `- description: ${obj.desc || "(none)"}`,
       `- inputs: ${obj.inputs.map(symText).join("; ") || "(none)"}`, `- outputs: ${obj.outputs.map(symText).join("; ")}`,
       `- group: ${obj.group || "(top level)"}${obj.per ? `; done once per ${obj.per} (${IDX[obj.per]?.name ?? ""})` : ""}`,
+      ...(obj.condition ? [`- done only when: ${obj.condition}`] : []),
       `- equation check (@G.verify): ${obj.verified === null ? "none covers this step" : obj.verify_msg.split("\n")[0]}`);
     if (explain) L.push(
       `- its inputs come from: ${obj.inputs.map((k) => `${k}: ${PRODUCER[k] ? `the step "${OP[PRODUCER[k]].label}"` : `the ${SYM[k]?.role ?? "data"}`}`).join("; ") || "(none)"}`,
@@ -1535,13 +1773,13 @@ function askPrompt(sel, request) {
 
 /* ---------- legend ---------- */
 function buildLegend() {
-  $("indices").innerHTML = D.indices.map((i) => `<tr><td class="tex">${tex(i.tex)}</td><td><span class="name">${esc(i.name)}</span>${i.desc ? `<div class="d">${rich(i.desc)}</div>` : ""}</td><td class="act">${pen(i.decl, "tex", "the index")}</td></tr>`).join("");
+  $("indices").innerHTML = D.indices.map((i) => `<tr><td class="tex">${tex(i.tex)}</td><td><span class="name">${esc(i.name)}</span>${descHTML(i.desc, "div")}</td><td class="act">${pen(i.decl, "tex", "the index")}</td></tr>`).join("");
   const roles = [["input", "Data"], ["setting", "Settings (configurable)"], ["constant", "Constants (fixed in the code)"], ["value", "Intermediate values"], ["output", "Results"]];
   $("symbols").innerHTML = roles.map(([role, title]) => {
     const rows = D.symbols.filter((s) => s.role === role);
     if (!rows.length) return "";
     return `<tr class="rolehead"><td colspan="4">${title}</td></tr>` + rows.map((s) =>
-      `<tr data-ref="s:${esc(s.key)}" data-go="sym:${esc(s.key)}"><td class="tex">${tex(s.tex)}</td><td class="shape">${s.dims.length ? tex(dimsTex(s)) : s.value !== null ? `= ${esc(s.value)}` : D.suite?.datasets.some((d) => d.values && s.key in d.values) ? "per dataset" : ""}${s.per ? `<div>per ${tex(IDX[s.per]?.tex ?? s.per)}</div>` : ""}</td><td><span class="name">${esc(s.name)}</span>${s.desc ? `<div class="d">${rich(s.desc)}</div>` : ""}</td><td class="act">${pen(s.decl, "tex", "the symbol")}</td></tr>`).join("");
+      `<tr data-ref="s:${esc(s.key)}" data-go="sym:${esc(s.key)}"><td class="tex">${symShown(s)}</td><td class="shape">${s.dims.length ? tex(dimsTex(s)) : s.value !== null ? `= ${esc(s.value)}` : D.suite?.datasets.some((d) => d.values && s.key in d.values) ? "per dataset" : ""}${s.per ? `<div>per ${tex(IDX[s.per]?.tex ?? s.per)}</div>` : ""}</td><td><span class="name">${esc(s.name)}</span>${descHTML(s.desc, "div")}</td><td class="act">${pen(s.decl, "tex", "the symbol")}</td></tr>`).join("");
   }).join("");
   const ds = D.suite?.datasets ?? [];
   $("dshead").hidden = !ds.length;
@@ -1556,7 +1794,7 @@ function buildLegend() {
     const o = OP[k];
     if (o.group !== last) { h += `<div class="eqgroup" data-ref="G:${esc(o.group)}">${esc(o.group ? o.group.split("/").map((p, n, a) => GRP[a.slice(0, n + 1).join("/")]?.label ?? p).join(" › ") : "top level")}</div>`; last = o.group; }
     const mark = o.verified === false ? ` <span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
-    h += `<div class="eqrow" data-ref="o:${esc(k)}" data-go="op:${esc(k)}"><div class="lbl">${esc(o.label)}${mark}${o.per ? `<div class="d">per ${tex(IDX[o.per]?.tex ?? o.per)}</div>` : ""}</div><div>${o.tex ? `<div class="math">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}${o.desc ? `<div class="d">${rich(o.desc)}</div>` : ""}</div><div class="act">${pen(o.decl, "tex", "the equation")}</div></div>`;
+    h += `<div class="eqrow" data-ref="o:${esc(k)}" data-go="op:${esc(k)}"><div class="lbl">${esc(o.label)}${mark}${o.per ? `<div class="d">per ${tex(IDX[o.per]?.tex ?? o.per)}</div>` : ""}${o.condition ? `<div class="d">only when ${o.condition_tex ? tex(o.condition_tex) : `<code>${esc(o.condition)}</code>`}</div>` : ""}</div><div>${o.tex ? `<div class="math">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}${!noDesc(o.desc) ? `<div class="d">${rich(o.desc)}</div>` : o.code_doc ? `<div class="d codedoc">${esc(o.code_doc)}</div>` : ""}</div><div class="act">${pen(o.decl, "tex", "the equation")}</div></div>`;
   }
   $("equations").innerHTML = h;
   document.querySelectorAll("#legend [data-go]").forEach((el) => el.addEventListener("click", () => {
@@ -1661,6 +1899,7 @@ function compareObj(kind, o, n, A, B, lin) {
     const grp = (lane, path) => path ? lin.of(lane.id, "group", path) : "";
     if (grp(A, o.group) !== grp(B, n.group)) note("structure", {field: "group", a: o.group || "(top level)", b: n.group || "(top level)"});
     if (!same(o.per, n.per)) note("structure", {field: "per", a: o.per, b: n.per});
+    if ((o.condition ?? "") !== (n.condition ?? "")) note("structure", {field: "condition", a: o.condition || "(always)", b: n.condition || "(always)"});
     if (normTex(o.tex) !== normTex(n.tex)) note("equation", {field: "tex", a: o.tex, b: n.tex});
     if (!same(o.verified, n.verified)) note("check", {field: "verified", a: o.verified, b: n.verified});
     for (const f of ["label", "desc"]) if (!same(o[f], n[f])) note("wording", {field: f, a: o[f], b: n[f]});
@@ -2430,6 +2669,7 @@ function header(buildError = "") {
   $("desc").hidden = !D.desc;
   requestAnimationFrame(descFit);
   $("meta").innerHTML = (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span> · ` : "") +
+    (D.live && D.draft ? `<button id="redraft" title="draft this spec again from the code, as headway init ${esc(D.draft.entry)} --depth ${esc(D.draft.depth ?? 2)} did">Redraft</button> · ` : "") +
     `built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}`;
   $("checks").innerHTML = buildError
     ? `<div class="checks"><b>The rebuild failed</b> (this is the last good build): ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
@@ -2465,6 +2705,19 @@ $("split").onchange = (e) => {
   note(state.split ? "Each input is drawn next to every group that uses it" : "One node per input, with edges across the graph");
 };
 let noteTimer;
+async function redraftSpec(force = false) {
+  // the spec drafted again from the code (headway redraft); the live rebuild then brings the new graph in
+  const r = await fetch("redraft", {method: "POST", headers: {"X-Headway": "1", "Content-Type": "application/json"},
+                                    body: JSON.stringify({force})});
+  const got = await r.json().catch(() => ({error: `${r.status} ${r.statusText}`}));
+  if (r.status === 409 && got.edited) {
+    if (confirm("This spec has been edited since it was drafted. Drafting it again from the code replaces those edits; the edited version is kept beside it, as .bak.\n\nRedraft it anyway?")) redraftSpec(true);
+    return;
+  }
+  note(got.ok ? `Redrafted${got.backup ? "; the edited version is kept as " + got.backup.split(/[\\/]/).pop() : ""}. Rebuilding…` : "Redraft failed: " + (got.error ?? "unknown"));
+}
+$("meta").addEventListener("click", (e) => { if (e.target.id === "redraft") redraftSpec(); });
+
 function note(text) {
   const el = $("note");
   el.textContent = text;
@@ -2544,9 +2797,11 @@ function update(next) {
 }
 function live() {
   let version = D.version;                          // the build this page holds
+  const boot = D.boot;                              // the server process it came from (D is replaced on rebuilds)
   const events = new EventSource("events");
   events.onmessage = async (e) => {
     const st = JSON.parse(e.data);
+    if (st.boot && boot && st.boot !== boot) { location.reload(); return; }       // headway itself was restarted
     $("live")?.classList.replace("off", "on");
     if (st.version === version) return;
     version = st.version;

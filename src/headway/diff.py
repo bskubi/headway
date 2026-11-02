@@ -195,6 +195,8 @@ def _compare(kind: str, o: dict[str, Any], n: dict[str, Any], a: int, b: int, sy
             note("structure", f"moved from group {o['group'] or '(top level)'} to {n['group'] or '(top level)'}")
         if o.get("per") != n.get("per"):
             note("structure", f"per: {o.get('per')} -> {n.get('per')}")
+        if o.get("condition", "") != n.get("condition", ""):
+            note("structure", f"condition: {o.get('condition') or '(always)'} -> {n.get('condition') or '(always)'}")
         if _tex(o["tex"]) != _tex(n["tex"]):
             note("equation", f"equation: {o['tex']}\n       -> {n['tex']}")
         if o.get("verified") != n.get("verified"):

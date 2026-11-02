@@ -56,7 +56,10 @@ class Op:
     per: str | None = None
     bind: dict[str, str] = field(default_factory=dict)     # code name -> symbol key, for the shape trace
     where: list[tuple[str, str]] = field(default_factory=list)  # (TeX, definition): symbols used only in this step
+    names: dict[str, dict[str, str]] = field(default_factory=dict)  # code name -> {"symbol": key} or {"tex": TeX}
     was: list[str] = field(default_factory=list)            # earlier keys, for comparing versions (diff.py)
+    condition: str = ""                 # when it is done: a Python expression of symbols ("correct"); "": always
+    relations: list[dict[str, Any]] = field(default_factory=list)   # what it computes: headway.clean's declarations
 
 
 @dataclass
@@ -95,10 +98,18 @@ class Headway:
     `was` (on symbols, settings, constants, steps and groups) names the keys an object had in earlier versions of
     the spec, so that comparing versions (`headway diff`, the viewer's lanes) matches it across a rename. Several
     keys: renamed more than once, or several earlier objects merged into this one; the same earlier key on several
-    objects: one object split into these."""
+    objects: one object split into these.
 
-    def __init__(self, title: str, desc: str = ""):
+    `draft`: for a spec drafted from the code by `headway init`, its arguments ({"entry": "pkg.mod:func", "depth":
+    2}), so that it can be drafted again (`headway redraft`, the live viewer's Redraft).
+
+    `hints`: take the code's type hints as assumptions where the code is written as math ("From the code"): a
+    parameter or variable annotated as a number is a scalar (k p, not k ⊙ p)."""
+
+    def __init__(self, title: str, desc: str = "", *, draft: dict[str, Any] | None = None, hints: bool = False):
         self.title, self.desc = title, desc
+        self.draft = draft
+        self.hints = hints
         self.indices: dict[str, Index] = {}
         self.symbols: dict[str, Symbol] = {}
         self.ops: dict[str, Op] = {}
@@ -135,15 +146,28 @@ class Headway:
     def op(self, key: str, label: str, tex: str = "", desc: str = "", *, inputs: Sequence[SymbolLike] = (),
            outputs: Sequence[SymbolLike] = (), code: str | Iterable[str] = (), group: str = "",
            per: IndexLike | None = None, bind: dict[str, SymbolLike] | None = None,
-           where: dict[str, str] | None = None, was: str | Iterable[str] = ()) -> Op:
+           where: dict[str, str] | None = None, names: dict[str, Symbol | str] | None = None,
+           was: str | Iterable[str] = (), condition: str = "",
+           relations: Sequence[dict[str, Any]] = ()) -> Op:
         r"""`where` defines symbols the equation uses that are not values of the graph, as a paper would after the
         equation: {TeX: definition}, e.g. {r"\mu_f": "mean of $x_{if}$ over the learning cells"}. A value another
-        step also uses is better declared as a symbol and listed in both steps' inputs or outputs."""
+        step also uses is better declared as a symbol and listed in both steps' inputs or outputs.
+        `names` says how to write the code's names when its code is written as math ("From the code", codetex.py):
+        {code name: a symbol (its TeX and indices) or TeX}, e.g. {"z": z, "pseudo": r"\kappa", "return": out}.
+        The names in `bind` are written as their symbols too.
+        `condition`: when the step is done, if not always: a Python expression whose names are symbol keys,
+        "correct" (a setting that is True), "not correct", "mode == 'exact'"; written as math in the viewer.
+        `relations`: what the step's code declares it computes (headway.clean: {"kind": "maximizes", "target":
+        "pkg.mod:objective", "over": ["b", "d"], "subject_to": [...]}, or "solves", "equals", "approximates"); drafted
+        from the code's decorators. The viewer writes the target as math, beside the algorithm, with what a run's
+        checks found."""
         assert key not in self.ops, f"op {key!r} declared twice"
         self.ops[key] = o = Op(key, label, tex, desc, list(map(_key, inputs)), list(map(_key, outputs)),
                                _refs(code), group, None if per is None else _key(per),
                                {k: _key(v) for k, v in (bind or {}).items()}, list((where or {}).items()),
-                               _refs(was))
+                               {k: {"tex": v} if isinstance(v, str) else {"symbol": _key(v)}
+                                for k, v in (names or {}).items()},
+                               _refs(was), condition, [dict(r) for r in relations])
         self.declared["op:" + key] = _caller()
         return o
 

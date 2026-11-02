@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from headway import api, page
-from headway.serve import Handler, Server, run
+from headway.serve import Handler, Server, boot_events, run
 
 SKIP = {".git", ".hg", ".venv", "venv", "env", "node_modules", "__pycache__", "site-packages", "dist", "build",
         ".tox", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
@@ -228,6 +228,8 @@ class Home:
                 h.send(f.read_bytes(), "application/json" if f.suffix == ".json" else "text/html")
             elif path.startswith("/live/"):
                 self.serve_live(h, path[len("/live/"):], q.get("open", []))
+            elif path == "/api/events":                             # which server this is: a page that finds
+                boot_events(h)                                      # another (headway restarted) reloads
             else:
                 h.send("not found", "text/plain", 404)
         except FileNotFoundError as e:
@@ -255,6 +257,17 @@ class Home:
         self.remember(good)
         h.send(page.html(d | {"opened": str(good[0])} | ({"lanes": lanes} if lanes else {}),
                          library=self.library()), "text/html")
+
+    def post(self, h: Handler, target: str) -> None:
+        """A POST to a live spec (/live/SPEC.py/redraft), passed to its server."""
+        path = urllib.parse.unquote(urllib.parse.urlsplit(target).path)
+        rel, dot, sub = path.removeprefix("/live/").partition(".py")
+        f = self.path(rel + dot) if path.startswith("/live/") and dot else None
+        server = self.server(f) if f else None
+        if server is None:
+            h.send("not found", "text/plain", 404)
+            return
+        server.post(h, sub)
 
     def serve_live(self, h: Handler, rest: str, opened: list[str]) -> None:
         rel, dot, sub = rest.partition(".py")
@@ -296,6 +309,10 @@ class Home:
             def do_GET(self) -> None:
                 if self.local():
                     home.get(self, self.path)
+
+            def do_POST(self) -> None:
+                if self.writable():
+                    home.post(self, self.path)
         return Library
 
     def run(self, port: int = 8765, open_browser: bool = False, spec: str | None = None,

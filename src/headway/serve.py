@@ -6,6 +6,9 @@ failed rebuild leaves the last good graph up, with the error over it.
 
 Watched: every .py file under the spec's top-level package (or the spec file alone, outside a package), and every
 file the last build's code references and declarations point to.
+
+headway's own source is watched too (an editable install, while headway itself is being changed): when it changes,
+the server restarts itself in place (same command, same port), once the new code imports, and the open pages reload.
 """
 from __future__ import annotations
 
@@ -28,6 +31,7 @@ from headway import page
 
 POLL = 0.4          # seconds between looks at the files
 QUIET = 0.3         # seconds of no further change before rebuilding
+BOOT = f"{os.getpid()}-{time.time_ns()}"   # this server process: a page that finds another one reloads
 
 
 class Server:
@@ -129,7 +133,7 @@ class Server:
             seen = now | {f: st for f, st in stamps().items() if f not in now}
 
     def state(self) -> dict[str, Any]:
-        return {"version": self.version, "ok": not self.error, "error": self.error}
+        return {"version": self.version, "ok": not self.error, "error": self.error, "boot": BOOT}
 
     # ---------- serving ----------
     def get(self, h: Handler, path: str) -> None:
@@ -145,12 +149,45 @@ class Server:
         else:
             h.send("not found", "text/plain", 404)
 
+    def post(self, h: Handler, path: str) -> None:
+        """Answer a POST: /redraft, the spec drafted again from the code with its headway init arguments (the
+        rebuild follows, as for any change). A spec edited since it was drafted: 409, unless {"force": true}."""
+        if path != "/redraft":
+            h.send("not found", "text/plain", 404)
+            return
+        from headway.draft import DraftEdited, DraftError, redraft
+        try:
+            force = bool(json.loads(h.body() or "{}").get("force"))
+            file = self.file()
+            backup = redraft(file, force=force)
+        except DraftEdited as e:
+            h.send(json.dumps({"edited": True, "message": str(e)}), "application/json", 409)
+            return
+        except (DraftError, OSError, ValueError) as e:
+            h.send(json.dumps({"error": str(e)}), "application/json", 400)
+            return
+        kept = f" (the edited one kept as {backup})" if backup else ""
+        print(f"[{time.strftime('%H:%M:%S')}] redrafted {file}{kept}", file=sys.stderr)
+        h.send(json.dumps({"ok": True, "file": str(file), "backup": str(backup) if backup else None}),
+               "application/json")
+
+    def file(self) -> Path:
+        """The spec's file."""
+        sys.path.insert(0, self.cwd)
+        try:
+            found = importlib.util.find_spec(self.spec.partition(":")[0])
+        finally:
+            sys.path.remove(self.cwd)
+        if not found or not found.origin:
+            raise ValueError(f"no file for {self.spec}")
+        return Path(found.origin)
+
     def page(self, lanes: Sequence[dict[str, Any]] = (), library: dict[str, Any] | None = None) -> str:
         """The live page: the last good build, with more versions in lanes (and, served from the library, what
         the viewer needs to show it); before a first good build, the error."""
         if self.data is None:
             return _waiting(self.error)
-        d = self.data | ({"lanes": [*self.data.get("lanes", []), *lanes]} if lanes else {})
+        d = self.data | {"boot": BOOT} | ({"lanes": [*self.data.get("lanes", []), *lanes]} if lanes else {})
         return page.html(d, library=library)
 
     def events(self, h: Handler) -> None:
@@ -182,6 +219,10 @@ class Server:
             def do_GET(self) -> None:
                 if self.local():
                     server.get(self, self.path.split("?")[0])
+
+            def do_POST(self) -> None:
+                if self.writable():
+                    server.post(self, self.path.split("?")[0])
         return One
 
     def start(self) -> None:
@@ -214,6 +255,24 @@ class Handler(BaseHTTPRequestHandler):
         self.send("only requests to 127.0.0.1 or localhost are answered", "text/plain", 403)
         return False
 
+    def writable(self) -> bool:
+        """May this request change files (a POST)? Only from headway's own pages: addressed here by name, with
+        headway's header (which a page of another site cannot add without asking, and is not asked), and, if the
+        browser says where it comes from, from here."""
+        if not self.local():
+            return False
+        origin = self.headers.get("Origin")
+        port = self.headers.get("Host", "").rpartition(":")[2]           # local() vouched for the host
+        here = {f"http://{h}:{port}" for h in ("127.0.0.1", "localhost", "[::1]")}
+        if self.headers.get("X-Headway") != "1" or origin is not None and origin not in here:
+            self.send("only headway's own pages may change files", "text/plain", 403)
+            return False
+        return True
+
+    def body(self) -> str:
+        n = int(self.headers.get("Content-Length") or 0)
+        return self.rfile.read(n).decode() if n else ""
+
     def redirect(self, to: str) -> None:
         self.send_response(302)
         self.send_header("Location", to)
@@ -238,6 +297,8 @@ def run(handler: type[Handler], port: int, open_browser: bool, message: str, clo
     print(message.format(url=url), file=sys.stderr)
     if open_browser:
         webbrowser.open(url + start)
+    restart = threading.Event()
+    threading.Thread(target=_watch_self, args=(httpd, restart), daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -245,6 +306,64 @@ def run(handler: type[Handler], port: int, open_browser: bool, message: str, clo
     finally:
         close()
         httpd.server_close()
+    if restart.is_set():                                # the same command, on the same port, with the new code
+        args = [a for a in sys.argv[1:] if a != "--open"]
+        if "--port" not in args and not any(a.startswith("--port=") for a in args):
+            args.append(f"--port={httpd.server_port}")
+        os.execv(sys.executable, [sys.executable, "-m", "headway.cli", *args])
+
+
+def boot_events(h: Handler) -> None:
+    """Server-sent events: this server process's id, then a heartbeat, for as long as the page listens."""
+    h.send_response(200)
+    h.send_header("Content-Type", "text/event-stream")
+    h.send_header("Cache-Control", "no-store")
+    h.end_headers()
+    try:
+        h.wfile.write(f"data: {json.dumps({'boot': BOOT})}\n\n".encode())
+        while True:
+            h.wfile.flush()
+            time.sleep(15)
+            h.wfile.write(b": still here\n\n")
+    except (BrokenPipeError, ConnectionResetError, ValueError):
+        pass
+
+
+def _own_files() -> dict[Path, tuple[int, int]]:
+    """headway's own source (its modules and the viewer), with their modification stamps."""
+    out = {}
+    for f in Path(__file__).parent.iterdir():
+        if f.suffix in (".py", ".html"):
+            try:
+                st = f.stat()
+                out[f] = (st.st_mtime_ns, st.st_size)
+            except OSError:
+                pass
+    return out
+
+
+def _watch_self(httpd: ThreadingHTTPServer, restart: threading.Event) -> None:
+    """When headway's own source changes and the new code imports, stop serving so that run() restarts."""
+    seen = _own_files()
+    while True:
+        time.sleep(POLL)
+        now = _own_files()
+        if now == seen:
+            continue
+        time.sleep(QUIET)
+        now = _own_files()
+        seen = now
+        check = subprocess.run([sys.executable, "-c", "import headway.cli, headway.home, headway.page"],
+                               capture_output=True, text=True)
+        stamp = time.strftime("%H:%M:%S")
+        if check.returncode:
+            print(f"[{stamp}] headway's own code changed but does not import; still serving the old one:\n"
+                  f"{check.stderr.strip()[-2000:]}", file=sys.stderr)
+            continue
+        print(f"[{stamp}] headway's own code changed: restarting", file=sys.stderr)
+        restart.set()
+        httpd.shutdown()
+        return
 
 
 def _waiting(error: str) -> str:

@@ -234,7 +234,11 @@ def _comment(parsed: tuple[Any, list[Definition]] | None, lines: list[str]) -> C
             return False
         col = len(lines[n]) - len(lines[n].lstrip())
         node = root.descendant_for_point_range((n, col), (n, col + 1))
-        return node is not None and "comment" in node.type and node.start_point[0] == n
+        while node is not None and node.start_point[0] == n:    # the "//" token of a line_comment, say
+            if "comment" in node.type:
+                return True
+            node = node.parent
+        return False
     return comment
 
 

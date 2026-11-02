@@ -1,14 +1,17 @@
 """Checks a spec against itself and against the code.
 
   structure    every symbol, index and group an op or symbol names is declared; every symbol has at most one
-               producer; every value is produced and every non-output is used; the graph has no cycle
+               producer; every value is produced and every non-output is used; the graph has no cycle; a step's
+               condition is an expression of symbols
   references   every code reference resolves (resolve.py): renamed or deleted code fails the check
   verifiers    the spec's @verify functions: the named ops' equations reproduce the code's results
 """
 from __future__ import annotations
 
+import ast
 import traceback
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from headway.files import bases
 from headway.resolve import Location, RefError, resolve
@@ -67,11 +70,9 @@ def structure(g: Headway, report: Report) -> None:
         for code_name, k in o.bind.items():
             if k not in g.symbols:
                 e.append(f"op {o.key}: bind {code_name!r} to undeclared symbol {k!r}")
-    for s in g.symbols.values():
-        if s.role in ("value", "output") and s.key not in producer:
-            e.append(f"symbol {s.key}: a {s.role} that no op produces (declare it as an input?)")
-        if s.role != "output" and s.key not in used:
-            w.append(f"symbol {s.key}: not used by any op")
+        for code_name, n in o.names.items():
+            if "symbol" in n and n["symbol"] not in g.symbols:
+                e.append(f"op {o.key}: names {code_name!r} as undeclared symbol {n['symbol']!r}")
     # `was` names earlier keys; one this spec still declares would match two objects across versions
     for kind, objects in (("op", g.ops), ("symbol", g.symbols), ("group", g.groups)):
         for k, obj in objects.items():
@@ -81,6 +82,33 @@ def structure(g: Headway, report: Report) -> None:
     for path in g.groups:
         if not any(o.group == path or o.group.startswith(path + "/") for o in g.ops.values()):
             w.append(f"group {path!r}: no ops")
+    # what a step declares it computes: one of headway.clean's kinds, of a code reference
+    from headway.clean import KINDS
+    for o in g.ops.values():
+        for r in o.relations:
+            if r.get("kind") not in KINDS:
+                e.append(f"op {o.key}: relation kind {r.get('kind')!r} is not one of {', '.join(KINDS)}")
+            elif not r.get("target"):
+                e.append(f"op {o.key}: its {r['kind']} declaration names no function")
+    # a step's condition: an expression of symbols
+    for o in g.ops.values():
+        if not o.condition:
+            continue
+        try:
+            names = {n.id for n in ast.walk(ast.parse(o.condition, mode="eval")) if isinstance(n, ast.Name)}
+        except SyntaxError:
+            e.append(f"op {o.key}: condition {o.condition!r} is not an expression")
+            continue
+        used.update(names & set(g.symbols))             # a symbol deciding whether a step is done is used
+        unknown = sorted(names - set(g.symbols))
+        if unknown:
+            w.append(f"op {o.key}: condition {o.condition!r} names {', '.join(unknown)}, not symbols: the viewer cannot "
+                     "say what they are")
+    for s in g.symbols.values():
+        if s.role in ("value", "output") and s.key not in producer:
+            e.append(f"symbol {s.key}: a {s.role} that no op produces (declare it as an input?)")
+        if s.role != "output" and s.key not in used:
+            w.append(f"symbol {s.key}: not used by any op")
     # cycles, over ops
     after = {o.key: {producer[s] for s in o.inputs if s in producer} for o in g.ops.values()}
     state: dict[str, int] = {}
@@ -100,6 +128,8 @@ def structure(g: Headway, report: Report) -> None:
 
 def references(g: Headway, report: Report) -> None:
     owners = [(f"op {o.key}", o.code) for o in g.ops.values()] + \
+             [(f"op {o.key}: its {r.get('kind')} declaration", [x for x in (r.get("target"), *r.get("subject_to", ()))
+                                                               if x]) for o in g.ops.values() for r in o.relations] + \
              [(f"symbol {s.key}", s.code) for s in g.symbols.values()] + \
              [(f"dataset {d.key}", d.code) for d in getattr(g, "datasets", {}).values()] + \
              [(f"figure {f.key}", f.code) for f in getattr(g, "figures", {}).values()]       # a Suite's
@@ -145,6 +175,67 @@ def check(g: Headway, run_verifiers: bool = True) -> Report:
     references(g, report)
     if isinstance(g, Suite):
         check_suite(g, report.errors, report.warnings)
+    if g.hints:
+        shapes_stated(g, report)
     if run_verifiers:
         verifiers(g, report)
     return report
+
+
+def shapes_stated(g: Headway, report: Report) -> None:
+    """With hints: each step's bound values (bind=, names= given symbols) against the shapes the code's type hints
+    state for them (jaxtyping, shapes.py): as many axes as the symbol's dims, and each of the function's axis names
+    one index of the spec within the step. A warning: the hints are not checked by Python."""
+    from headway.draft import Drafter, DraftError, Package
+    drafters: dict[str, Drafter | None] = {}
+    for o in g.ops.values():
+        loc = report.locations.get(o.code[0]) if o.code else None
+        module, _, qual = o.code[0].partition(":") if o.code else ("", "", "")
+        if loc is None or loc.lang != "python" or not qual or "#" in qual:
+            continue
+        top = module.split(".")[0]
+        if top not in drafters:
+            folder = Path(loc.file).parent
+            while (folder.parent / "__init__.py").exists():
+                folder = folder.parent
+            try:
+                drafters[top] = Drafter(Package(top, [folder.parent]), hints=True, infer=False)
+            except DraftError:
+                drafters[top] = None
+        d = drafters[top]
+        m = d.package.module(module) if d else None
+        cls, _, name = qual.rpartition(".")
+        owner = m.defs.get(cls) if m and cls else None
+        node = next((n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == name), None) \
+            if isinstance(owner, ast.ClassDef) else m.defs.get(name) if m else None
+        if d is None or m is None or not isinstance(node, ast.FunctionDef):
+            continue
+        annotations = {a.arg: a.annotation for a in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
+        returned = d.shape_items(m, node.returns)
+        named = {**{c: k for c, k in o.bind.items()}, **{c: n["symbol"] for c, n in o.names.items() if "symbol" in n}}
+        seen: dict[str, tuple[str, str]] = {}
+        for code_name, key in named.items():
+            if key not in g.symbols:
+                continue
+            if code_name == "return":
+                axes = d.shape(m, node.returns)
+            elif code_name.startswith("return.") and code_name[7:].isdigit():
+                axes = returned[int(code_name[7:])] if returned and int(code_name[7:]) < len(returned) else None
+            else:
+                axes = d.shape(m, annotations.get(code_name))
+            if axes is None:
+                continue
+            dims = list(g.symbols[key].dims)
+            if not dims:                        # a scalar, or dims= not given yet (a draft leaves what it cannot tell)
+                report.warnings.append(f"op {o.key}: {code_name} is annotated with axes ({' '.join(axes)}) in "
+                                       f"{o.code[0]}, but {key} has no dims= (a scalar, or not given yet)")
+                continue
+            if len(dims) != len(axes):
+                report.warnings.append(f"op {o.key}: {code_name} is annotated with {len(axes)} axes "
+                                       f"({' '.join(axes)}) in {o.code[0]}, but {key} has {len(dims)} (dims={dims})")
+                continue
+            for axis, index in zip(axes, dims):
+                if axis in seen and seen[axis][0] != index:
+                    report.warnings.append(f"op {o.key}: the axis {axis} of {o.code[0]} is {seen[axis][0]} in "
+                                           f"{seen[axis][1]} but {index} in {code_name}")
+                seen.setdefault(axis, (index, code_name))

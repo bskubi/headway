@@ -17,6 +17,9 @@ to write a headway for a codebase. It is written to be handed to a coding agent 
 
 ```
 pip install headway                             # into the environment that imports the method
+headway init my_pkg.method:run -o my_pkg/graphspec.py   # a first draft, read from the code (Python)
+headway redraft my_pkg.graphspec               # draft it again from the code, with init's arguments
+headway tex my_pkg.model:residuals              # a function's numpy code, written as math
 headway check my_pkg.graphspec                  # exit 1 if the spec and the code disagree
 headway build my_pkg.graphspec -o headway.html  # one HTML file; open it in a browser
     [--collapse "round 0"] [--hide setup] [--json headway.json] [--no-verify] [--offline]
@@ -102,6 +105,16 @@ code (with a link that opens your editor at the line); double-click a group to c
 upstream or downstream of the selection; hide groups; show the settings as nodes. Steps done once per fold or per
 cell are drawn as stacked cards; ✗ marks a step whose equation check failed.
 
+**Find** (the box in the graph bar, or press `/`) boxes every step, value and group whose name or key holds what you
+type. Case is ignored, and `_` and spaces count as the same.
+
+- An **exact** match (a name is what you typed) is boxed solid; a **partial** one (a name holds it) is dashed.
+  Tick **Exact** to keep only the exact ones.
+- The rest of the graph fades. A match inside a collapsed group boxes the group.
+- Enter or ↓ jumps to the next match, and Shift+Enter or ↑ to the previous one, in the layout's reading order.
+  Each jump centres the match and selects it, so its panel opens. The ‹ › buttons do the same, and ⤢ puts all
+  the matches in view. Esc clears.
+
 ## A spec
 
 ```python
@@ -121,6 +134,31 @@ G.op("residuals", "residuals", r"R_{jg} = \frac{m_{jg} + \kappa_r q}{n_{jg} + \k
 @G.verify("residuals")                              # the equation, written plainly, against the code
 def residuals_as_written(): ...
 ```
+
+Each step's side panel also shows its code written as math ("From the code"). This covers base Python and
+numpy, and is read from the code without running it. Give `names={"methylated": m, "pseudo": r"\kappa_r"}` to
+write the code's names as symbols: a symbol's indices then carry into the math, so `x.sum(0)` on $x_{jg}$ is
+$\sum_j x_{jg}$. The code and the equation sit side by side, and a mismatch between them is easy to see.
+
+A step with no description yet shows its code's docstring or the comment above it, in any language, marked as
+coming from the code.
+
+`headway init my_pkg.method:run` drafts this from the code, starting at the method's entry function:
+
+- every call to the package's own functions is a step, with its code references;
+- a step's inputs and outputs are the variables the code binds to and from its calls, traced by Python's scoping
+  rules; a value made by other code between steps is shown as an input "made by the code" at its line, not
+  guessed at, and a comment lists where values may change in place;
+- a call that changes a variable in place (stores into it) makes the variable's next value one of its outputs;
+- functions that call others become groups, and loops become `per=`;
+- with `--hints`, the code's type hints are taken as assumptions, with what the mypy type checker infers from
+  them: a settings dataclass's fields become settings, methods of the package's classes become steps, arrays and
+  lists changed in place (by `+=`, `.append`, or through a view) are followed, and shapes in the type hints
+  (jaxtyping's `Float[np.ndarray, "cells genes"]`) or docstrings become `dims=`;
+- docstrings (numpydoc, Google) describe the inputs, outputs, settings and groups.
+
+It reads the source without running it, and draws no edge the code does not state. The TeX, the descriptions and
+the dimensions are left as TODOs (see the guide).
 
 `where` is for symbols an equation uses that are not values of the graph: a step's own intermediates, functions
 like the logistic σ. The viewer shows them under the equation, as a paper would ("where q is …"). A value another
