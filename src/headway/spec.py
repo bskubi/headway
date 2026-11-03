@@ -11,7 +11,7 @@ import itertools
 import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, TypeAlias
 
 ROLES = ("input", "value", "output", "setting", "constant")
 
@@ -83,8 +83,8 @@ class Group:
     was: list[str] = field(default_factory=list)            # earlier paths, for comparing versions (diff.py)
 
 
-type SymbolLike = Symbol | str
-type IndexLike = Index | str
+SymbolLike: TypeAlias = "Symbol | str"
+IndexLike: TypeAlias = "Index | str"
 
 
 def _key(x: Symbol | Index | str) -> str:

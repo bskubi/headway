@@ -864,6 +864,7 @@ class Printer:
                 return []
             value = self.expr(st.value)
             again = st.again and all(t in self.defined for t in st.targets)
+            rel = r"\leftarrow" if again else "="
             lhs = self.lhs(st)
             self.defined |= set(st.targets)
             if isinstance(st.value, Draw):
@@ -874,8 +875,8 @@ class Printer:
                     lhs = self.lhs(st)
                 finally:
                     self.bare = False
-                return [f"{pad}{lhs} &{r'\leftarrow' if again else '='} {self.matrix(st.value).tex}"]  # type: ignore
-            return [f"{pad}{lhs} &{r'\leftarrow' if again else '='} {value.tex}"]
+                return [f"{pad}{lhs} &{rel} {self.matrix(st.value).tex}"]  # type: ignore
+            return [f"{pad}{lhs} &{rel} {value.tex}"]
         if isinstance(st, SetPart):
             part = st.shown if st.shown is not None and not isinstance(st.shown, Item) else st.target
             return [f"{pad}{self.expr(part).tex} &\\leftarrow {self.expr(st.value).tex}"]

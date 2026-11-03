@@ -15,11 +15,12 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering",
     "Topic :: Software Development :: Documentation",
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = ["numpy>=1.26", "tree-sitter-language-pack>=1.22", "beniget>=0.4", "mypy>=1.10", "docstring_parser>=0.16"]
 
 [project.urls]

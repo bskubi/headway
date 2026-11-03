@@ -30,7 +30,7 @@ code is established only by a check function you write (`@G.verify`).
 
 ## Installing it in another codebase
 
-headway is a Python package (Python 3.12+, numpy). Install it into the environment that can import the method:
+headway is a Python package (Python 3.11+, numpy). Install it into the environment that can import the method:
 
 ```
 pip install headway                     # or: uv pip install headway

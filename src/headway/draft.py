@@ -212,7 +212,7 @@ def _parse(name: str, file: Path) -> Module:
                 imports[a.asname or a.name] = f"{source}.{a.name}"
     aliases: dict[str, ast.expr] = {}
     for st in tree.body:
-        if isinstance(st, ast.TypeAlias) and isinstance(st.name, ast.Name):
+        if isinstance(st, getattr(ast, "TypeAlias", ())) and isinstance(st.name, ast.Name):   # `type X = ...` (3.12+)
             aliases[st.name.id] = st.value
         elif isinstance(st, ast.AnnAssign) and isinstance(st.target, ast.Name) and st.value is not None \
                 and (st.annotation.attr if isinstance(st.annotation, ast.Attribute) else
