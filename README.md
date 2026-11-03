@@ -93,8 +93,8 @@ The page stays a static view; edits happen in the spec, and the page takes you t
 
   The mode and the answer format are remembered per browser; what is typed is kept per object and per mode.
 
-The built page is a static file: open it from disk, send it, or put it on any web server. It loads KaTeX, elkjs and
-highlight.js from CDNs; with `--offline` they are written into the file instead (about 3 MB), and the page needs no
+The built page is a static file: open it from disk, send it, or put it on any web server. It loads KaTeX, elkjs,
+highlight.js and html-to-image from CDNs; with `--offline` they are written into the file instead (about 3 MB), and the page needs no
 network at all. `--offline` downloads them once, into `~/.cache/headway`. The ✎ links point to the spec on the
 machine that built the page.
 
@@ -103,7 +103,10 @@ the legend below. Drag a divider to resize; drag it nearly shut, double-click it
 pane. The sizes are remembered per browser. Click a step or a value for its equation, inputs, outputs and
 code (with a link that opens your editor at the line); double-click a group to collapse or expand it; show only what is
 upstream or downstream of the selection; hide groups; show the settings as nodes. Steps done once per fold or per
-cell are drawn as stacked cards; ✗ marks a step whose equation check failed.
+cell are drawn as stacked cards; ✗ marks a step whose equation check failed. **Copy image** (above the graph,
+and in the Results view) copies a PNG of the whole graph, or of the results table, to the clipboard; each equation
+and each piece of code in the side panel has a small copy button of its own (on hover). Where the browser takes no
+image on the clipboard, the PNG is downloaded instead.
 
 **Find** (the box in the graph bar, or press `/`) boxes every step, value and group whose name or key holds what you
 type. Case is ignored, and `_` and spaces count as the same.
@@ -264,7 +267,9 @@ over the metrics and the datasets shown, of a transform of each version's mean t
 `x/0.002`, `log(x)`, ...). Click a column for what the metric or objective is (its equation, code, check
 and source) and the replicates of every version, plotted. A column's header sorts by it (clicked again,
 unsorted; a metric's header sorts by the mean place over the datasets shown); drag a version's row to reorder the
-versions (the graph's lanes too; a sorted order is kept as the new order). Each value's difference is from the row
+versions (the graph's lanes too; a sorted order is kept as the new order), or a column's header to reorder the
+columns. **Columns** shows, hides and reorders the objectives, metrics, datasets and figures (kept in the browser,
+per suite; hiding a column changes no objective). Each value's difference is from the row
 above it as shown, or from the baseline. Click a dataset (under
 the table, or its column when grouped by dataset) for what it is: its settings, how it is made, its facts and code,
 and every version's results on it. In the suite's own page, the legend lists the datasets, and a setting shows

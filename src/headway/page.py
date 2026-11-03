@@ -486,7 +486,7 @@ def inline_assets(page: str) -> str:
         assert "</style" not in css and "url(fonts/" not in css, url
         return f'<style media="{media}">{css}</style>' if media else f"<style>{css}</style>"
     page = re.sub(r'<script src="(https://[^"]+)"></script>', script, page)
-    return re.sub(r'<link rel="stylesheet" href="(https://[^"]+)"(?: media="([^"]+)")?>', style, page)
+    return re.sub(r'<link rel="stylesheet"(?: crossorigin="anonymous")? href="(https://[^"]+)"(?: media="([^"]+)")?>', style, page)
 
 
 def _fetch(url: str) -> bytes:

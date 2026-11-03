@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><!--TITLE--></title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+<link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"></script>
 <style>
 :root {
   --bg: #fbfaf7; --panel: #ffffff; --fg: #1d1d1f; --muted: #6b6b70; --border: #d6d3cc; --grid: #ece9e2;
@@ -321,6 +322,26 @@ table.heat td.fig .more { font-size: 11px; color: var(--muted); }
 #results .dsl { margin: 10px 0 0; font-size: 12.5px; color: var(--muted); }
 #results .dsl .chip { margin-left: 4px; }
 table.heat th[data-ds] { cursor: pointer; }
+table.heat th.colover { box-shadow: inset 3px 0 0 var(--accent); }
+table.heat th.colover.after { box-shadow: inset -3px 0 0 var(--accent); }
+#colsmenu > div { left: 0; right: auto; max-height: 60vh; overflow: auto; }
+#colsmenu .colkind { font-size: 11.5px; color: var(--muted); margin: 8px 0 2px; }
+#colsmenu .mu { color: var(--muted); }
+ul.cols { list-style: none; margin: 0; padding: 0; }
+ul.cols li { display: flex; align-items: center; gap: 5px; padding: 0 2px; border-radius: 4px; }
+ul.cols li .grip { color: var(--muted); cursor: grab; font-size: 11px; }
+ul.cols li label { flex: 1; color: var(--fg); }
+ul.cols li.colover { box-shadow: inset 0 2px 0 var(--accent); }
+ul.cols li.colover.after { box-shadow: inset 0 -2px 0 var(--accent); }
+/* copying images: the big buttons, the panel's small ones, and the copy drawn out of sight */
+.copybig svg, .copyimg svg, #graph .copybig svg { width: 13px; height: 13px; display: inline-block; vertical-align: -2px; }
+button.busy { opacity: .5; cursor: progress; }
+.copyimg { padding: 2px 4px; line-height: 0; color: var(--muted); opacity: 0; transition: opacity .15s; }
+.copyimg:hover { color: var(--accent); }
+#detail .eq:hover > .copyimg, .code:hover .copyimg, .copyimg:focus-visible, .copyimg.busy { opacity: 1; }
+#detail .eq > .copyimg { position: absolute; right: 6px; bottom: 4px; }
+.code .where .copyimg { margin-left: auto; margin-right: 8px; padding: 1px 4px; }
+.shot { position: absolute; left: -100000px; top: 0; width: max-content; pointer-events: none; }
 
 /* lanes: other versions, one lane each, registered on one layout */
 /* the library (home.py): over the page, or the whole page when nothing is open */
@@ -464,6 +485,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
         <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
       </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
+      <span class="grp"><button id="copygraph" class="copybig" title="copy an image of the whole graph (every lane, as drawn now, at full size) to the clipboard"><span class="ico"></span> Copy image</button></span>
       <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this. Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed"><input type="checkbox" id="findexact"><span>Exact</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
@@ -698,6 +720,78 @@ const NS = "http://www.w3.org/2000/svg";
 const tex = (t, display = false) => { try { return katex.renderToString(t, {displayMode: display, throwOnError: false}); } catch (e) { return esc(t); } };
 // text with inline $math$
 const rich = (s) => esc(s).split(/\$([^$]+)\$/).map((part, n) => n % 2 ? tex(part.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")) : part).join("");
+
+// copying an image of part of the page (the graph, the results, an equation, some code) to the clipboard, as a PNG:
+// html-to-image draws a copy of it (loaded with the page; here again if that failed); with no clipboard, the PNG is downloaded
+const COPY_ICON = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M7 5.5h5a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-5a1.5 1.5 0 0 1-1.5-1.5v-5a1.5 1.5 0 0 1 1.5-1.5z"/><path d="M3.5 10.5h-.5a1 1 0 0 1-1-1v-6.5a1 1 0 0 1 1-1h6.5a1 1 0 0 1 1 1v.5"/></svg>`;
+let imageLib = null;
+const loadImageLib = () => imageLib ??= new Promise((ok, bad) => {
+  if (window.htmlToImage) return ok(window.htmlToImage);
+  const s = document.createElement("script");
+  s.src = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js";
+  s.onload = () => window.htmlToImage ? ok(window.htmlToImage) : bad(new Error("the image library did not load"));
+  s.onerror = () => { imageLib = null; bad(new Error("could not load the image library (offline?)")); };
+  document.head.append(s);
+});
+// node: what to copy. It is drawn from a copy put beside it, out of sight (so the page's styles still apply), with
+// the controls taken out and whatever scrolls shown in full. prepare(copy) adjusts the copy and may give its size
+async function copyImage(node, what, btn, prepare = null) {
+  if (!node || btn?.classList.contains("busy")) return;
+  btn?.classList.add("busy");
+  note(`Drawing ${what}…`);
+  const box = document.createElement("div");
+  box.className = "shot";
+  const copy = node.cloneNode(true);
+  copy.removeAttribute("id");
+  copy.querySelectorAll(".copyimg, .eye, .grip, .pen, .namesw").forEach((x) => x.remove());
+  copy.querySelectorAll(".sel").forEach((x) => { if (x.matches("td")) x.classList.remove("sel"); });
+  box.append(copy);
+  node.parentElement.append(box);
+  const blob = (async () => {
+    try {
+      const size = prepare?.(copy) ?? {};
+      if (!size.keepOverflow) {
+        for (const x of [copy, ...copy.querySelectorAll("pre, .katex-display, .eq")]) x.style.overflow = "visible";
+        copy.style.margin = "0";
+      }
+      const r = copy.getBoundingClientRect(), w = Math.ceil(size.width ?? r.width), h = Math.ceil(size.height ?? r.height);
+      const css = getComputedStyle(document.body), bg = css.getPropertyValue("--panel").trim() || css.backgroundColor;
+      const lib = await loadImageLib();
+      const out = await lib.toBlob(copy, {width: w, height: h, backgroundColor: size.background ?? bg, pixelRatio: Math.max(1, Math.min(2, 12000 / Math.max(w, h)))});
+      if (!out) throw new Error("the image came out empty");
+      return out;
+    } finally { box.remove(); }
+  })();
+  try {
+    if (!navigator.clipboard?.write || !window.ClipboardItem) throw new Error("no clipboard");
+    await navigator.clipboard.write([new ClipboardItem({"image/png": blob})]);
+    note(`Copied an image of ${what}`);
+  } catch (e) {
+    const b = await blob.catch((err) => { note(`Could not draw ${what}: ${err.message ?? err}`); return null; });
+    if (b) {
+      const a = document.createElement("a"), name = `${what.replace(/^the /, "").replace(/[^\w.-]+/g, "-")}.png`;
+      a.href = URL.createObjectURL(b); a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      note(`The clipboard took no image here, so it is saved as ${name}`);
+    }
+  } finally { btn?.classList.remove("busy"); }
+}
+// the panel's equations and code each get a small copy button, whatever drew them
+function addCopyButtons(root) {
+  const button = (title) => { const b = document.createElement("button"); b.className = "copyimg"; b.title = title; b.innerHTML = COPY_ICON; return b; };
+  root.querySelectorAll(".eq").forEach((eq) => {
+    if (eq.querySelector(":scope > .copyimg") || eq.closest(".shot")) return;
+    const b = button("copy an image of this equation");
+    b.onclick = (e) => { e.stopPropagation(); copyImage(eq, "the equation", b); };
+    eq.append(b);
+  });
+  root.querySelectorAll(".code > .where").forEach((where) => {
+    if (where.querySelector(":scope > .copyimg") || where.closest(".shot")) return;
+    const b = button("copy an image of this code");
+    b.onclick = (e) => { e.stopPropagation(); copyImage(where.parentElement, "the code", b); };
+    where.firstElementChild ? where.firstElementChild.after(b) : where.append(b);
+  });
+}
 
 // lookups over D, remade when a live rebuild replaces it
 let SYM, OP, IDX, GRP, PRODUCER, CONSUMERS, CONTROLS, ORDER;
@@ -2419,6 +2513,90 @@ function pairedTitle(p, bName, aName, m) {
   L.push(p.supported ? "supported" : "not supported: shown in grey");
   return L.join("; ");
 }
+// the Results table's columns, per suite and kept in this browser: their order (dragged by their headers, or in the
+// Columns menu) and the ones hidden. kinds: o objectives, m metrics, d datasets, f figures. Display only: hiding a
+// column leaves the objectives as they are
+const COLS_KEY = "headway.columns";
+const COLS = (() => { try { return JSON.parse(localStorage.getItem(COLS_KEY) ?? "{}") ?? {}; } catch { return {}; } })();   // suite id -> {order: {kind: [keys]}, hidden: ["kind:key"]}
+const storeCols = () => { try { localStorage.setItem(COLS_KEY, JSON.stringify(COLS)); } catch {} };
+const colsOf = (sid) => { const c = COLS[sid] ??= {}; c.order ??= {}; c.hidden ??= []; return c; };
+// a kind's items in the order chosen; ones never moved keep their own order, after the others
+function colOrder(sid, kind, items) {
+  const ord = COLS[sid]?.order?.[kind] ?? [];
+  const at = (x) => { const k = ord.indexOf(x.key); return k < 0 ? Infinity : k; };
+  return items.map((x, n) => [x, n]).sort((a, b) => (at(a[0]) - at(b[0])) || a[1] - b[1]).map(([x]) => x);
+}
+const colShown = (sid, kind, key) => !(COLS[sid]?.hidden ?? []).includes(kind + ":" + key);
+const colItems = (sn, kind) => kind === "o" ? objectivesOf(sn) : kind === "m" ? sn.meta.metrics : kind === "d" ? sn.meta.datasets : sn.meta.figures ?? [];
+// the shown ones of a kind, in order (datasets: the held-out ones only when asked for)
+const colsShown = (sn, kind) => colOrder(sn.id, kind, colItems(sn, kind)).filter((x) => colShown(sn.id, kind, x.key) && (kind !== "d" || rs.heldout || !x.heldout));
+function moveCol(sn, kind, key, toKey, after) {
+  const keys = colOrder(sn.id, kind, colItems(sn, kind)).map((x) => x.key).filter((k) => k !== key);
+  const k = keys.indexOf(toKey);
+  keys.splice(k < 0 ? keys.length : k + (after ? 1 : 0), 0, key);
+  colsOf(sn.id).order[kind] = keys;
+  storeCols();
+}
+function setColShown(sn, kind, key, show) {
+  const c = colsOf(sn.id), id = kind + ":" + key;
+  c.hidden = c.hidden.filter((x) => x !== id);
+  if (!show) c.hidden.push(id);
+  storeCols();
+}
+let colsMenuOpen = false;
+document.addEventListener("click", (e) => { const m = document.getElementById("colsmenu"); if (m?.open && !e.target.closest("#colsmenu")) m.open = false; });
+// the Columns menu: each kind's columns, to show or hide and drag into order
+function colsMenuHTML(sn) {
+  const kinds = [["o", "Objectives"], ["m", "Metrics"], ["d", "Datasets"], ["f", "Figures"]];
+  const sym = (m) => sn.suite.symbols.find((x) => x.key === m.key);
+  const label = (kind, x) => kind === "m" ? `${tex(sym(x)?.tex ?? x.key)} ${esc(sym(x)?.name ?? "")}` : esc(x.name) + (kind === "d" && x.heldout ? ` <span class="mu">(held out${rs.heldout ? "" : ", not shown"})</span>` : "");
+  const nHid = colsOf(sn.id).hidden.length;
+  return `<details class="menu" id="colsmenu"${colsMenuOpen ? " open" : ""}><summary title="show, hide and reorder the columns (kept in this browser; the objectives are unchanged)">Columns${nHid ? ` (${nHid} hidden)` : ""} ▾</summary><div>` +
+    `<div class="mbtns"><button id="colsall">Show all</button><button id="colsreset" title="the suite's own order, every column shown">Reset</button></div>` +
+    kinds.filter(([k]) => colItems(sn, k).length).map(([k, name]) => `<div class="colkind">${name}</div><ul class="cols" data-kind="${k}">` +
+      colOrder(sn.id, k, colItems(sn, k)).map((x) => `<li draggable="true" data-key="${esc(x.key)}"><span class="grip">⠿</span><label><input type="checkbox"${colShown(sn.id, k, x.key) ? " checked" : ""}> ${label(k, x)}</label></li>`).join("") + `</ul>`).join("") +
+    `<div class="mu" style="font-size:11.5px;margin-top:6px">drag to reorder, here or by a column's header</div></div></details>`;
+}
+function wireColsMenu(sn) {
+  const menu = $("colsmenu");
+  menu.addEventListener("toggle", () => { colsMenuOpen = menu.open; });
+  $("colsall").onclick = () => { colsOf(sn.id).hidden = []; storeCols(); renderResults(); };
+  $("colsreset").onclick = () => { delete COLS[sn.id]; storeCols(); renderResults(); };
+  menu.querySelectorAll("ul.cols").forEach((ul) => {
+    const kind = ul.dataset.kind;
+    ul.querySelectorAll("input").forEach((c) => c.onchange = () => {
+      const key = c.closest("li").dataset.key, by = rs.sort;
+      setColShown(sn, kind, key, c.checked);
+      if (!c.checked && by && (kind === "d" ? by.dataset === key : by.key === key && by.kind === (kind === "o" ? "objective" : "metric"))) rs.sort = null;
+      renderResults();
+    });
+    wireColDrag(sn, [...ul.querySelectorAll("li")], () => kind, "y");
+  });
+}
+// drag one of a kind's columns (a header, or the menu's row) onto another of the same kind to move it there
+let colDrag = null;
+function wireColDrag(sn, els, kindOf, axis) {
+  for (const el of els) {
+    el.addEventListener("dragstart", (e) => { e.stopPropagation(); colDrag = {kind: kindOf(el), key: el.dataset.key}; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", el.dataset.key); });
+    el.addEventListener("dragend", () => { colDrag = null; });
+    el.addEventListener("dragover", (e) => {
+      if (!colDrag || colDrag.kind !== kindOf(el)) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      el.classList.add("colover");
+      el.classList.toggle("after", axis === "y" ? e.clientY > r.top + r.height / 2 : e.clientX > r.left + r.width / 2);
+    });
+    el.addEventListener("dragleave", (e) => { if (!el.contains(e.relatedTarget)) el.classList.remove("colover", "after"); });
+    el.addEventListener("drop", (e) => {
+      if (!colDrag || colDrag.kind !== kindOf(el)) return;
+      e.preventDefault(); e.stopPropagation();
+      const after = el.classList.contains("after"), {kind, key} = colDrag;
+      el.classList.remove("colover", "after");
+      colDrag = null;
+      if (key !== el.dataset.key) { moveCol(sn, kind, key, el.dataset.key, after); renderResults(); }
+    });
+  }
+}
 // the Results table's rows (the versions shown, with their results on the suite) in the order shown: the versions'
 // order, or sorted by the chosen column (ties keep the versions' order)
 function resultRows(sn) {
@@ -2436,12 +2614,12 @@ function resultRows(sn) {
     key = (n) => { const v = rows[n].r?.values[rs.sort.dataset]?.[rs.sort.key]; return !v?.length ? Infinity : m.better === "higher" ? -mean(v) : mean(v); };
   } else {                                    // a metric over the datasets shown: the mean place, ties shared (unitless)
     const m = meta.metrics.find((x) => x.key === rs.sort.key);
-    const places = meta.datasets.filter((d) => rs.heldout || !d.heldout).map((d) => {
+    const places = colsShown(sn, "d").map((d) => {
       const col = rows.map((x) => { const v = x.r?.values[d.key]?.[m.key]; return v?.length ? mean(v) : null; });
       const vs = col.filter((v) => v !== null);
       return col.map((v) => v === null ? null : 1 + vs.filter((q) => m.better === "higher" ? q > v : q < v).length + (vs.filter((q) => q === v).length - 1) / 2);
     });
-    key = (n) => places.some((p) => p[n] === null) ? Infinity : mean(places.map((p) => p[n]));
+    key = (n) => !places.length || places.some((p) => p[n] === null) ? Infinity : mean(places.map((p) => p[n]));
   }
   const k = rows.map((_, n) => key(n));
   return rows.map((_, n) => n).sort((a, b) => k[a] === k[b] ? a - b : k[a] - k[b]).map((n) => rows[n]);
@@ -2477,16 +2655,17 @@ function renderResults() {
   const {meta} = sn;
   const rows = resultRows(sn);
   const nHidden = LANES.length - rows.length;
-  const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
-  const metrics = meta.metrics, title = (m) => sn.suite.symbols.find((x) => x.key === m.key);
-  const objectives = objectivesOf(sn).map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
+  // the columns shown, in the order chosen (the Columns menu, or dragged by their headers)
+  const datasets = colsShown(sn, "d"), metrics = colsShown(sn, "m"), title = (m) => sn.suite.symbols.find((x) => x.key === m.key);
+  const objectives = colsShown(sn, "o").map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
+  const dc = (kind, key) => ` draggable="true" data-ckind="${kind}" data-key="${esc(key)}"`;
   const value = (row, dk, mk) => { const v = row.r?.values[dk]?.[mk]; return v?.length ? v : null; };
   // columns: objectives, then metric x dataset, grouped by metric or by dataset
   // figures: columns of images before the metrics, never shaded, sorted or ranked
-  const figures = meta.figures ?? [];
-  const groups = rs.by === "metric" ? [...figures.map((f) => ({head: f, fig: true, cols: datasets.map((d) => ({f, d}))})),
+  const figures = colsShown(sn, "f");
+  const groups = (rs.by === "metric" ? [...figures.map((f) => ({head: f, fig: true, cols: datasets.map((d) => ({f, d}))})),
     ...metrics.map((m) => ({head: m, cols: datasets.map((d) => ({m, d}))}))]
-    : datasets.map((d) => ({head: d, cols: [...figures.map((f) => ({f, d})), ...metrics.map((m) => ({m, d}))]}));
+    : datasets.map((d) => ({head: d, cols: [...figures.map((f) => ({f, d})), ...metrics.map((m) => ({m, d}))]}))).filter((g) => g.cols.length);
   const cols = groups.flatMap((g) => g.cols);
   const dirMark = (m) => `<span class="dir" title="${m.better} is better">${m.better === "higher" ? "↑" : "↓"}</span>`;
   const sorted = (kind, key, dataset) => rs.sort && rs.sort.kind === kind && rs.sort.key === key && (kind === "objective" || rs.sort.dataset === dataset) ? " sorted" : "";
@@ -2495,17 +2674,19 @@ function renderResults() {
     `<span class="seg"><label><input type="radio" name="rby" value="metric"${rs.by === "metric" ? " checked" : ""}><span>By metric</span></label><label><input type="radio" name="rby" value="dataset"${rs.by === "dataset" ? " checked" : ""}><span>By dataset</span></label></span>` +
     `<span class="seg" title="the shade of a cell: from the worst to the best of the versions shown, or across the metric's whole range"><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
     `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline): the mean of the per-replicate differences ± their s.d. and how many replicates agree, paired by replicate id; ● every interval of the difference the benchmark gave excludes 0, ◐ some, ○ none; in color only when the difference is supported"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
+    colsMenuHTML(sn) +
     `<button id="addobj" title="make your own objective: the sum of a transform of each metric, typed in the panel (kept in this browser)">+ Objective</button>` +
     `<label class="seg" title="beside each value, its place among the versions shown (#1 the best; = a tie)"><input type="checkbox" id="rranks"${rs.ranks ? " checked" : ""}><span>Ranks</span></label>` +
     (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="the datasets kept out of development"><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
-    `<span>click a column's header to sort by it (again: unsort) and for what it measures; a metric's header, by the mean place over the datasets shown; click a value for the values' spread · drag a version to reorder</span></div>`;
+    `<button id="copyresults" class="copybig" title="copy an image of the table (as shown) to the clipboard">${COPY_ICON} Copy image</button>` +
+    `<span>click a column's header to sort by it (again: unsort) and for what it measures; a metric's header, by the mean place over the datasets shown; click a value for the values' spread · drag a version or a column's header to reorder</span></div>`;
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
-    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}" title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
+    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}"${dc("o", o.key)} title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
     `<th rowspan="2" class="gap"></th>` +
-    groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
-      : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}click: sort by the mean place over the datasets shown"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
-    `</tr><tr>` + cols.map(({m, f, d}) => f ? `<th class="sub" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.desc ?? "")}">${rs.by === "metric" ? esc(d.name) : `${esc(f.name)}<span class="dir">▣</span>`}</th>`
-      : `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}">${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
+    groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}"${dc("f", g.head.key)} title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
+      : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}"${dc(rs.by === "metric" ? "m" : "d", g.head.key)} ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}click: sort by the mean place over the datasets shown"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
+    `</tr><tr>` + cols.map(({m, f, d}) => f ? `<th class="sub" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}"${rs.by === "metric" ? dc("d", d.key) : dc("f", f.key)} title="${esc(f.desc ?? "")}">${rs.by === "metric" ? esc(d.name) : `${esc(f.name)}<span class="dir">▣</span>`}</th>`
+      : `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}"${rs.by === "metric" ? dc("d", d.key) : dc("m", m.key)}>${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
   for (const [n, row] of rows.entries()) {
     const rr = resultRef(rows, row);
     h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}&#10;click: read this version · drag: reorder (the graph's lanes too)" draggable="true"><span class="grip">⠿</span>${eyeHTML(row.lane)}${esc(row.lane.name)}</th>`;
@@ -2559,6 +2740,9 @@ function renderResults() {
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => pick({kind: "dataset", key: c.dataset.ds})));
   el.querySelectorAll("[data-fig]").forEach((c) => c.addEventListener("click", () => pick({kind: "figure", key: c.dataset.fig, dataset: c.dataset.dataset ?? null})));
   if ($("rshowall")) $("rshowall").onclick = () => setHidden(LANES, false);
+  wireColsMenu(sn);
+  wireColDrag(sn, [...el.querySelectorAll("table.heat thead th[data-ckind]")], (th) => th.dataset.ckind, "x");
+  $("copyresults").onclick = () => copyImage(el.querySelector("table.heat"), "results", $("copyresults"));
   wireEyes(el.querySelector("table.heat tbody"), "th.row");
   // drag a row to reorder the versions: a sorted table's order is taken as the versions' order first
   let dragged = null;
@@ -3042,6 +3226,20 @@ function note(text) {
 document.querySelectorAll("input[name=focus]").forEach((r) => r.onchange = () => { state.focus = r.value; render(true); });
 document.querySelectorAll("input[name=dir]").forEach((r) => r.onchange = () => { state.dir = r.value; render(true); });
 $("fit").onclick = () => fitView();
+$("copygraph").querySelector(".ico").outerHTML = COPY_ICON;
+// the whole graph at its own size: the copy's drawing moved to its corner, with a margin
+$("copygraph").onclick = () => {
+  const b = $("vp").getBBox(), pad = 16;
+  copyImage($("svg"), "the graph", $("copygraph"), (svg) => {
+    const w = Math.ceil(b.width + 2 * pad), h = Math.ceil(b.height + 2 * pad);
+    svg.querySelector("#findlayer")?.remove();
+    svg.querySelector("#vp").setAttribute("transform", `translate(${pad - b.x},${pad - b.y})`);
+    svg.setAttribute("width", w); svg.setAttribute("height", h);
+    svg.style.width = w + "px"; svg.style.height = h + "px";
+    return {width: w, height: h, keepOverflow: true, background: getComputedStyle(document.body).getPropertyValue("--bg").trim()};
+  });
+};
+new MutationObserver(() => addCopyButtons($("detail"))).observe($("detail"), {childList: true, subtree: true});
 $("zoomin").onclick = () => zoomStep(1.25);
 $("zoomout").onclick = () => zoomStep(1 / 1.25);
 

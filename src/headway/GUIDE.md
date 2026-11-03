@@ -644,6 +644,10 @@ pinned as the baseline. Markers: **+** added, **Δ** changed, **−** gone, **�
 shows one version, keeping the others open. A version's eye (in the version bar or on its Results row; drag across
 several, or shift-click, to sweep a range) hides it from both views while it stays open: the objectives are scored
 over the versions shown, each version is compared with the shown one before it, and a hidden baseline is set aside.
+In the Results view, drag a column's header to move it among its kind (objectives, metrics, datasets, figures), and
+**Columns** shows, hides and reorders them; this is display only (kept in the browser, per suite), and the objectives
+are scored as defined. **Copy image** copies a PNG of the whole graph or of the results table; the side panel's
+equations and code have small copy buttons of their own.
 
 Objects correspond across versions by key. When you rename a key, say so in the new version with `was=`:
 
