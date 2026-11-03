@@ -641,7 +641,9 @@ headway diff headways/v4.json headways/v5.json                   # the same comp
 In the viewer, **Open…** opens more versions beside the page: under `headway serve`, from the library (recent
 headways, and any folder's); from a page opened as a file, with the file picker. A version built without `--name` is called by its file name; lanes are ordered by build time and can be dragged, closed or
 pinned as the baseline. Markers: **+** added, **Δ** changed, **−** gone, **⋔** split or merged. **One at a time**
-shows one version, keeping the others open.
+shows one version, keeping the others open. A version's eye (in the version bar or on its Results row; drag across
+several, or shift-click, to sweep a range) hides it from both views while it stays open: the objectives are scored
+over the versions shown, each version is compared with the shown one before it, and a hidden baseline is set aside.
 
 Objects correspond across versions by key. When you rename a key, say so in the new version with `was=`:
 
@@ -720,6 +722,11 @@ the method being benchmarked. The graph then reads data → method → metrics, 
   metric's mean scaled to 0..1 by its range, turned so 1 is best, weighted and averaged over the datasets
   (absolute). `how="rank"`: the weighted mean rank among the versions shown, 1 best (relative). `datasets`:
   default every dataset not held out. A version missing any value an objective needs gets no score ("incomplete").
+  A rank objective can reorder two versions when others are added or hidden (a version that loses narrowly on one
+  metric loses as many places as there are versions in between); a `how="mean"` objective scores each version from
+  its own values, so it cannot. In the viewer, **+ Objective** (in the Results view) makes one's own objective of that kind:
+  the sum, over the metrics and the datasets shown, of a transform of each version's mean typed per metric (`-x`,
+  `2*x`, `x/0.002`, `log(x)`, with `sd`, `n`, `lo`, `hi` and a few functions), kept in the browser, not the suite.
 
 Suite errors: an empty range, an objective naming an undeclared metric or dataset, a `how="mean"` objective over a
 metric without a range, a weight that is not positive, a dataset value for anything but a declared setting, a
@@ -767,7 +774,8 @@ it for the comparisons that matter: the version before, the baseline.
 
 headway itself pairs two versions' values by replicate id: the difference of each replicate in common, their mean
 and spread, and how many agree in sign. Under each value (the Results view's Differences), the version's
-difference from the one it is compared with reads `+0.026 5/5 ●`: the mean of the per-replicate differences, how
+difference from the one it is compared with (the row above it as the table is shown, sorted or dragged into order,
+or the baseline) reads `+0.026 5/5 ●`: the mean of the per-replicate differences, how
 many replicates agree in sign, and, where the benchmark gave intervals of that difference (in either version's
 results), ● if every one excludes 0, ◐ if some do, ○ if none. It is in color only when supported: every interval
 excludes 0 or, without intervals, every paired replicate agrees in sign; otherwise grey. Without replicate ids in

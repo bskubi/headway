@@ -268,6 +268,9 @@ table.heat th:hover { color: var(--accent); }
 table.heat th.grp { border-bottom: 2px solid var(--border); text-align: center; }
 table.heat th.sub { font-weight: 400; color: var(--muted); font-size: 12px; }
 table.heat th.row { text-align: left; padding-right: 12px; }
+table.heat th.row .grip { color: var(--muted); cursor: grab; font-size: 11px; margin-right: 3px; }
+table.heat tr.over th.row, table.heat tr.over td { box-shadow: inset 0 3px 0 var(--accent); }
+table.heat tr.over.after th.row, table.heat tr.over.after td { box-shadow: inset 0 -3px 0 var(--accent); }
 table.heat tr.on th.row { color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); padding-left: 8px; }
 table.heat tr.off th.row, table.heat tr.off td { opacity: .45; }
 table.heat th .dir { color: var(--muted); font-weight: 400; margin-left: 3px; }
@@ -276,7 +279,15 @@ table.heat td.cell { min-width: 78px; height: 36px; padding: 2px 6px; text-align
 table.heat td.cell:hover, table.heat td.cell.sel { outline: 2px solid var(--accent); }
 table.heat td.obj { font-weight: 650; }
 table.heat td.gap { width: 8px; padding: 0; }
+#detail .minename { font: inherit; width: 100%; border: 1px solid transparent; border-radius: 4px; padding: 1px 4px; margin-left: -5px; background: transparent; color: inherit; }
+#detail .minename:hover, #detail .minename:focus { border-color: var(--border); }
+table.mine input { width: 100%; box-sizing: border-box; font-family: var(--mono, monospace); font-size: 12.5px; padding: 2px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: inherit; }
+table.mine input.bad { border-color: var(--bad); }
+table.mine .err { color: var(--bad); font-size: 11.5px; }
+table.mine .err:empty { display: none; }
+table.mine td:last-child { width: 45%; }
 td.cell .sd { color: var(--muted); font-size: 10.5px; font-weight: 400; }
+td.cell .rk { color: var(--muted); font-size: 10.5px; font-weight: 600; margin-left: 4px; }
 td.cell .dl { display: block; font-size: 10.5px; font-weight: 400; white-space: nowrap; }
 .dl.good { color: var(--ok); } .dl.bad { color: var(--bad); } .dl.same, .dl.weak { color: var(--muted); }
 .dl .ag { opacity: .8; margin-left: 3px; }
@@ -372,6 +383,14 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
 .lanechip .grip { color: var(--muted); cursor: grab; font-size: 11px; }
 .lanechip button { font-size: 11px; padding: 0 5px; border-radius: 4px; font-weight: 400; color: var(--muted); }
 .lanechip button.on { color: var(--accent); border-color: var(--accent); }
+.lanechip.hid { opacity: .55; border-style: dashed; }
+.lanechip.hid .nm { text-decoration: line-through; }
+.lanechip button.eye, table.heat th.row button.eye { border: none; background: none; padding: 0 2px; color: var(--muted); display: inline-flex; align-items: center; cursor: pointer; touch-action: none; }
+.lanechip button.eye:hover, table.heat th.row button.eye:hover { color: var(--accent); }
+.lanechip button.eye.off { color: var(--bad); }
+table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
+.lanechip.brushed, table.heat th.row.brushed { outline: 2px dashed var(--accent); outline-offset: 1px; }
+#lanes #showall { font-size: 11.5px; padding: 1px 7px; }
 .lane rect { fill: none; stroke: var(--border); stroke-dasharray: 4 3; rx: 10; }
 .lane.on rect { stroke: var(--accent); stroke-dasharray: none; stroke-width: 1.5; }
 .lane .lanehead { font-size: 12.5px; color: var(--muted); padding: 6px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
@@ -868,9 +887,9 @@ function laneView(lane, lin) {
   return {lane, v, map, items, container, edges, groups, control};
 }
 async function render(fit = false, flash = false, changed = new Set()) {
-  const before = flash && current && LANES.length === 1 ? new Set(current.v.nodes.keys()) : null;
+  const before = flash && current && visibleLanes().length === 1 ? new Set(current.v.nodes.keys()) : null;
   const lin = lineages();
-  const per = (cmp.solo ? [active] : LANES).map((lane) => laneView(lane, lin));
+  const per = (cmp.solo ? [active] : visibleLanes()).map((lane) => laneView(lane, lin));
   use(active);
   const nodes = new Map(), edges = new Map(), groups = new Map();
   for (const p of per) {                                 // a slot is as large as its largest version; a later lane places it
@@ -898,7 +917,7 @@ async function render(fit = false, flash = false, changed = new Set()) {
   for (const n of nodes.values()) (holder[n.container] ?? elkNode).children.push({id: n.id, width: n.w + PAD, height: n.h + PAD});
   [...edges.values()].forEach(([a, b], k) => elkNode.edges.push({id: "e" + k, sources: [a], targets: [b]}));
   const laid = await elk.layout(elkNode);
-  const changes = new Map(LANES.map((l) => [l.id, refOf(l) ? diffLanes(lin, refOf(l), l) : null]));
+  const changes = new Map(visibleLanes().map((l) => [l.id, refOf(l) ? diffLanes(lin, refOf(l), l) : null]));
   const act = per.find((p) => p.lane === active);
   current = {v: act.v, laid, per, lin, changes, slots: nodes};
   draw();
@@ -943,11 +962,11 @@ function draw() {
     el.innerHTML = html;
     return el;
   };
-  const sn = suiteNow(), first = sn?.meta.objectives[0];
-  const scored = first && LANES.length > 1 ? objScores(LANES.map((l) => resultsOf(l, sn.id)), first, sn.meta).scores : null;
+  const vis = visibleLanes(), sn = suiteNow(), first = sn?.meta.objectives[0];
+  const scored = first && vis.length > 1 ? objScores(vis.map((l) => resultsOf(l, sn.id)), first, sn.meta).scores : null;
   per.forEach((p, k) => {
     const lane = p.lane, ref = refOf(lane), refP = ref && per.find((q) => q.lane === ref);
-    const score = scored?.[LANES.indexOf(lane)];
+    const score = scored?.[vis.indexOf(lane)];
     const ch = current.changes.get(lane.id);
     const dx = down ? 0 : k * (W + LANE_GAP), dy = (down ? k * (H + head + LANE_GAP) : 0) + head;
     use(lane);
@@ -1001,7 +1020,7 @@ function draw() {
       el.addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); select(n.type === "cgroup" ? {type: "group", key: n.key} : {type: n.type, key: n.key}); });
       if (n.type === "cgroup") el.addEventListener("dblclick", (e) => { e.stopPropagation(); toggle(n.key, lane); });
       nLayer.append(el);
-      const m = LANES.length > 1 && status(it);
+      const m = vis.length > 1 && status(it);
       if (m && m.status !== "same") {
         const mx = ix + fw - 3, my = iy + 3;
         const el2 = svgEl(`mk ${m.status}${m.quiet ? " quiet" : ""}`, `<title>${esc(m.title)}</title><circle cx="${mx}" cy="${my}" r="7.5"/><text x="${mx}" y="${my}">${esc(m.sym ?? MARK[m.status])}</text>`);
@@ -1089,7 +1108,7 @@ function fitView(readable = false) {
   window.addEventListener("pointerup", () => { panned = !!drag?.moved; drag = null; g.classList.remove("panning"); });
   // a press-and-drag pans: it must not select the nodes' text or drag it, nor count as a click where it ends
   g.addEventListener("selectstart", (e) => { if (!(e.target.parentElement ?? e.target).closest("#results, #gbar")) e.preventDefault(); });
-  g.addEventListener("dragstart", (e) => e.preventDefault());
+  g.addEventListener("dragstart", (e) => { if (!e.target.closest?.("#results")) e.preventDefault(); });     // (the results' rows drag)
   g.addEventListener("click", (e) => { if (panned) { panned = false; e.stopPropagation(); } }, true);
   g.addEventListener("click", (e) => { if (e.target.closest(".node, .grp, #results")) return; if (state.sel && !state.focus) select(null); });
 })();
@@ -1278,7 +1297,7 @@ function select(sel) {
 }
 function toggle(path, lane = active) {
   // the group in every lane, under whichever path it has there
-  const paths = current && LANES.length > 1 ? new Set([path, ...[...current.lin.members("group", current.lin.of(lane.id, "group", path)).values()].flat()]) : [path];
+  const paths = current && visibleLanes().length > 1 ? new Set([path, ...[...current.lin.members("group", current.lin.of(lane.id, "group", path)).values()].flat()]) : [path];
   const close = !state.collapsed.has(path);
   paths.forEach((p) => close ? state.collapsed.add(p) : state.collapsed.delete(p));
   render();
@@ -1416,11 +1435,11 @@ function showDetail(sel) {
 /* ---------- the selection across versions ---------- */
 const symLabel = (lane, k) => { const x = lane.D.symbols.find((y) => y.key === k); return x ? symShown(x) : esc(k); };
 function versionsHTML(sel) {
-  if (LANES.length < 2 || !current || sel.type === "spec") return "";
+  if (visibleLanes().length < 2 || !current || sel.type === "spec") return "";
   const kind = sel.type, mem = current.lin.members(kind, current.lin.of(active.id, kind, sel.key));
-  const rows = LANES.map((l) => {
+  const rows = visibleLanes().map((l) => {
     const keys = mem.get(l.id) ?? [], ch = current.changes.get(l.id), c = keys.length && ch ? ch.map.get(kind + "|" + keys[0]) : null;
-    const st = !keys.length ? `<span class="vs none">not in this version</span>` : !ch ? `<span class="vs same">${cmp.base === l.id ? "the baseline" : "the first version"}</span>`
+    const st = !keys.length ? `<span class="vs none">not in this version</span>` : !ch ? `<span class="vs same">${cmp.base === l.id ? "the baseline" : "the first version shown"}</span>`
       : `<span class="vs ${c?.status ?? "same"}">${esc(statusText(c) || "same")}</span>`;
     const named = keys.length && (keys.length > 1 || keys[0] !== sel.key) ? " " + keys.map((k) => `<code>${esc(k)}</code>`).join(", ") : "";
     return `<tr class="${l === active ? "on" : ""}" data-lane="${l.id}" title="${keys.length ? "show this version" : ""}"><td>${esc(l.name)}${named}</td><td>${st}</td></tr>`;
@@ -1505,8 +1524,9 @@ function summaryLinesFor(lane, ref) {
 }
 function versionLines() {
   const L = [];
-  if (LANES.length > 1 || active.D.snapshot) {
-    L.push(`This is about the version "${active.name}" (${laneMeta(active) || "built " + D.built}), one of ${LANES.length} versions open side by side: ${LANES.map((l) => `"${l.name}"`).join(", ")}.`);
+  const vis = visibleLanes();
+  if (vis.length > 1 || active.D.snapshot) {
+    L.push(`This is about the version "${active.name}" (${laneMeta(active) || "built " + D.built}), one of ${vis.length} versions shown side by side: ${vis.map((l) => `"${l.name}"`).join(", ")}.`);
     if (D.snapshot) L.push(`"${active.name}" is a saved build${active.from ? ` (${fileName(active.from)})` : ""}, not necessarily what is on disk now: the declarations and code below are quoted as they were then.${D.source?.git ? " To read the files as they were, look at that commit." : ""}`);
   } else if (D.source?.git) L.push(`The page was built from ${gitText(D)}.`);
   return L.length ? [...L, ""] : [];
@@ -1578,7 +1598,7 @@ const EXPLAIN = [
   ["Check my understanding", "write your understanding below the question", (S) =>
     `Here is my understanding of ${S}. Tell me what is right, what is wrong and what is missing:\n\n`],
 ];
-const explainPresets = () => LANES.length > 1 && refOf(active) ? [...EXPLAIN, ["What changed?", "what changed against the version this one is compared with, and what it does", (S) =>
+const explainPresets = () => visibleLanes().length > 1 && refOf(active) ? [...EXPLAIN, ["What changed?", "what changed against the version this one is compared with, and what it does", (S) =>
   `What changed in ${S} from the version "${refOf(active).name}" to "${active.name}", and what does the change do to the results? Say which reasons are documented and which are your reading.`]] : EXPLAIN;
 const FORMATS = [            // from the quickest answer to the most elaborate
   ["quick", "Quick answer", "a few sentences in the chat",
@@ -1757,7 +1777,7 @@ function askPrompt(sel, request) {
     L.push(`- label: ${obj.label}`, `- description: ${obj.desc || "(none)"}`, `- steps: ${ORDER.filter((k) => within(OP[k].group, obj.path)).join(", ")}`);
   }
   L.push("");
-  if (LANES.length > 1 && current && refOf(active)) {
+  if (visibleLanes().length > 1 && current && refOf(active)) {
     const c = current.changes.get(active.id)?.map.get(sel.type + "|" + sel.key);
     const lines = changeLines(c, sel.type, refOf(active));
     if (lines.length) L.push(...lines, "");
@@ -1823,11 +1843,32 @@ let active = own, laneSeq = LANES.length;
 const cmp = {base: null, wording: false, solo: false};  // against the lane before or a baseline; solo: draw the active lane only
 function snapshot(d) { delete d.lanes; d.snapshot = true; return d; }
 function use(lane) { if (D !== lane.D) { D = lane.D; index(); } }
+/* hidden versions stay open (loaded, in the version bar) but are left out of both views: not drawn, not in the
+   results, not scored (a rank objective ranks among the shown ones) and not compared with. Remembered per
+   version (title, name, build time) in this browser, so a reload or a later page hides them again. */
+const visibleLanes = () => LANES.filter((l) => !l.hidden);
+const HIDDEN_KEY = "headway.hidden";
+const laneKey = (l) => [l.D.title, l.D.name ?? l.name, madeAt(l.D)].join("|");
+function storedHidden() { try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) ?? "[]")); } catch { return new Set(); } }
+function storeHidden() {
+  try {
+    const s = storedHidden();
+    for (const l of LANES) { s.delete(laneKey(l)); if (l.hidden) s.add(laneKey(l)); }   // the latest last
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...s].slice(-500)));
+  } catch {}
+}
+{ const s = storedHidden(); LANES.forEach((l) => l.hidden = s.has(laneKey(l))); }
+if (!visibleLanes().length) own.hidden = false;
+if (active.hidden) { active = visibleLanes().at(-1); use(active); }
+// the version a lane is compared with: the baseline while it is shown (hidden, it is set aside until shown again),
+// else the shown version before it
 const refOf = (lane) => {
-  if (cmp.base !== null) return lane.id === cmp.base ? null : LANES.find((l) => l.id === cmp.base) ?? null;
-  const k = LANES.indexOf(lane);
-  return k > 0 ? LANES[k - 1] : null;
+  const base = cmp.base === null ? null : LANES.find((l) => l.id === cmp.base && !l.hidden);
+  if (base) return lane === base ? null : base;
+  const vis = visibleLanes(), k = vis.indexOf(lane);
+  return k > 0 ? vis[k - 1] : null;
 };
+const baseShown = () => cmp.base !== null && LANES.some((l) => l.id === cmp.base && !l.hidden);
 const KIND = {op: "ops", sym: "symbols", group: "groups"};
 const kkey = (kind, o) => kind === "group" ? o.path : o.key;
 // objects that correspond across the lanes (the same key, or a `was` key), each lineage named by a key of its last lane
@@ -1952,7 +1993,7 @@ const laneMeta = (l) => [l.D.title !== own.D.title ? `“${l.D.title}”` : "", 
   `built ${l.D.built}`, gitText(l.D)].filter(Boolean).join(" · ");
 
 function setActive(lane) {
-  if (lane === active) return;
+  if (lane === active || lane.hidden) return;
   const there = state.sel ? counterpart(state.sel, lane) : null;
   active = lane;
   use(lane);
@@ -1980,35 +2021,101 @@ window.HW = {                                       // what the library (above) 
   add: (files) => addLanes(files),
 };
 function lanesChanged(fit = true) {
-  if (!LANES.includes(active)) { active = LANES.includes(own) ? own : LANES.at(-1); use(active); state.sel = null; header(); buildLegend(); buildGroupsMenu(); }
+  if (!LANES.includes(active) || active.hidden) {        // closed or hidden: read the nearest shown version instead
+    const vis = visibleLanes(), at = LANES.indexOf(active);
+    const next = at < 0 ? (vis.includes(own) ? own : vis.at(-1)) : vis.find((l) => LANES.indexOf(l) > at) ?? vis.at(-1);
+    state.sel = at < 0 ? null : counterpart(state.sel, next);
+    active = next; use(active); header(); buildLegend(); buildGroupsMenu();
+  }
   if (cmp.base !== null && !LANES.some((l) => l.id === cmp.base)) cmp.base = null;
+  if (rs.focus?.kind === "lane" && !visibleLanes().some((l) => l.id === rs.focus.key)) rs.focus = null;
   laneBar();
   viewSwitch();
   syncURL();
   render(fit).then(() => { if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel); });
 }
+/* showing and hiding versions, from the version bar and the Results rows alike: click a version's eye, press on one
+   and drag across its neighbours, or shift-click to reach from the last one clicked; the versions swept take the
+   state opposite to the first one's. One version always stays shown. */
+const EYE = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="2.2" fill="currentColor"/></svg>`;
+const EYE_OFF = `<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M1 8s2.6-5 7-5 7 5 7 5-2.6 5-7 5-7-5-7-5z" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.5 13.5l11-11" stroke="currentColor" stroke-width="1.4"/></svg>`;
+const eyeHTML = (l) => `<button class="eye${l.hidden ? " off" : ""}" data-eye="${l.id}" title="${l.hidden ? "show" : "hide"} this version (it stays open) · drag across others to ${l.hidden ? "show" : "hide"} them too · shift-click: from the last one clicked">${l.hidden ? EYE_OFF : EYE}</button>`;
+let brushing = false, eyeAnchor = null;
+function setHidden(lanes, hide) {
+  const change = lanes.filter((l) => !!l.hidden !== hide);
+  if (!change.length) return;
+  if (hide && visibleLanes().every((l) => change.includes(l))) {
+    const keep = change.includes(active) ? active : change[0];         // one stays shown
+    change.splice(change.indexOf(keep), 1);
+    if (!change.length) { note("One version stays shown"); return; }
+  }
+  change.forEach((l) => l.hidden = hide);
+  storeHidden();
+  note(`${hide ? "Hid" : "Showed"} ${change.length > 3 ? change.length + " versions" : change.map((l) => l.name).join(", ")}` +
+    (hide ? `; still open: ${LANES.filter((l) => l.hidden).length} hidden` : ""));
+  lanesChanged(true);
+}
+// the eyes of the items (each with data-lane) in el, in their order there
+function wireEyes(el, itemSel) {
+  if (!el) return;
+  const items = [...el.querySelectorAll(itemSel)];
+  const laneOf = (it) => LANES.find((l) => l.id === +it.dataset.lane);
+  items.forEach((item) => {
+    const eye = item.querySelector(".eye");
+    if (!eye) return;
+    eye.addEventListener("click", (e) => e.stopPropagation());
+    eye.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); e.stopPropagation();
+      const anchor = e.shiftKey && eyeAnchor ? items.findIndex((x) => laneOf(x) === eyeAnchor) : -1;
+      const from = anchor >= 0 ? anchor : items.indexOf(item), hide = !laneOf(item).hidden;
+      let to = items.indexOf(item);
+      const span = () => items.slice(Math.min(from, to), Math.max(from, to) + 1);
+      const paint = () => { const sw = span(); items.forEach((x) => x.classList.toggle("brushed", sw.includes(x))); };
+      const move = (ev) => {
+        const k = items.indexOf(document.elementFromPoint(ev.clientX, ev.clientY)?.closest(itemSel));
+        if (k >= 0 && k !== to) { to = k; paint(); }
+      };
+      const end = (ev) => {
+        removeEventListener("pointermove", move); removeEventListener("pointerup", end); removeEventListener("pointercancel", end);
+        brushing = false;
+        items.forEach((x) => x.classList.remove("brushed"));
+        if (ev.type === "pointercancel") return;
+        eyeAnchor = laneOf(items[to]);
+        setHidden(span().map(laneOf), hide);
+      };
+      brushing = true;
+      paint();
+      addEventListener("pointermove", move); addEventListener("pointerup", end); addEventListener("pointercancel", end);
+    });
+  });
+}
 const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom";
 function laneBar() {
   const el = $("lanes");
   $("hint").textContent = HINT; $("hint").title = "";
-  $("unchanged").hidden = LANES.length < 2;
+  $("unchanged").hidden = visibleLanes().length < 2;
   if (LANES.length < 2) { el.innerHTML = ""; return; }
-  const base = LANES.find((l) => l.id === cmp.base);
+  const base = baseShown() ? LANES.find((l) => l.id === cmp.base) : null, nHidden = LANES.filter((l) => l.hidden).length;
   el.innerHTML = `<span class="lbl">Versions</span>` + LANES.map((l) =>
-    `<span class="lanechip${l === active ? " on" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;click: read this version in the panels · drag: reorder"><span class="grip">⠿</span>${esc(l.name)}` +
-    `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="compare every other version with this one">baseline</button>` +
+    `<span class="lanechip${l === active ? " on" : ""}${l.hidden ? " hid" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;${l.hidden ? "hidden: left out of the graph and the results · click: show it" : "click: read this version in the panels"} · drag: reorder"><span class="grip">⠿</span>${eyeHTML(l)}<span class="nm">${esc(l.name)}</span>` +
+    `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="${cmp.base === l.id && l.hidden ? "the baseline, set aside while it is hidden: the others are compared with the shown version before them" : "compare every other version with this one"}">baseline</button>` +
     `<button data-close="${l.id}" title="close this lane">×</button></span>`).join("") +
+    (nHidden ? `<button id="showall" title="show every open version again">Show all (${nHidden} hidden)</button>` : "") +
     `<span class="lanectl gonly"><span class="seg" title="draw every open version, or only the one you are reading (the others stay open; click one to switch)">` +
     `<label><input type="radio" name="solo" value=""${cmp.solo ? "" : " checked"}><span>Side by side</span></label>` +
     `<label><input type="radio" name="solo" value="1"${cmp.solo ? " checked" : ""}><span>One at a time</span></label></span>` +
     `<label class="seg" title="also mark changes to labels, names and descriptions"><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label></span>`;
-  $("hint").innerHTML = `marked against ${base ? esc(base.name) : `the version ${lanesDown() ? "above" : "to the left"}`}: <span style="color:var(--ok)">+</span> added · <span style="color:var(--setting)">Δ</span> changed · <span style="color:var(--bad)">−</span> gone · <span style="color:var(--output)">⋔</span> split or merged`;
+  $("hint").innerHTML = `marked against ${base ? esc(base.name) : `the shown version ${lanesDown() ? "above" : "to the left"}${cmp.base !== null ? " (the baseline is hidden)" : ""}`}: <span style="color:var(--ok)">+</span> added · <span style="color:var(--setting)">Δ</span> changed · <span style="color:var(--bad)">−</span> gone · <span style="color:var(--output)">⋔</span> split or merged`;
   $("hint").title = HINT;
   let dragged = null;
   el.querySelectorAll(".lanechip").forEach((chip) => {
     const lane = LANES.find((l) => l.id === +chip.dataset.lane);
-    chip.addEventListener("click", (e) => { if (!e.target.closest("button")) setActive(lane); });
-    chip.addEventListener("dragstart", (e) => { dragged = lane; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(lane.id)); });
+    chip.addEventListener("click", (e) => {
+      if (e.target.closest("button")) return;
+      if (lane.hidden) { setHidden([lane], false); setActive(lane); } else setActive(lane);
+    });
+    chip.addEventListener("dragstart", (e) => { if (brushing) { e.preventDefault(); return; } dragged = lane; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(lane.id)); });
     chip.addEventListener("dragover", (e) => {
       e.preventDefault();
       const r = chip.getBoundingClientRect();
@@ -2034,6 +2141,8 @@ function laneBar() {
     note(`Closed ${lane.name}`);
     lanesChanged();
   }));
+  wireEyes(el, ".lanechip");
+  if ($("showall")) $("showall").onclick = () => setHidden(LANES, false);
   $("wording").onchange = (e) => { cmp.wording = e.target.checked; render(); showDetail(state.sel); };
   document.querySelectorAll("input[name=solo]").forEach((r) => r.onchange = () => {
     cmp.solo = !!r.value;
@@ -2087,6 +2196,7 @@ async function addLanes(files) {
         continue;
       }
       const lane = {id: ++laneSeq, name, from: f.src ?? f.name, src: f.src ?? null, D: snapshot(d)};
+      lane.hidden = storedHidden().has(laneKey(lane));       // hidden the last time it was open
       const later = LANES.findIndex((l) => madeAt(l.D) > madeAt(d));      // in order of building, among the others
       LANES.splice(later < 0 ? LANES.length : later, 0, lane);
       added.push(lane.name);
@@ -2097,7 +2207,8 @@ async function addLanes(files) {
     if (active.D !== D) use(active);
     header(); buildLegend();
     note([added.length && `Opened ${added.join(", ")}: each in a lane of its own`,
-          reloaded.length && `Open already: ${reloaded.join(", ")}; reloaded from the file`].filter(Boolean).join("; "));
+          reloaded.length && `Open already: ${reloaded.join(", ")}; reloaded from the file`,
+          LANES.some((l) => l.hidden && added.includes(l.name)) && "hidden as before: show them from the version bar"].filter(Boolean).join("; "));
   }
 }
 $("addlane").onclick = () => LIB ? openLibrary(false) : $("lanefile").click();
@@ -2107,13 +2218,13 @@ $("lanefile").onchange = (e) => { addLanes([...e.target.files]); e.target.value 
    Each version's headway may carry results, each on a suite (title@version) with the suite's built headway. The
    versions compared are the open lanes; the suite is the active version's (else the first one found). The
    objectives are computed here as in bench.py; keep the two in step. */
-const rs = {view: "graph", heldout: false, by: "metric", delta: true, color: "shown", sort: null, focus: null};
+const rs = {view: "graph", heldout: false, by: "metric", delta: true, ranks: true, color: "shown", sort: null, focus: null};
 try { Object.assign(rs, JSON.parse(localStorage.getItem("headway.results") ?? "{}"), {sort: null, focus: null}); } catch {}
-const saveRs = () => { try { localStorage.setItem("headway.results", JSON.stringify({view: rs.view, heldout: rs.heldout, by: rs.by, delta: rs.delta, color: rs.color})); } catch {} };
+const saveRs = () => { try { localStorage.setItem("headway.results", JSON.stringify({view: rs.view, heldout: rs.heldout, by: rs.by, delta: rs.delta, ranks: rs.ranks, color: rs.color})); } catch {} };
 const resultsOf = (lane, id) => (lane.D.results ?? []).find((r) => !id || r.id === id) ?? null;
-const hasResults = () => LANES.some((l) => l.D.results?.length);
+const hasResults = () => visibleLanes().some((l) => l.D.results?.length);
 function suiteNow() {
-  const r = resultsOf(active) ?? LANES.map((l) => resultsOf(l)).find(Boolean);
+  const r = resultsOf(active) ?? visibleLanes().map((l) => resultsOf(l)).find(Boolean);
   return r ? {id: r.id, suite: r.suite, meta: r.suite.suite} : null;
 }
 const mean = (v) => v.reduce((a, b) => a + b, 0) / v.length;
@@ -2132,9 +2243,99 @@ function fmt(x) {
   const [m, e] = x.toExponential(SIG - 1).split("e");
   return `${m}e${Number(e)}`;
 }
+/* your own objectives, made in the browser: the sum, over the metrics and the datasets shown, of a transform of each
+   version's mean. Each version is scored from its own values alone, so two versions keep their order whatever others
+   are shown (unlike a mean rank). Kept in this browser, per suite; bench.py knows nothing of them. */
+const EXPR_FNS = {log: Math.log, log10: Math.log10, log2: Math.log2, exp: Math.exp, sqrt: Math.sqrt, abs: Math.abs, min: Math.min, max: Math.max};
+const EXPR_VARS = ["x", "sd", "n", "lo", "hi"];
+const exprCache = new Map();
+// a transform as typed -> {fn} (fn: {x, sd, n, lo, hi} -> number), {error}, or {} if empty; parsed, never run as code
+function compileExpr(src) {
+  src = (src ?? "").trim();
+  if (!src) return {};
+  if (!exprCache.has(src)) { try { exprCache.set(src, {fn: parseExpr(src)}); } catch (e) { exprCache.set(src, {error: e.message}); } }
+  return exprCache.get(src);
+}
+function parseExpr(src) {
+  const toks = src.replace(/×/g, "*").replace(/−/g, "-").replace(/\*\*/g, "^")
+    .match(/\d+\.?\d*(?:e[+-]?\d+)?|\.\d+(?:e[+-]?\d+)?|[A-Za-z_]\w*|\S/gi) ?? [];
+  let k = 0;
+  const peek = () => toks[k];
+  const take = (t) => { if (toks[k] !== t) throw new Error(toks[k] === undefined ? `a “${t}” is missing at the end` : `expected “${t}”, not “${toks[k]}”`); k++; };
+  const binary = (next, ops) => () => {
+    let a = next();
+    while (ops[peek()]) { const op = ops[toks[k++]], l = a, r = next(); a = (e) => op(l(e), r(e)); }
+    return a;
+  };
+  const unary = () => {
+    if (peek() === "-") { k++; const a = unary(); return (e) => -a(e); }
+    if (peek() === "+") { k++; return unary(); }
+    const a = atom();
+    if (peek() !== "^") return a;
+    k++;
+    const b = unary();
+    return (e) => a(e) ** b(e);
+  };
+  const atom = () => {
+    const t = toks[k++];
+    if (t === undefined) throw new Error("it ends too soon");
+    if (/^[\d.]/.test(t)) { const v = Number(t); if (!Number.isFinite(v)) throw new Error(`“${t}” is not a number`); return () => v; }
+    if (t === "(") { const a = sum(); take(")"); return a; }
+    if (/^[A-Za-z_]/.test(t)) {
+      if (peek() === "(") {
+        const f = Object.hasOwn(EXPR_FNS, t) ? EXPR_FNS[t] : null;
+        if (!f) throw new Error(`no function “${t}”: ${Object.keys(EXPR_FNS).join(", ")}`);
+        k++;
+        const args = [sum()];
+        while (peek() === ",") { k++; args.push(sum()); }
+        take(")");
+        return (e) => f(...args.map((a) => a(e)));
+      }
+      if (!EXPR_VARS.includes(t)) throw new Error(`no name “${t}”: ${EXPR_VARS.join(", ")}`);
+      return (e) => e[t] ?? NaN;
+    }
+    throw new Error(`unexpected “${t}”`);
+  };
+  const product = binary(unary, {"*": (a, b) => a * b, "/": (a, b) => a / b});
+  const sum = binary(product, {"+": (a, b) => a + b, "-": (a, b) => a - b});
+  const f = sum();
+  if (k < toks.length) throw new Error(`unexpected “${toks[k]}”`);
+  return f;
+}
+const MINE_KEY = "headway.objectives";
+const MINE = (() => { try { return JSON.parse(localStorage.getItem(MINE_KEY) ?? "{}") ?? {}; } catch { return {}; } })();   // suite id -> objectives
+const storeMine = () => { try { localStorage.setItem(MINE_KEY, JSON.stringify(MINE)); } catch {} };
+const objectivesOf = (sn) => [...sn.meta.objectives, ...(MINE[sn.id] ?? [])];
+function addMine(sn) {
+  const list = MINE[sn.id] ??= [];
+  const o = {key: "mine" + Date.now().toString(36), name: list.length ? `Mine ${list.length + 1}` : "Mine", how: "sum", desc: "",
+    f: Object.fromEntries(sn.meta.metrics.map((m) => [m.key, m.better === "higher" ? "x" : "-x"]))};
+  list.push(o);
+  storeMine();
+  return o;
+}
+function sumScores(rows, o, meta) {
+  const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
+  const fs = meta.metrics.map((m) => [m, compileExpr(o.f[m.key])]).filter(([, c]) => c.fn || c.error);
+  const bad = fs.filter(([, c]) => c.error).map(([m]) => `a valid transform of ${m.key}`);
+  const missing = rows.map(() => [...bad, ...(fs.length ? [] : ["a transform of any metric"])]);
+  const scores = rows.map((r, n) => {
+    if (missing[n].length) return null;
+    let total = 0;
+    for (const [m, {fn}] of fs) for (const d of datasets) {
+      const v = r?.values[d.key]?.[m.key];
+      if (!v?.length) { missing[n].push(`${m.key} on ${d.key}`); continue; }
+      const y = fn({x: mean(v), sd: sd(v), n: v.length, lo: m.range?.[0], hi: m.range?.[1]});
+      if (Number.isFinite(y)) total += y; else missing[n].push(`finite transform of ${m.key} on ${d.key} (${fmt(y)})`);
+    }
+    return missing[n].length ? null : total;
+  });
+  return {scores, missing};
+}
 const objDatasets = (o, meta) => o.datasets ?? meta.datasets.filter((d) => !d.heldout).map((d) => d.key);
 // an objective for each row (null: incomplete), and what each incomplete row lacks
 function objScores(rows, o, meta) {
+  if (o.how === "sum") return sumScores(rows, o, meta);
   const metrics = Object.fromEntries(meta.metrics.map((m) => [m.key, m]));
   const cells = Object.entries(o.weights).flatMap(([mk, w]) => objDatasets(o, meta).map((dk) => [dk, mk, w]));
   const means = rows.map((r) => new Map(cells.filter(([dk, mk]) => r?.values[dk]?.[mk]?.length).map(([dk, mk]) => [dk + "|" + mk, mean(r.values[dk][mk])])));
@@ -2175,6 +2376,13 @@ function deltaHTML(v, ref, better) {
   const good = better === "higher" ? d > 0 : d < 0;
   return `<span class="dl ${good ? "good" : "bad"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
 }
+// a value's place among the column's (the versions shown that have one), 1 the best; ties share a place
+function placeHTML(v, column, better) {
+  const vs = column.filter((x) => x !== null && x !== undefined);
+  if (!rs.ranks || v === null || vs.length < 2) return "";
+  const ahead = vs.filter((x) => better === "higher" ? x > v : x < v).length, tied = vs.filter((x) => x === v).length - 1;
+  return `<span class="rk" title="${ahead + 1}${tied ? `, tied with ${tied} other${tied > 1 ? "s" : ""},` : ""} of the ${vs.length} versions shown with a value (${better} is better)">#${ahead + 1}${tied ? "=" : ""}</span>`;
+}
 // version b's difference from version a on a metric and dataset, paired by replicate id: bench.py's paired (keep
 // the two in step), and each replicate's difference with the benchmark's interval of it, for the plot
 function pairedDiff(b, a, dk, mk, bName, aName) {
@@ -2211,10 +2419,55 @@ function pairedTitle(p, bName, aName, m) {
   L.push(p.supported ? "supported" : "not supported: shown in grey");
   return L.join("; ");
 }
+// the Results table's rows (the versions shown, with their results on the suite) in the order shown: the versions'
+// order, or sorted by the chosen column (ties keep the versions' order)
+function resultRows(sn) {
+  const rows = visibleLanes().map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  if (!rs.sort) return rows;
+  const {meta} = sn;
+  let key;
+  if (rs.sort.kind === "objective") {
+    const o = objectivesOf(sn).find((x) => x.key === rs.sort.key);
+    if (!o) return rows;
+    const {scores} = objScores(rows.map((x) => x.r), o, meta);
+    key = (n) => scores[n] === null ? Infinity : o.how === "rank" ? scores[n] : -scores[n];
+  } else if (rs.sort.dataset) {
+    const m = meta.metrics.find((x) => x.key === rs.sort.key);
+    key = (n) => { const v = rows[n].r?.values[rs.sort.dataset]?.[rs.sort.key]; return !v?.length ? Infinity : m.better === "higher" ? -mean(v) : mean(v); };
+  } else {                                    // a metric over the datasets shown: the mean place, ties shared (unitless)
+    const m = meta.metrics.find((x) => x.key === rs.sort.key);
+    const places = meta.datasets.filter((d) => rs.heldout || !d.heldout).map((d) => {
+      const col = rows.map((x) => { const v = x.r?.values[d.key]?.[m.key]; return v?.length ? mean(v) : null; });
+      const vs = col.filter((v) => v !== null);
+      return col.map((v) => v === null ? null : 1 + vs.filter((q) => m.better === "higher" ? q > v : q < v).length + (vs.filter((q) => q === v).length - 1) / 2);
+    });
+    key = (n) => places.some((p) => p[n] === null) ? Infinity : mean(places.map((p) => p[n]));
+  }
+  const k = rows.map((_, n) => key(n));
+  return rows.map((_, n) => n).sort((a, b) => k[a] === k[b] ? a - b : k[a] - k[b]).map((n) => rows[n]);
+}
+// the row a row's results are compared with: the baseline while it is shown, else the row above it as shown
+function resultRef(rows, row) {
+  const base = baseShown() ? rows.find((x) => x.lane.id === cmp.base) : null;
+  if (base) return row === base ? null : base;
+  const k = rows.indexOf(row);
+  return k > 0 ? rows[k - 1] : null;
+}
+// the versions shown take this order, in the places they hold among all the open ones (hidden ones stay put)
+function adoptOrder(lanes) {
+  const slots = LANES.flatMap((l, k) => l.hidden ? [] : [k]);
+  slots.forEach((k, n) => LANES[k] = lanes[n]);
+}
 function renderResults() {
   const el = $("results");
   const sn = suiteNow();
   if (!sn) {
+    const hiddenWith = LANES.filter((l) => l.hidden && l.D.results?.length);
+    if (hiddenWith.length) {
+      el.innerHTML = `<div class="noresults"><p><b>No benchmark results in the versions shown.</b></p><p>Hidden: ${hiddenWith.map((l) => esc(l.name)).join(", ")}, with results. <button id="noresultsshow">Show ${hiddenWith.length > 1 ? "them" : "it"}</button></p></div>`;
+      $("noresultsshow").onclick = () => setHidden(hiddenWith, false);
+      return;
+    }
     el.innerHTML = `<div class="noresults"><p><b>No benchmark results in ${LANES.length > 1 ? "any of the open versions" : "this headway"}.</b></p>` +
       `<p>Results are put into a built headway by the benchmark: <code>headway build SPEC --results results.json</code>, <code>headway attach HEADWAY results.json</code>, or <code>headway.build(..., results=[...])</code> from Python (<code>headway guide</code>, “Benchmarks”).${D.live ? " A spec served live has none of its own: it is the code as it is now, not yet benchmarked." : ""}</p>` +
       `<p><button id="noresultsopen">Open…</button> opens built versions that have results beside this one.</p></div>`;
@@ -2222,10 +2475,11 @@ function renderResults() {
     return;
   }
   const {meta} = sn;
-  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const rows = resultRows(sn);
+  const nHidden = LANES.length - rows.length;
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
   const metrics = meta.metrics, title = (m) => sn.suite.symbols.find((x) => x.key === m.key);
-  const objectives = meta.objectives.map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
+  const objectives = objectivesOf(sn).map((o) => ({o, ...objScores(rows.map((x) => x.r), o, meta)}));
   const value = (row, dk, mk) => { const v = row.r?.values[dk]?.[mk]; return v?.length ? v : null; };
   // columns: objectives, then metric x dataset, grouped by metric or by dataset
   // figures: columns of images before the metrics, never shaded, sorted or ranked
@@ -2234,43 +2488,34 @@ function renderResults() {
     ...metrics.map((m) => ({head: m, cols: datasets.map((d) => ({m, d}))}))]
     : datasets.map((d) => ({head: d, cols: [...figures.map((f) => ({f, d})), ...metrics.map((m) => ({m, d}))]}));
   const cols = groups.flatMap((g) => g.cols);
-  // rows in lane order, or sorted by the chosen column
-  let order = rows.map((_, n) => n);
-  if (rs.sort) {
-    const key = (n) => {
-      if (rs.sort.kind === "objective") { const ob = objectives.find((x) => x.o.key === rs.sort.key); const v = ob.scores[n]; return v === null ? Infinity : ob.o.how === "rank" ? v : -v; }
-      const m = metrics.find((x) => x.key === rs.sort.key), v = value(rows[n], rs.sort.dataset, rs.sort.key);
-      return v === null ? Infinity : m.better === "higher" ? -mean(v) : mean(v);
-    };
-    order.sort((a, b) => key(a) - key(b));
-  }
-  const ref = (lane) => { const l = refOf(lane); return l ? rows.find((x) => x.lane === l) : null; };
   const dirMark = (m) => `<span class="dir" title="${m.better} is better">${m.better === "higher" ? "↑" : "↓"}</span>`;
   const sorted = (kind, key, dataset) => rs.sort && rs.sort.kind === kind && rs.sort.key === key && (kind === "objective" || rs.sort.dataset === dataset) ? " sorted" : "";
   const focused = (kind, key, dataset) => rs.focus && rs.focus.kind === kind && rs.focus.key === key && (!dataset || rs.focus.dataset === dataset);
-  let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions have results on it</span>` +
+  let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions shown have results on it${nHidden ? ` · ${nHidden} hidden, left out of the scores <button id="rshowall" title="show every open version again">Show all</button>` : ""}</span>` +
     `<span class="seg"><label><input type="radio" name="rby" value="metric"${rs.by === "metric" ? " checked" : ""}><span>By metric</span></label><label><input type="radio" name="rby" value="dataset"${rs.by === "dataset" ? " checked" : ""}><span>By dataset</span></label></span>` +
     `<span class="seg" title="the shade of a cell: from the worst to the best of the versions shown, or across the metric's whole range"><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
     `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline): the mean of the per-replicate differences ± their s.d. and how many replicates agree, paired by replicate id; ● every interval of the difference the benchmark gave excludes 0, ◐ some, ○ none; in color only when the difference is supported"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
+    `<button id="addobj" title="make your own objective: the sum of a transform of each metric, typed in the panel (kept in this browser)">+ Objective</button>` +
+    `<label class="seg" title="beside each value, its place among the versions shown (#1 the best; = a tie)"><input type="checkbox" id="rranks"${rs.ranks ? " checked" : ""}><span>Ranks</span></label>` +
     (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="the datasets kept out of development"><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
-    `<span>click a column for what it measures and the values' spread; click it again to sort by it</span></div>`;
+    `<span>click a column's header to sort by it (again: unsort) and for what it measures; a metric's header, by the mean place over the datasets shown; click a value for the values' spread · drag a version to reorder</span></div>`;
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
-    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}" title="${esc(o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
-    (objectives.length ? `<th rowspan="2"></th>` : "") +
+    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}" title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
+    `<th rowspan="2" class="gap"></th>` +
     groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
-      : `<th class="grp" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
+      : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}" ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}click: sort by the mean place over the datasets shown"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
     `</tr><tr>` + cols.map(({m, f, d}) => f ? `<th class="sub" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.desc ?? "")}">${rs.by === "metric" ? esc(d.name) : `${esc(f.name)}<span class="dir">▣</span>`}</th>`
       : `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}">${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
-  for (const n of order) {
-    const row = rows[n], rr = ref(row.lane);
-    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}">${esc(row.lane.name)}</th>`;
+  for (const [n, row] of rows.entries()) {
+    const rr = resultRef(rows, row);
+    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}&#10;click: read this version · drag: reorder (the graph's lanes too)" draggable="true"><span class="grip">⠿</span>${eyeHTML(row.lane)}${esc(row.lane.name)}</th>`;
     for (const ob of objectives) {
-      const v = ob.scores[n], g = v === null ? null : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : 1 - (v - 1) / Math.max(1, ob.scores.filter((x) => x !== null).length - 1);
+      const v = ob.scores[n], g = v === null ? null : ob.o.how === "sum" ? goodness(v, {better: "higher"}, ob.scores) : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : 1 - (v - 1) / Math.max(1, ob.scores.filter((x) => x !== null).length - 1);
       const rv = rr ? ob.scores[rows.indexOf(rr)] : null;
       h += v === null ? `<td class="cell obj missing" data-obj="${esc(ob.o.key)}" title="incomplete: no ${esc(ob.missing[n].join(", "))}">${row.r ? "incomplete" : "–"}</td>`
-        : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${rs.delta ? deltaHTML(v, rv, ob.o.how === "rank" ? "lower" : "higher") : ""}</td>`;
+        : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${placeHTML(v, ob.scores, ob.o.how === "rank" ? "lower" : "higher")}${rs.delta ? deltaHTML(v, rv, ob.o.how === "rank" ? "lower" : "higher") : ""}</td>`;
     }
-    if (objectives.length) h += `<td class="gap"></td>`;
+    h += `<td class="gap"></td>`;
     for (const {m, f, d} of cols) {
       if (f) {
         const imgs = row.r?.figures?.[d.key]?.[f.key];
@@ -2284,7 +2529,7 @@ function renderResults() {
       const ids = row.r.replicates?.[d.key]?.[m.key], ivs = row.r.intervals?.[d.key]?.[m.key];
       const pd = rs.delta && rr?.r ? pairedDiff(row.r, rr.r, d.key, m.key, row.lane.name, rr.lane.name) : null;
       h += `<td class="cell${focused("metric", m.key, d.key) ? " sel" : ""}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}" style="${cellStyle(goodness(mean(v), m, column))}" title="${v.length} value${v.length > 1 ? "s" : ""}: ${esc(v.map((x, k) => (ids ? ids[k] + ": " : "") + fmt(x) + (ivs?.[k] ? ` [${fmt(ivs[k][0])}, ${fmt(ivs[k][1])}]` : "")).join(", "))}${pd ? "\n" + esc(pairedTitle(pd, row.lane.name, rr.lane.name, m)) : ""}">` +
-        `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${pd ? pairedHTML(pd, m.better) : ""}</td>`;
+        `${fmt(mean(v))}${v.length > 1 ? `<span class="sd"> ±${fmt(sd(v))}</span>` : ""}${placeHTML(mean(v), column, m.better)}${pd ? pairedHTML(pd, m.better) : ""}</td>`;
     }
     h += `</tr>`;
   }
@@ -2297,32 +2542,96 @@ function renderResults() {
   el.querySelectorAll("input[name=rby]").forEach((r) => r.onchange = () => { rs.by = r.value; saveRs(); renderResults(); });
   el.querySelectorAll("input[name=rcolor]").forEach((r) => r.onchange = () => { rs.color = r.value; saveRs(); renderResults(); });
   $("rdelta").onchange = (e) => { rs.delta = e.target.checked; saveRs(); renderResults(); };
+  $("addobj").onclick = (e) => { e.stopPropagation(); const o = addMine(sn); rs.focus = {kind: "objective", key: o.key}; renderResults(); showResultDetail(); };
+  $("rranks").onchange = (e) => { rs.ranks = e.target.checked; saveRs(); renderResults(); };
   if ($("rheld")) $("rheld").onchange = (e) => { rs.heldout = e.target.checked; saveRs(); renderResults(); };
-  const pick = (focus) => {
-    const again = rs.focus && JSON.stringify(rs.focus) === JSON.stringify(focus);
-    if (again && focus.kind !== "lane" && focus.kind !== "figure") rs.sort = rs.sort && JSON.stringify(rs.sort) === JSON.stringify(focus) ? null : focus;
+  // a column's header sorts by it at once (clicked again: unsorted); a value sorts by its column when clicked again
+  const pick = (focus, header = false) => {
+    const same = (a, b) => !!a && JSON.stringify(a) === JSON.stringify(b);
+    if (header) rs.sort = same(rs.sort, focus) ? null : focus;
+    else if (same(rs.focus, focus) && focus.kind !== "lane" && focus.kind !== "figure") rs.sort = same(rs.sort, focus) ? null : focus;
     rs.focus = focus;
     renderResults();
     showResultDetail();
   };
-  el.querySelectorAll("[data-obj]").forEach((c) => c.addEventListener("click", () => pick({kind: "objective", key: c.dataset.obj})));
-  el.querySelectorAll("[data-metric]").forEach((c) => c.addEventListener("click", () => pick({kind: "metric", key: c.dataset.metric, dataset: c.dataset.dataset ?? null})));
+  el.querySelectorAll("[data-obj]").forEach((c) => c.addEventListener("click", () => pick({kind: "objective", key: c.dataset.obj}, c.tagName === "TH")));
+  el.querySelectorAll("[data-metric]").forEach((c) => c.addEventListener("click", () => pick({kind: "metric", key: c.dataset.metric, dataset: c.dataset.dataset ?? null}, c.tagName === "TH")));
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => pick({kind: "dataset", key: c.dataset.ds})));
   el.querySelectorAll("[data-fig]").forEach((c) => c.addEventListener("click", () => pick({kind: "figure", key: c.dataset.fig, dataset: c.dataset.dataset ?? null})));
-  el.querySelectorAll("th.row").forEach((c) => c.addEventListener("click", () => {
+  if ($("rshowall")) $("rshowall").onclick = () => setHidden(LANES, false);
+  wireEyes(el.querySelector("table.heat tbody"), "th.row");
+  // drag a row to reorder the versions: a sorted table's order is taken as the versions' order first
+  let dragged = null;
+  el.querySelectorAll("table.heat tbody tr").forEach((tr) => {
+    const th = tr.querySelector("th.row"), lane = LANES.find((l) => l.id === +th.dataset.lane);
+    th.addEventListener("dragstart", (e) => { if (brushing) { e.preventDefault(); return; } dragged = lane; e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(lane.id)); });
+    th.addEventListener("dragend", () => { dragged = null; });
+    tr.addEventListener("dragover", (e) => {
+      if (!dragged) return;
+      e.preventDefault();
+      const r = tr.getBoundingClientRect();
+      tr.classList.add("over");
+      tr.classList.toggle("after", e.clientY > r.top + r.height / 2);
+    });
+    tr.addEventListener("dragleave", (e) => { if (!tr.contains(e.relatedTarget)) tr.classList.remove("over", "after"); });
+    tr.addEventListener("drop", (e) => {
+      e.preventDefault();
+      const after = tr.classList.contains("after");
+      tr.classList.remove("over", "after");
+      if (!dragged || dragged === lane) return;
+      if (rs.sort) { adoptOrder(rows.map((x) => x.lane)); rs.sort = null; note("The sorted order is now the versions' order"); }
+      moveLane(dragged, lane, after);
+    });
+  });
+  el.querySelectorAll("th.row").forEach((c) => c.addEventListener("click", (e) => {
+    if (e.target.closest(".eye")) return;
     const lane = LANES.find((l) => l.id === +c.dataset.lane);
     setActive(lane);
     pick({kind: "lane", key: lane.id});
   }));
 }
 
+const objVersionsHTML = (rows, scores, missing) => `<table class="wts">${rows.map((x, n) => `<tr><td>${esc(x.lane.name)}</td><td>${scores[n] === null ? `<span class="empty">incomplete${x.r ? `: no ${esc(missing[n].join(", "))}` : ": no results on this suite"}</span>` : fmt(scores[n])}</td></tr>`).join("")}</table>`;
+// one's own objective in the panel: its name and a transform of each metric, applied as they are typed
+function mineEditor(o, sn, rows) {
+  const el = $("detail"), {meta, suite} = sn;
+  const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
+  const scoresHTML = () => { const {scores, missing} = objScores(rows.map((x) => x.r), o, meta); return objVersionsHTML(rows, scores, missing); };
+  el.innerHTML = `<h2><input id="minename" class="minename" value="${esc(o.name)}" aria-label="the objective's name"></h2>` +
+    `<div class="crumb">your objective · kept in this browser · <button class="linkish" id="mineremove">remove</button></div>` +
+    `<p>The sum, over the metrics and the datasets shown (${datasets.map((d) => esc(d.name)).join(", ")}), of each metric's transform of the version's mean: higher is better. Each version is scored from its own values, so two versions keep their order whatever others are shown.</p>` +
+    `<table class="wts mine">${meta.metrics.map((m) => { const sy = suite.symbols.find((x) => x.key === m.key), c = compileExpr(o.f[m.key]);
+      return `<tr><td>${tex(sy?.tex ?? m.key)}</td><td>${esc(sy?.name ?? m.key)}<span class="dir">${m.better === "higher" ? " ↑" : " ↓"}</span></td>` +
+        `<td><input data-mk="${esc(m.key)}" class="${c.error ? "bad" : ""}" value="${esc(o.f[m.key] ?? "")}" placeholder="left out" spellcheck="false"><div class="err">${esc(c.error ?? "")}</div></td></tr>`; }).join("")}</table>` +
+    `<p class="empty"><code>x</code> the version's mean on a dataset; <code>sd</code>, <code>n</code> its replicates' s.d. and number; <code>lo</code>, <code>hi</code> the metric's range. <code>+ − * / ^</code> and ${Object.keys(EXPR_FNS).map((k) => `<code>${k}</code>`).join(", ")}. For example <code>-x</code> (lower is better), <code>2*x</code> (twice the weight), <code>x/0.002</code> (in units of a difference that matters), <code>log(x)</code>, <code>min(x, 0.9)</code>.</p>` +
+    `<h3>Versions</h3><div id="minescores">${scoresHTML()}</div>` + resultsAskHTML();
+  let timer = null;
+  const changed = () => { storeMine(); clearTimeout(timer); timer = setTimeout(() => { renderResults(); $("minescores").innerHTML = scoresHTML(); }, 200); };
+  $("minename").oninput = (e) => { o.name = e.target.value.trim() || "Mine"; changed(); };
+  el.querySelectorAll("input[data-mk]").forEach((inp) => inp.oninput = () => {
+    o.f[inp.dataset.mk] = inp.value;
+    const c = compileExpr(inp.value);
+    inp.classList.toggle("bad", !!c.error);
+    inp.nextElementSibling.textContent = c.error ?? "";
+    changed();
+  });
+  $("mineremove").onclick = () => {
+    MINE[sn.id] = MINE[sn.id].filter((x) => x !== o);
+    if (!MINE[sn.id].length) delete MINE[sn.id];
+    storeMine();
+    if (rs.sort?.key === o.key) rs.sort = null;
+    rs.focus = null;
+    renderResults(); showResultDetail();
+  };
+  wireResultsAsk();
+}
 // the side panel in the Results view: what a metric or objective is, and the values' spread
 function showResultDetail() {
   const el = $("detail"), sn = suiteNow(), f = rs.focus;
   if (!sn) { el.innerHTML = `<p class="empty">Nothing to compare yet: no open version has benchmark results.</p>`; return; }
   if (!f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
   const {meta, suite} = sn;
-  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const rows = resultRows(sn);
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
   let h = "", last = "";                                // last: what goes below everything (the equation check)
   if (f.kind === "metric") {
@@ -2356,13 +2665,16 @@ function showResultDetail() {
       h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + figureGrid(d.key, fg, rows, true);
     if (fg.code?.length) h += `<h3>Code${pen(fg.decl, "code", "the code references")}</h3>${codeHTML(fg.code)}`;
   } else if (f.kind === "objective") {
-    const o = meta.objectives.find((x) => x.key === f.key), {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
-    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${o.how === "mean" ? "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute)" : "a weighted mean rank, 1 is best (relative: it depends on which versions are compared)"}</div>`;
+    const o = objectivesOf(sn).find((x) => x.key === f.key);
+    if (!o) { rs.focus = null; return showResultDetail(); }
+    if (o.how === "sum") return mineEditor(o, sn, rows);
+    const {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
+    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${o.how === "mean" ? "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute)" : "a weighted mean rank, 1 is best (relative: it depends on which versions are compared, here the ones shown)"}</div>`;
     if (o.desc) h += `<p>${rich(o.desc)}</p>`;
     if (o.tex) h += `<div class="eq">${tex(o.tex, true)}</div>`;
     h += `<h3>Metrics and weights</h3><table class="wts">${Object.entries(o.weights).map(([k, w]) => { const sy = suite.symbols.find((x) => x.key === k); return `<tr><td>${tex(sy?.tex ?? k)}</td><td>${esc(sy?.name ?? k)}</td><td>× ${w}</td></tr>`; }).join("")}</table>`;
     h += `<p class="empty">Over ${objDatasets(o, meta).map((k) => esc(meta.datasets.find((d) => d.key === k)?.name ?? k)).join(", ")}, each metric's mean over its replicates.</p>`;
-    h += `<h3>Versions</h3><table class="wts">${rows.map((x, n) => `<tr><td>${esc(x.lane.name)}</td><td>${scores[n] === null ? `<span class="empty">incomplete${x.r ? `: no ${esc(missing[n].join(", "))}` : ": no results on this suite"}</span>` : fmt(scores[n])}</td></tr>`).join("")}</table>`;
+    h += `<h3>Versions</h3>` + objVersionsHTML(rows, scores, missing);
   } else {
     const lane = LANES.find((l) => l.id === f.key) ?? active, ref = refOf(lane), r = resultsOf(lane, sn.id);
     h += `<h2>${esc(lane.name)}</h2><div class="crumb">${esc(laneMeta(lane))}</div>`;
@@ -2512,7 +2824,7 @@ function diffPairs(mk, dk, rows) {
     const p = !seen.has(key) && ref?.r && row.r ? pairedDiff(row.r, ref.r, dk, mk, row.lane.name, refLane.name) : null;
     if (p) { seen.add(key); pairs.push({row, ref: refLane, p, extra}); }
   };
-  for (const row of rows) { const rr = refOf(row.lane); if (rr) add(row, rr, false); }
+  for (const row of rows) { const rr = resultRef(rows, row); if (rr) add(row, rr.lane, false); }
   for (const row of rows) for (const [name, by] of Object.entries(row.r?.differences ?? {})) {
     const other = by?.[dk]?.[mk] && rows.find((x) => x.lane !== row.lane && x.lane.name === name);
     if (other) add(row, other.lane, true);
@@ -2594,9 +2906,9 @@ function resultsPrompt(question) {
   const sn = suiteNow(), f = rs.focus;
   if (!sn) return "";
   const {meta, suite} = sn;
-  const rows = LANES.map((lane) => ({lane, r: resultsOf(lane, sn.id)}));
+  const rows = resultRows(sn);
   const sym = (k) => suite.symbols.find((x) => x.key === k), op = (k) => suite.ops.find((x) => x.key === k);
-  const about = !f || f.kind === "lane" ? "the results as a whole" : f.kind === "dataset" ? `the results on the dataset "${meta.datasets.find((d) => d.key === f.key)?.name}"` : f.kind === "objective" ? `the objective "${meta.objectives.find((o) => o.key === f.key)?.name}"`
+  const about = !f || f.kind === "lane" ? "the results as a whole" : f.kind === "dataset" ? `the results on the dataset "${meta.datasets.find((d) => d.key === f.key)?.name}"` : f.kind === "objective" ? `the objective "${objectivesOf(sn).find((o) => o.key === f.key)?.name}"`
     : f.kind === "figure" ? `the figure "${(meta.figures ?? []).find((x) => x.key === f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`
     : `the metric "${sym(f.key)?.name}"${f.dataset ? ` on the dataset "${meta.datasets.find((d) => d.key === f.dataset)?.name}"` : ""}`;
   const L = [`I am comparing versions of the method "${own.D.title}" on the benchmark "${suite.title}" (version ${meta.version}), and want to understand ${about}.`, "",
@@ -2626,14 +2938,16 @@ function resultsPrompt(question) {
   const figs = (meta.figures ?? []).filter((fg) => f?.kind !== "figure" || fg.key === f.key);
   const images = figs.flatMap((fg) => datasets.flatMap((d) => rows.flatMap(({lane, r}) => (r?.figures?.[d.key]?.[fg.key] ?? []).map((e) =>
     `- ${fg.name}, ${lane.name} on ${d.name}: ${e.path ?? e.url}${e.replicate ? `, replicate ${e.replicate}` : ""}${e.caption ? ` (${e.caption})` : ""}${keysText(e.keys) ? `; ${keysText(e.keys)}` : ""}`))));
-  for (const o of meta.objectives) {
+  for (const o of objectivesOf(sn)) {
     const {scores} = objScores(rows.map((x) => x.r), o, meta);
-    L.push(`- objective ${o.name} (${o.how === "mean" ? "a weighted mean of the range-scaled metrics, 1 is best" : "a weighted mean rank, 1 is best"}): ` + rows.map(({lane}, n) => `${lane.name} ${scores[n] === null ? "incomplete" : fmt(scores[n])}`).join("; "));
+    const how = o.how === "sum" ? `my own: the sum over the metrics and the datasets shown of ${meta.metrics.filter((m) => compileExpr(o.f[m.key]).fn).map((m) => `${o.f[m.key].trim()} for ${m.key}`).join(", ")}, where x is the version's mean, higher is better`
+      : o.how === "mean" ? "a weighted mean of the range-scaled metrics, 1 is best" : "a weighted mean rank, 1 is best";
+    L.push(`- objective ${o.name} (${how}): ` + rows.map(({lane}, n) => `${lane.name} ${scores[n] === null ? "incomplete" : fmt(scores[n])}`).join("; "));
   }
   L.push("");
   if (images.length) L.push("The figures: images the benchmark made, to look at, not ranked (open the files to see them).",
     ...figs.map((fg) => `- ${fg.name} (\`${fg.key}\`): ${fg.desc ?? ""}${fg.code?.length ? ` Drawn by: ${fg.code.map((c) => c.ref).join(", ")}` : ""}`), "The images:", ...images, "");
-  if (current) for (const lane of LANES) {
+  if (current) for (const lane of visibleLanes()) {
     const ref = refOf(lane);
     if (!ref) continue;
     const lines = summaryLinesFor(lane, ref);

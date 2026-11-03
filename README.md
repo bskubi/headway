@@ -180,6 +180,12 @@ a git repository, the commit, branch and whether the work tree had changes, and 
   against the lane before it (or against a lane pinned as the baseline): **+** added, **Δ** changed, **−** gone
   (drawn dashed where it was), **⋔** split or merged. The lanes start in the order the versions were built (a
   version opened later takes its place in that order); drag them to reorder, × to close one, any number of them.
+  The eye on a version (in the version bar, and on its row in the Results view) hides it and keeps it open: it is
+  left out of the graph and the results, and the objectives are scored over the versions shown (a rank objective
+  ranks among them; a mean objective does not depend on the others). Press on one eye and drag across its
+  neighbours, or shift-click, to hide or show several at once; **Show all** brings them back. A version is
+  compared with the shown version before it, and a hidden baseline is set aside until it is shown again. The
+  browser remembers which versions were hidden.
   Opening a version that is open already (the same build, or one given the same `--name`) reloads it. **One at a
   time** draws only the version you are reading, with its markers, and keeps the others open: click another to
   switch. Click a lane to read that version in the side panel and the legend. Selecting an object selects it in every
@@ -251,9 +257,15 @@ difference exclude 0 (● all, ◐ some, ○ none); it is colored only when supp
 In the viewer, **Graph | Results** switches between the computation graph and the results of the same open
 versions: a heatmap of versions × metrics × datasets (grouped by metric or by dataset), each value the mean over
 replicates ± their s.d., shaded from worst to best among the versions (or across the metric's range), with its
-difference from the version it is compared with. Missing results are hatched, never filled in; an objective missing
-any value it needs is "incomplete". Click a column for what the metric or objective is (its equation, code, check
-and source) and the replicates of every version, plotted; click it again to sort by it. Click a dataset (under
+difference from the row above it (or the baseline) and its place among the versions shown (**Ranks**: `#1` the best,
+`#2=` a shared place). Missing results are hatched, never filled in; an objective missing
+any value it needs is "incomplete". **+ Objective** adds one of your own, kept in the browser: the sum,
+over the metrics and the datasets shown, of a transform of each version's mean that you type per metric (`-x`,
+`x/0.002`, `log(x)`, ...). Click a column for what the metric or objective is (its equation, code, check
+and source) and the replicates of every version, plotted. A column's header sorts by it (clicked again,
+unsorted; a metric's header sorts by the mean place over the datasets shown); drag a version's row to reorder the
+versions (the graph's lanes too; a sorted order is kept as the new order). Each value's difference is from the row
+above it as shown, or from the baseline. Click a dataset (under
 the table, or its column when grouped by dataset) for what it is: its settings, how it is made, its facts and code,
 and every version's results on it. In the suite's own page, the legend lists the datasets, and a setting shows
 its value in each. Click a version for what
