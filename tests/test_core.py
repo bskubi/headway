@@ -176,3 +176,35 @@ def test_deep_learning_example() -> None:
     assert codetex.transcribe("".join(src), {}, hints=True, first_line=first, file=steps.__file__) == (
         r"\operatorname{loss}\left(\mathit{logits}_{sc}, y_{s}\right) = \operatorname{mean}_{s} \left("
         r"\operatorname{logsumexp}_{c} \mathit{logits}_{sc} - \mathit{logits}_{s,y_{s}}\right)")
+
+
+@pytest.mark.parametrize("fn", [cc.random_start, cc.random_start_shaped])
+def test_a_recorded_call_draws_what_it_drew(fn) -> None:
+    """NumPy's global random state is kept with a recorded call, and restored for the code's rerun and before
+    each form of the math; the shape drawn is the code's size, whether or not its axes are known."""
+    from headway.core.verify import traced
+    with traced(fn, limit=2) as calls:
+        fn(3)
+        fn(3)
+    for args, result in calls[f"{fn.__module__}.{fn.__qualname__}"]:
+        assert verify(fn, kwargs=args, result=result).ok
+        assert verify(fn, kwargs=args).ok                           # the code rerun from the state kept
+
+
+def test_a_comparison_that_cannot_run_is_a_failed_check() -> None:
+    """A function in a result that is not a function of a chunk: compared by name; never an exception."""
+    from headway.core.verify import compare
+    report = verify(cc.with_link)
+    assert not report.ok and all("the function" in c.detail for c in report.checks)
+    ok, _, detail = compare(object(), np.zeros((2, 2)), 1e-9, 1e-12)
+    assert not ok and detail
+
+
+@pytest.mark.parametrize("name", ["merged", "merged_in_place", "set_difference"])
+def test_container_operators_are_not_read_as_elementwise(name: str) -> None:
+    """d | {...} is a merge and s - t a difference: not the math's elementwise or and minus. Not written, so lint
+    says so, rather than math that drops the right-hand side."""
+    from headway.lint import lint
+    errors = [f for f in lint("core_cases").findings if f.level == "error" and f.function == name]
+    assert errors, name
+    assert not verify(getattr(cc, name), (1.5,)).ok

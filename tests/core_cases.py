@@ -244,3 +244,33 @@ def table_counts(design: pl.DataFrame) -> pl.DataFrame:
 
 def diagonals(v: Float[np.ndarray, "genes"], m: Float[np.ndarray, "genes genes"]) -> Float[np.ndarray, "genes genes"]:
     return np.diag(v) + m * np.diag(m @ m.T).sum()
+
+
+# the global random state, drawn from: a recorded call's rerun draws what the call drew
+def random_start(n: int):  # noqa: ANN201
+    return np.random.normal(size=n) * 2
+
+
+def random_start_shaped(n: int):  # noqa: ANN201
+    return np.random.normal(0, 1, (n, 2)) + np.random.rand(3).sum()
+
+
+# a result holding functions not of a chunk
+def with_link():  # noqa: ANN201
+    return {"link": lambda mu, y: mu - y}
+
+
+# dict and set operators: a merge, a difference (not elementwise)
+def merged(x: float):  # noqa: ANN201
+    d = {"a": x, "b": 2 * x}
+    return d | {"b": x + 1, "c": 3 * x}
+
+
+def merged_in_place(x: float):  # noqa: ANN201
+    d = {"a": x}
+    d |= {"c": 3 * x}
+    return d
+
+
+def set_difference(x: float):  # noqa: ANN201
+    return {1, 2} - {1}

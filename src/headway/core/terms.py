@@ -308,6 +308,7 @@ class Draw(Expr):
     """A sample from a distribution: independent across its parameters' indices (and `size`'s)."""
     dist: Dist
     rng: Expr | None = None             # the generator it comes from (recorded, not written)
+    size: Expr | None = None            # the code's size, as written: the shape drawn, whether or not its axes are known
 
 
 @dataclass(frozen=True)

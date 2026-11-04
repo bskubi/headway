@@ -941,6 +941,8 @@ class Lowerer:
         name = BINOPS.get(type(op))
         if name is None:
             raise Unsupported
+        if {a.type, b.type} & {"dict", "set"} and name in ("or", "and", "xor", "sub"):
+            raise Unsupported                           # a merge, union, intersection or difference: not elementwise
         typ = _array_type(a, b) or ("int" if a.type == b.type == "int" and name not in ("div", "pow") else
                                     "float" if a.sig == () and b.sig == () else "")
         if name in ("and", "or"):

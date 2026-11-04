@@ -30,7 +30,7 @@ from typing import Any
 
 from headway.clean import Relation, Result, check as check_relation, relations, resolve
 from headway.core.evaluate import safe_copy
-from headway.core.verify import compare, traced, verify
+from headway.core.verify import compare, random_state, restore_random, traced, verify, without_random
 
 MATH_RTOL = 1e-6                                     # the math shown, against the code: up to rounding
 
@@ -114,7 +114,7 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
             if per[key] >= limit:
                 return
             names = inspect.signature(which.fn).parameters
-            started[id(frame)] = {k: safe_copy(v) for k, v in frame.f_locals.items() if k in names}
+            started[id(frame)] = {k: safe_copy(v) for k, v in frame.f_locals.items() if k in names} | random_state()
         elif event == "return" and id(frame) in started:
             per[key] += 1
             (calls if c else own_calls).append((which, started.pop(id(frame)), safe_copy(arg)))
@@ -129,23 +129,26 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
     f = Findings()
     helpers = [fn for fn in vars(module).values() if inspect.isfunction(fn) and fn.__module__ == module.__name__]
     math_calls: dict[str, list[tuple[dict[str, Any], Any]]] = defaultdict(list)
-    for c, args, result in own_calls:                   # the clean code's own calls: its declarations, its math
+    for c, kept, result in own_calls:                   # the clean code's own calls: its declarations, its math
         name = f"{c.fn.__module__}.{c.fn.__qualname__}"
-        math_calls[name].append((args, result))
+        math_calls[name].append((kept, result))         # verify() restores the random state kept
+        args, _ = without_random(kept)
         for rel in relations(c.fn):
             if rel is c.rel or result is None:
                 continue
             _objective_call(rel, args, result, math_calls)
             target = rel.target if isinstance(rel.target, str) else \
                 f"{rel.target.__module__}:{rel.target.__qualname__}"
-            f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, args, result))
-    for c, args, want in calls:
+            f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, kept, result))
+    for c, kept, want in calls:
         counts = f.counts[c.name]
+        args, state = without_random(kept)
         if want is None:
             counts["raised"] += 1
             continue
         try:                                            # the clean version, its helpers' calls recorded too
             with traced(*helpers, limit=limit) as inner:
+                restore_random(state)                   # it draws what the original drew
                 got = c.fn(**{k: safe_copy(v) for k, v in args.items()})
         except AssertionError:
             counts["outside its conditions"] += 1
@@ -163,7 +166,7 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
             else:
                 target = rel.target if isinstance(rel.target, str) else \
                     f"{rel.target.__module__}:{rel.target.__qualname__}"
-                f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, args, got))
+                f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, kept, got))
                 _objective_call(rel, args, got, math_calls)
     # the math shown, against the clean code, on the calls the run made
     for name, recorded in math_calls.items():

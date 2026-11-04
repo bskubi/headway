@@ -75,6 +75,29 @@ def program_of(fn: Callable[..., Any], hints: bool = True, given: dict[str, Shap
     return low.program(node), module
 
 
+# a recorded call's NumPy global random state, as the call started (kept with its arguments, under this name): a
+# rerun of the code, or of the math, draws the numbers the call drew. NumPy's global generator only; a Generator
+# passed as an argument is copied with the arguments; Python's random and torch's are not kept
+RANDOM = "__headway_numpy_random__"
+
+
+def random_state() -> dict[str, Any]:
+    """The state to keep with a call's arguments, as it starts."""
+    return {RANDOM: np.random.get_state()}
+
+
+def without_random(args: dict[str, Any]) -> tuple[dict[str, Any], Any]:
+    """A recorded call's arguments, and the random state kept with them (None if none was)."""
+    args = dict(args)
+    return args, args.pop(RANDOM, None)
+
+
+def restore_random(state: Any) -> None:
+    """NumPy's global random state as a recorded call started (nothing, if none was kept)."""
+    if state is not None:
+        np.random.set_state(state)
+
+
 def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str, Any] | None = None,
            result: Any = None, rtol: float = 1e-9, atol: float = 1e-12, forms: tuple[str, ...] = ("lowered", "folded"),
            names: dict[str, Any] | None = None, scaled: bool = False,
@@ -84,10 +107,12 @@ def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str,
     from headway.core.fold import fold
     owner = getattr(fn, "__self__", None)                # a bound method: its object is its self
     target = inspect.unwrap(fn.__func__ if inspect.ismethod(fn) else fn)
+    kwargs, state = without_random(kwargs or {})
     bound = inspect.signature(target).bind(*((owner,) if owner is not None else ()), *args, **(kwargs or {}))
     bound.apply_defaults()
     call = dict(bound.arguments)
     if result is None:
+        restore_random(state)
         result = target(*(safe_copy(a) for a in bound.args), **{k: safe_copy(v) for k, v in bound.kwargs.items()})
         if owner is not None:
             call["self"] = owner
@@ -104,6 +129,7 @@ def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str,
     for form in forms:
         p = prog if form == "lowered" else fold(prog)
         ev = Evaluator(names=scope)
+        restore_random(state)                           # each form draws what the call drew
         try:
             got = ev.run(p, call)
         except (Uncheckable, Mismatch) as e:
@@ -121,10 +147,23 @@ def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str,
 def compare(got: Any, want: Any, rtol: float, atol: float, scaled: bool = False) -> tuple[bool, float, str]:
     """Whether two results agree, item by item, each element within atol + rtol × its size (scaled: atol taken
     relative to the largest element's size, for rounding that grows with the values a result is computed from):
-    (agrees, the largest difference, what differs)."""
+    (agrees, the largest difference, what differs). A comparison that fails is a check that fails, not the run."""
+    try:
+        return _compare(got, want, rtol, atol, scaled)
+    except Exception as e:                              # noqa: BLE001
+        return False, float("inf"), f"not compared: {type(e).__name__}: {e}"
+
+
+def _compare(got: Any, want: Any, rtol: float, atol: float, scaled: bool = False) -> tuple[bool, float, str]:
     import types
     if isinstance(want, types.FunctionType) and callable(got):     # a function of a chunk: all of it
-        got, want = got(slice(None)), want(slice(None))
+        try:
+            got, want = got(slice(None)), want(slice(None))
+        except Exception:                               # noqa: BLE001 (a function of something else: which one)
+            name = lambda f: getattr(f, "__qualname__", None) or type(f).__name__   # noqa: E731
+            same = name(got) == name(want)
+            return same, 0.0 if same else float("inf"), "" if same else \
+                f"the function {name(got)}, the code's is {name(want)}"
     if type(want).__name__ == "DataFrame" and type(got).__name__ == "DataFrame" and hasattr(want, "columns"):
         # tables: the same columns, and the same rows in any order (a group_by's order is not polars' to keep)
         if sorted(got.columns) != sorted(want.columns):
@@ -214,7 +253,8 @@ def traced(*functions: Callable[..., Any], limit: int = 3) -> Iterator[dict[str,
             code = frame.f_code
             n = code.co_argcount + code.co_kwonlyargcount
             names = code.co_varnames[:n]
-            started[id(frame)] = {k: safe_copy(frame.f_locals[k]) for k in names if k in frame.f_locals}
+            started[id(frame)] = {k: safe_copy(frame.f_locals[k]) for k in names if k in frame.f_locals} | \
+                random_state()
         elif event == "return" and id(frame) in started:
             calls[name].append((started.pop(id(frame)), safe_copy(arg)))
 

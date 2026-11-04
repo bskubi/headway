@@ -142,7 +142,9 @@ file, the opaque part mostly changes in place, pandas, and arrays made at sizes 
 index set names, wherever that axis is; an elementwise operation aligns its operands by index set, not by
 position; only where index sets are not known does it follow numpy's positional rules (as the term then says).
 Operators are called (what one means is what its function does); a draw is taken from the generator the code
-passes, so a run from the same seed draws the same values when the draws come in the same order. It uses no
+passes, so a run from the same seed draws the same values when the draws come in the same order, in the shape
+the code's `size` gives. A recorded call keeps NumPy's global random state as it started, and each rerun (the code,
+and each form of the math) starts from it; Python's `random` and torch's generators are not kept. It uses no
 table, so a wrong translation, a wrong signature or a wrong fold gives other numbers than the code.
 
 It is used in two ways:

@@ -632,7 +632,11 @@ class Evaluator:
         else:
             gen = self.ev(e.rng)
         params = {k: self.ev(v) for k, v in e.dist.params}
-        size: tuple[int, ...] | None = tuple(self.extent(a) for a in e.sig) if e.sig else None
+        size: tuple[int, ...] | None
+        if e.size is not None:                          # the shape the code asked for, as it asked
+            size = tuple(int(n) for n in np.atleast_1d(np.asarray(self.ev(e.size))))
+        else:
+            size = tuple(self.extent(a) for a in e.sig) if e.sig else None
         names = {"normal": ("loc", "scale"), "binomial": ("n", "p"), "poisson": ("lam",), "gamma": ("shape", "scale"),
                  "beta": ("a", "b"), "uniform": ("low", "high"), "exponential": ("scale",),
                  "negative_binomial": ("n", "p"), "lognormal": ("mean", "sigma"), "laplace": ("loc", "scale"),

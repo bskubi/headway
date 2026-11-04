@@ -461,7 +461,7 @@ def _draw(c: Call, rng: Expr | None, args: list[Expr]) -> Expr | None:
         else:
             sig = broadcast(made, sig) if len(made) >= len(sig) else None
     dist = Dist(family, tuple(params.items()), sig=sig, type=ND)
-    return Draw(dist, rng, sig=sig, type=ND if sig else "float",
+    return Draw(dist, rng, size, sig=sig, type=ND if sig or size is not None else "float",
                 dtype="int" if family in ("binomial", "poisson", "negative_binomial", "geometric") else "float")
 
 

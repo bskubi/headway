@@ -97,8 +97,12 @@ class Result:
 
 
 def check(fn: Callable[..., Any], rel: Relation, args: dict[str, Any], result: Any, seed: int = 0) -> Result:
-    """Whether a call of fn (its arguments by name, and what it returned) bears out a relation it declares."""
+    """Whether a call of fn (its arguments by name, and what it returned) bears out a relation it declares. The
+    original reruns from the NumPy random state kept with the arguments, if one was."""
+    from headway.core.verify import restore_random, without_random
+    args, state = without_random(args)
     if rel.kind in ("equals", "approximates"):
+        restore_random(state)
         return _compare(rel, args, result)
     values = dict(args)
     items = result if len(rel.over) > 1 else (result,)
@@ -137,7 +141,10 @@ def _compare(rel: Relation, args: dict[str, Any], result: Any) -> Result:
 
 def _leaves(x: Any) -> list[Any]:
     if callable(x):                                 # a function of a chunk: all of it
-        return [x(slice(None))]
+        try:
+            return [x(slice(None))]
+        except Exception:                           # noqa: BLE001 (a function of something else: which one)
+            return [getattr(x, "__qualname__", type(x).__name__)]
     if hasattr(x, "__dataclass_fields__"):
         return [leaf for f in x.__dataclass_fields__ for leaf in _leaves(getattr(x, f))]
     if isinstance(x, dict):
