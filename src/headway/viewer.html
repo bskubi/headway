@@ -486,7 +486,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
       </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
       <span class="grp"><button id="copygraph" class="copybig" title="copy an image of the whole graph (every lane, as drawn now, at full size) to the clipboard"><span class="ico"></span> Copy image</button></span>
-      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this. Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed"><input type="checkbox" id="findexact"><span>Exact</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
+      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
@@ -1268,16 +1268,26 @@ function findMatches(q) {
   // marks the group, with the best match inside it
   const out = new Map();
   if (!q) return out;
-  const grade = (...names) => { const ns = names.map(findNorm).filter(Boolean); return ns.includes(q) ? "exact" : ns.some((n) => n.includes(q)) ? "part" : null; };
+  const exact = $("findexact").checked, text = $("findtext").checked;
+  const word = new RegExp(`(?<![\\p{L}\\p{N}])${q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "u");
+  const inText = (d) => {
+    // a description as shown: as written, or what a placeholder says of where the thing came from
+    if (!text || !d) return null;
+    const t = findNorm(noDesc(d) ? String(d).replace(/^\s*TODO\b[.:]?\s*/i, "") : d);
+    return exact ? (word.test(t) ? "exact" : null) : t.includes(q) ? "part" : null;
+  };
+  const best = (...gs) => gs.includes("exact") ? "exact" : gs.includes("part") ? "part" : null;
+  const named = (...names) => { const ns = names.map(findNorm).filter(Boolean); return ns.includes(q) ? "exact" : ns.some((n) => n.includes(q)) ? "part" : null; };
+  const grade = (desc, ...names) => best(named(...names), inText(desc));
   const put = (id, g) => { if (id && g && out.get(id) !== "exact") out.set(id, g); };
   const shown = (id) => id && document.querySelector(`#vp [data-id="${CSS.escape(id)}"], #vp [data-id^="${CSS.escape(id)}@"]`);
-  for (const o of Object.values(OP)) put(selId({type: "op", key: o.key}), grade(o.key, o.label));
+  for (const o of Object.values(OP)) put(selId({type: "op", key: o.key}), grade(noDesc(o.desc) && o.code_doc ? o.code_doc : o.desc, o.key, o.label));
   for (const s of Object.values(SYM)) {
-    const g = grade(s.key, s.name);
+    const g = grade(s.desc, s.key, s.name);
     const id = selId({type: "sym", key: s.key});
     put(shown(id) || !PRODUCER[s.key] ? id : selId({type: "op", key: PRODUCER[s.key]}), g);    // in a collapsed group
   }
-  for (const gr of Object.values(GRP)) put(selId({type: "group", key: gr.path}), grade(gr.label, gr.path.split("/").pop()));
+  for (const gr of Object.values(GRP)) put(selId({type: "group", key: gr.path}), grade(gr.desc, gr.label, gr.path.split("/").pop()));
   return out;
 }
 let findAt = -1;                                        // the match jumped to (in reading order), -1 none
@@ -1361,7 +1371,7 @@ $("find").addEventListener("keydown", (e) => {
 $("findprev").addEventListener("click", () => findStep(-1));
 $("findnext").addEventListener("click", () => findStep(1));
 $("findall").addEventListener("click", findAll);
-$("findexact").addEventListener("change", () => { findAt = -1; applyFind(); $("find").focus(); });
+for (const id of ["findexact", "findtext"]) $(id).addEventListener("change", () => { findAt = -1; applyFind(); $("find").focus(); });
 document.addEventListener("keydown", (e) => {
   if (e.key === "/" && !e.target.closest?.("input, textarea, [contenteditable]") && !document.body.classList.contains("resultsview")) {
     e.preventDefault(); $("find").focus(); $("find").select();

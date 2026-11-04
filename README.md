@@ -113,6 +113,9 @@ type. Case is ignored, and `_` and spaces count as the same.
 
 - An **exact** match (a name is what you typed) is boxed solid; a **partial** one (a name holds it) is dashed.
   Tick **Exact** to keep only the exact ones.
+- Tick **Text** to search the descriptions too: a step, value or group whose description holds what you typed is
+  boxed dashed (with **Exact**, only where the description has it as whole words). A step with no description is
+  searched by its code's docstring, as its panel shows it.
 - The rest of the graph fades. A match inside a collapsed group boxes the group.
 - Enter or ↓ jumps to the next match, and Shift+Enter or ↑ to the previous one, in the layout's reading order.
   Each jump centres the match and selects it, so its panel opens. The ‹ › buttons do the same, and ⤢ puts all
