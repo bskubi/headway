@@ -247,6 +247,30 @@ OPTIMUM = "scipy.optimize.OptimizeResult"
 
 
 @dataclass(frozen=True)
+class Fit(Expr):
+    """A regression fitted by maximum likelihood (or least squares): statsmodels' OLS, WLS, GLM, Logit, Poisson.
+    Its value is the fit (its params the coefficients where `objective` is greatest, op "max", or least, "min").
+    objective: what is optimized, a function of the coefficients (over X's columns), for the reader; the family,
+    link, y, X, weights and offset say the same thing in a form the evaluator fits by (its own IRLS or least squares,
+    not the library's). call: the code's model, for what the fit has that the calculus does not say (bse, ...)."""
+    op: str                             # "max" or "min"
+    family: str                         # "gaussian", "poisson", "binomial", "negative_binomial", "gamma"
+    link: str                           # "identity", "log", "logit", "inverse_power"
+    y: Expr
+    X: Expr
+    objective: Expr                     # a Lambda: the coefficients (bound, so no variable of the code is them)
+    weights: Expr | None = None
+    offset: Expr | None = None
+    alpha: Expr | None = None           # the negative binomial's dispersion
+    call: Expr | None = None            # the model as the code makes it (an Op), and how it is fitted
+    fit_kwargs: tuple[tuple[str, Expr], ...] = ()
+    kind: str = "glm"                   # "ols", "wls", "glm", "logit", "poisson": the model the code names
+
+
+FIT = "statsmodels.results"
+
+
+@dataclass(frozen=True)
 class Op(Expr):
     """A function the calculus does not open: shown by its name, applied to its arguments; its meaning is the
     code's (qualname: what it is, to look it up and to call it, "methembed.core.embed.kmeans"). local: one of the

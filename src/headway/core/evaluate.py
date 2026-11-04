@@ -21,7 +21,7 @@ import numpy as np
 
 from headway.core.terms import (NEW, Aggregate, Align, Apply, Assume, Axis, Binder, Build, Cases, Const, Density,
                                 Dist, Draw, Effect, Expr, Extent, Field, For, Idx, If, Item, Jump, Key, Lambda, Let,
-                                Mapping, Op, Optimum, Pos, Program, Range, Restrict, Return, SetPart, Sig, SliceKey, Stmt, Table, Take,
+                                Fit, Mapping, Op, Optimum, Pos, Program, Range, Restrict, Return, SetPart, Sig, SliceKey, Stmt, Table, Take,
                                 Text, Tup, Unwritten, Var, While)
 
 
@@ -257,6 +257,23 @@ class Evaluator:
         f = fun if sign > 0 else (lambda x: -fun(x))
         return scipy.optimize.minimize(f, self.ev(e.start), jac=jac, method=method, bounds=bounds)
 
+    def fit(self, e: Fit) -> Any:
+        """A regression fitted here, by its own IRLS (least squares for a Gaussian with the identity link), from
+        what the term says it is: its coefficients. What else the code reads from its fit is the library's, from
+        the model the code makes, fitted as the code fits it."""
+        y = np.asarray(self.ev(e.y), np.float64)
+        X = np.asarray(self.ev(e.X), np.float64)
+        X = X[:, None] if X.ndim == 1 else X
+        w = np.broadcast_to(np.asarray(self.ev(e.weights), np.float64), y.shape) if e.weights is not None \
+            else np.ones_like(y)
+        offset = np.broadcast_to(np.asarray(self.ev(e.offset), np.float64), y.shape) if e.offset is not None \
+            else np.zeros_like(y)
+        alpha = float(self.ev(e.alpha)) if e.alpha is not None else 1.0
+        model = self.ev(e.call) if e.call is not None else None
+        kwargs = {k: self.ev(v) for k, v in e.fit_kwargs}
+        return Fitted(fit_glm(e.family, e.link, y, X, w, offset, alpha),
+                      (lambda: model.fit(**kwargs)) if model is not None else None)
+
     def ev(self, e: Expr) -> Any:
         v = self._ev(e)
         if e.sig is not None and isinstance(v, np.ndarray | np.generic) and not isinstance(e, Var):
@@ -317,6 +334,8 @@ class Evaluator:
             return self.function(e)
         if isinstance(e, Optimum):
             return self.optimum(e)
+        if isinstance(e, Fit):
+            return self.fit(e)
         if isinstance(e, Item):
             base, key = self.ev(e.base), self.key(e.key)
             if isinstance(base, list) and isinstance(key, np.ndarray):
@@ -658,6 +677,60 @@ class Evaluator:
             p = {k: align(v, d.sig, e.sig) if d.sig else v for (k, d), v in zip(e.dist.params, p.values())}
         lg = log_density(e.dist, np.asarray(x, np.float64), p)
         return lg if e.log else np.exp(lg)
+
+
+class Fitted:
+    """A fit: its coefficients, as fitted here; anything else read from it, the library's own fit's (fitted when
+    first read)."""
+
+    def __init__(self, params: np.ndarray, library: Callable[[], Any] | None) -> None:
+        self.params = params
+        self._library = library
+        self._fit: Any = None
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_") or self._library is None:
+            raise AttributeError(name)
+        if self._fit is None:
+            self._fit = self._library()
+        return getattr(self._fit, name)
+
+
+def fit_glm(family: str, link: str, y: np.ndarray, X: np.ndarray, w: np.ndarray, offset: np.ndarray,
+            alpha: float = 1.0) -> np.ndarray:
+    """The coefficients where a GLM's weighted log likelihood is greatest: by iteratively reweighted least squares
+    (Fisher scoring) until they stop changing, from the means statsmodels starts from; a Gaussian with the identity
+    link, by weighted least squares. The variance and link functions here are written out, not the library's."""
+    from scipy.special import expit
+    if family == "gaussian" and link == "identity":
+        s = np.sqrt(w)
+        return np.linalg.lstsq(s[:, None] * X, s * (y - offset), rcond=None)[0]
+    Fn = Callable[[np.ndarray], np.ndarray]
+    links: dict[str, tuple[Fn, Fn, Fn]] = {
+        "identity": (lambda m: m, lambda e: e, np.ones_like),
+        "log": (np.log, np.exp, lambda m: 1 / m),
+        "logit": (lambda m: np.log(m / (1 - m)), expit, lambda m: 1 / (m * (1 - m))),
+        "inverse_power": (lambda m: 1 / m, lambda e: 1 / e, lambda m: -1 / m ** 2)}
+    g, g_inv, g_deriv = links[link]
+    variances: dict[str, Fn] = {"gaussian": np.ones_like, "poisson": lambda m: m, "binomial": lambda m: m * (1 - m),
+                "gamma": lambda m: m ** 2, "negative_binomial": lambda m: m + alpha * m ** 2}
+    variance = variances[family]
+    mu = (y + 0.5) / 2 if family == "binomial" else (y + y.mean()) / 2
+    eta = g(mu)
+    beta: np.ndarray | None = None
+    for _ in range(500):
+        d = g_deriv(mu)
+        z = eta - offset + (y - mu) * d
+        s = np.sqrt(w / (d ** 2 * variance(mu)))
+        new = np.linalg.lstsq(s[:, None] * X, s * z, rcond=None)[0]
+        eta = X @ new + offset
+        mu = g_inv(eta)
+        done = beta is not None and np.max(np.abs(new - beta), initial=0.0) <= 1e-13 * (1 + np.max(np.abs(new)))
+        beta = new
+        if done:
+            break
+    assert beta is not None
+    return beta
 
 
 def _named_value(name: str) -> Any:

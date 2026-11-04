@@ -143,7 +143,7 @@ def _load() -> None:
     global _loaded
     if not _loaded:
         _loaded = True
-        from headway.core.libs import numpy_, polars_, python, scipy_, torch_  # noqa: F401
+        from headway.core.libs import numpy_, polars_, python, scipy_, statsmodels_, torch_  # noqa: F401
 
 
 def same_sig(a: Sig, b: Sig) -> bool:

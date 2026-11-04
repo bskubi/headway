@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
-from headway.core.terms import (NEW, Aggregate, Lambda, Optimum, Align, Apply, Assume, Axis, Binder, Build, Cases, Const, Density,
+from headway.core.terms import (FIT, NEW, Aggregate, Fit, Lambda, Optimum, Align, Apply, Assume, Axis, Binder, Build, Cases, Const, Density,
                                 Dist, Draw, Effect, Expr, Extent, Field, For, Idx, If, Item, Jump, Key, Let, Mapping,
                                 Op, Pos, Range, Restrict, Return, SetPart, Sig, SliceKey, Stmt, Table, Take, Text, Tup,
                                 Unwritten, Var, While, free_vars, known, walk_stmts)
@@ -203,6 +203,11 @@ class Printer:
         return T(r"\text{(text)}") if e.value is None else T(r"\text{“" + text(e.value) + "”}")
 
     def e_Field(self, e: Field) -> T:
+        if e.attr == "params" and e.base.type == FIT:
+            # a fit's coefficients: the fit, as the coefficients it is (res = argmax_β ...; res_k)
+            fit = self.expr(e.base)
+            at = self.index_tex(e.sig)
+            return T(indexed(base_tex(fit), at) if at else fit.tex)
         if isinstance(e.base, Restrict) and e.base.base.type in TABLE_TYPES and e.base.mask is not None:
             # a column of a table's rows where a mask holds: the column, restricted (depth_d|_{learns_d})
             whole = self.e_Field(Field(e.base.base, e.attr, sig=e.base.base.sig, type=e.type))
@@ -530,6 +535,14 @@ class Printer:
         op = r"\operatorname*{arg\,min}" if e.op == "min" else r"\operatorname*{arg\,max}"
         return T(op + "_{" + var + r"} \left[" + body + r"\right]_{\substack{" + r" \\ ".join(how) + "}}",
                  SUM)
+
+    def e_Fit(self, e: Fit) -> T:
+        """A regression's fit: the coefficients where what it optimizes is greatest (its log likelihood) or least
+        (its squared residuals), argmax_β Σ_i log p(y_i | g⁻¹(Σ_k X_ik β_k))."""
+        lam = e.objective
+        assert isinstance(lam, Lambda) and isinstance(lam.over[0].var, str)
+        op = r"\operatorname*{arg\,max}" if e.op == "max" else r"\operatorname*{arg\,min}"
+        return T(op + "_{" + self.symbol(lam.over[0].var) + "} " + self.expr(lam.body).tex, SUM)
 
     def e_Aggregate(self, e: Aggregate) -> T:
         if e.op == "count":

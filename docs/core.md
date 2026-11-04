@@ -1,7 +1,7 @@
 # The core: what clean code means, as mathematics
 
 Status: built (2026-10-29), in `src/headway/core/`: the calculus (`terms.py`), Python read into it (`lower.py`),
-the tables (`libs/`: numpy, scipy, Python, the start of PyTorch), the fold (`fold.py`), the printer (`printer.py`)
+the tables (`libs/`: numpy, scipy, Python, the start of PyTorch, statsmodels), the fold (`fold.py`), the printer (`printer.py`)
 and the reference evaluator (`evaluate.py`), with `verify.py` and `headway trace` checking what is shown against
 what the code computes on real calls. `codetex.py` is the front door the viewer uses.
 
@@ -131,6 +131,22 @@ builtins and math; polars (tables: columns, filter, with_columns, group_by/agg/l
 reductions, softmax and log-softmax, cross-entropy, MSE, `linear` and `nn.Linear` layers, autograd's gradients).
 Tables extend the calculus with a value of named columns over rows (`Table`) and a group's key (`Key`): a group-by
 is an aggregate whose condition ties a row's key to the group's, key_d = k, the same form as a segment sum.
+
+statsmodels (2026-11-04, for the regressions and corrections bioinformatics code uses most): a model's fit
+(`sm.OLS`, `WLS`, `GLM` with the Gaussian, Poisson, binomial, negative binomial and Gamma families and the identity,
+log, logit and inverse-power links, offsets, exposures and weights; `sm.Logit`, `sm.Poisson`) is a `Fit`, the
+coefficients where its likelihood is greatest, $\operatorname*{arg\,max}_\beta \sum_i \log
+\operatorname{Poisson}(y_i \mid \exp(\sum_k X_{ik}\beta_k + o_i))$ (least squares for a Gaussian). The evaluator fits
+it by its own IRLS, from the family and link the term names, never by the library's code. What a fit gives is
+written from it: `params`, the fitted means (`fittedvalues`, `mu`, `predict()`, `predict(X')`) and residuals. A
+fit's X is the one it was given only while no variable it reads is assigned again: otherwise (and for what no
+formula here says: `bse`, `pvalues`) the value is read from the fit by name, the library's. A family's variance and
+its link, inverse link and their derivatives are their formulas, statsmodels' clipping of a mean to $[\varepsilon,
+1 - \varepsilon]$ included. `multipletests` (Benjamini-Hochberg and Bonferroni), `fdrcorrection` and `robust.mad`
+are their formulas: BH's adjusted p-value is $\min(1, \min_{j : p_j \ge p_i} m\,p_j / r_j)$ with $r_j = |\{k :
+p_k \le p_j\}|$, which ties exactly as the step-up does. A fit by a method that stops short of the optimum
+(lbfgs), other families and links, Holm's and the default correction, and formulas (`smf.ols("y ~ x", df)`) are
+operators.
 
 `headway lint` measures coverage (the share of a module's expressions written as math) and lists what is opaque.
 On 2026-10-29: clean code 94-100%; unclean original code (methembed's core, PyDESeq2 read statically) 46-100% per

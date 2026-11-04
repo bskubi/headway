@@ -12,6 +12,7 @@ import ast
 import builtins
 import copy
 import textwrap
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -23,7 +24,7 @@ from headway.core.terms import (NEW, OPTIMUM, SCALAR, UNKNOWN, Align, Apply, Ass
                                 Effect, Extent, Lambda, Optimum,
                                 Expr, Field, For, If, Item, Jump, Let, Mapping, Op, Program, Range, Return,
                                 SetPart, Shape, Sig, SliceKey, Stmt, Text, Tup, Unwritten, Var, While, broadcast,
-                                shaped, walk_stmts)
+                                free_vars, shaped, walk_stmts)
 
 DEFAULT_IMPORTS = {"np": "numpy", "numpy": "numpy", "math": "math", "scipy": "scipy", "sp": "scipy",
                    "torch": "torch", "pd": "pandas", "pl": "polars", "jnp": "jax.numpy", "random": "random",
@@ -221,6 +222,10 @@ class Lowerer:
         self.members_made: dict[str, Expr] = {}     # self.x, as the class's __init__ made it
         self.depth = 0                      # functions read within functions (returns())
         self.local_defs: dict[str, ast.FunctionDef] = {}    # functions defined inside the one being read
+        # a library's object (a statsmodels model, fit, family) a variable holds: the term that made it, for what is
+        # read from it later (a fit's fitted values are its X's); trusted only while nothing it reads is assigned again
+        self.made: dict[str, Expr] = {}
+        self.stores: Counter[str] = Counter()               # how often each name is assigned, in the function
         self.inline_constants = True        # a module's constants written as their values (False: as names, their
         #                                     values given at run time, as a trace records them)
         # names holding a part of another array (part = x[:, block]): (x, the key, whether it is a view of x:
@@ -324,6 +329,11 @@ class Lowerer:
                 self.members_made[f"self.{t.attr}"] = value
 
     def program(self, fn: ast.FunctionDef, cls: ast.ClassDef | None = None) -> Program:
+        self.stores += Counter(n.id for n in ast.walk(fn) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store))
+        self.stores += Counter(a.arg for a in (*fn.args.posonlyargs, *fn.args.args, *fn.args.kwonlyargs))  # given
+        for node in ast.walk(fn):                       # x[k] = e: x changed, so never trusted as made
+            if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store) and isinstance(node.value, ast.Name):
+                self.stores[node.value.id] += 2
         if cls is None:                                 # a method: its class, by where it is in the module
             cls = next((c for c in self.module.classes.values() if fn in c.body or any(
                 isinstance(s, ast.FunctionDef) and s.name == fn.name and s.lineno == fn.lineno + self.offset
@@ -493,6 +503,10 @@ class Lowerer:
             if value.type in TABLES and value.sig is None:  # a table read from elsewhere: its rows a set of its own
                 value = replace(value, sig=(self.axis(t.id),))
             self.env[t.id] = value.shape
+            if value.type.startswith("statsmodels."):
+                self.made[t.id] = value
+            else:
+                self.made.pop(t.id, None)
             if isinstance(value, Extent) and isinstance(value.axis, Axis) and value.axis.known:
                 # n = x.shape[1]: n is that index set's size, so that np.zeros(n) is indexed by it
                 self.env[t.id] = Shape(value.type or "int", (), parts=(Shape(EXTENT, (value.axis,)),))
@@ -1054,6 +1068,18 @@ class Lowerer:
             out = None
         _RETURNS[key] = out
         return out
+
+    def made_by(self, e: Expr) -> Expr | None:
+        """The term that made a library object: e itself, or the term a variable was given, if that variable and
+        every one the term reads are assigned once in the function (so that the term still says what it holds)."""
+        if not isinstance(e, Var):
+            return e
+        made = self.made.get(e.name)
+        if made is None or self.stores[e.name] > 1:
+            return None
+        if any(self.stores[n] > 1 for n in free_vars(made)):
+            return None
+        return made
 
     def call_entry(self, q: str, args: list[Expr], kwargs: dict[str, Expr], node: ast.AST) -> Expr | None:
         entry = libs.function(q)

@@ -354,6 +354,12 @@ they are used:
   z_{nk} - z_{n,y_n})$; `F.linear` and an `nn.Module`'s `nn.Linear` layers (made in its `__init__`) as
   $\sum_f x_{nf} W^{(\mathit{layer1})}_{hf} + b^{(\mathit{layer1})}_h$; `torch.autograd.grad(L, θ)` as
   $\nabla_\theta L$, so a training loop reads as gradient descent.
+- **Regressions and corrections (statsmodels)**: a fit (`sm.GLM(y, X, family=sm.families.Poisson()).fit()`, OLS,
+  WLS, Logit) is the coefficients where its likelihood is greatest,
+  $\operatorname*{arg\,max}_\beta \sum_c \log \operatorname{Poisson}(y_c \mid \exp(\sum_i X_{ci}\beta_i))$ (least
+  squares for a Gaussian), and its fitted means, residuals and predictions are written from it; give `y` and `X`
+  their axes. `multipletests(p, method="fdr_bh")` is Benjamini-Hochberg's formula; a family's `variance` and its
+  `link` are theirs. What has no formula (`res.bse`, Holm's method) is shown by name.
 - **The code's own helpers**: a call to a function of the code with no shape in its annotation has the shape its
   own code gives it (read with the call's arguments), so `logit(baseline)` keeps $j$. A module's numeric
   constant (`RIDGE = 1e-6`) is written as its value, unless the spec names it.

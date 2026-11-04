@@ -29,7 +29,13 @@ Guide = "https://github.com/bskubi/headway/blob/main/src/headway/GUIDE.md"
 Issues = "https://github.com/bskubi/headway/issues"
 
 [project.optional-dependencies]
-test = ["pytest>=8", "jaxtyping>=0.2.30", "scipy>=1.11", "polars>=1.0"]
+test = [
+    "pytest>=8",
+    "jaxtyping>=0.2.30",
+    "scipy>=1.11",
+    "polars>=1.0",
+    "statsmodels>=0.14",
+]
 
 [project.scripts]
 headway = "headway.cli:main"
