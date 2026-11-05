@@ -121,6 +121,24 @@ type. Case is ignored, and `_` and spaces count as the same.
   Each jump centres the match and selects it, so its panel opens. The ‹ › buttons do the same, and ⤢ puts all
   the matches in view. Esc clears.
 
+**The keyboard** walks the graph as it is drawn (when the focus is not in a text box):
+
+- The arrows along the flow (→ and ← when the graph runs right, ↓ and ↑ when it runs down) move downstream or
+  upstream, along an edge, to the node at its other end. With nothing selected, the first one starts at the
+  beginning of the graph.
+- The arrows across the flow aim at another of the node's edges, its inputs and then its outputs (drawn thick).
+  The next move along the flow takes that edge. After a move, the aim is the edge you came by, so the way back is
+  one key. Otherwise a move takes the edge most nearly straight ahead.
+- A collapsed group is one node, and stays collapsed when you walk into it. A hidden group is not drawn, so it is
+  not walked into either: hiding a group is how to take it out of the way, and the Groups menu shows it again.
+- `c` collapses the group the node is in, or expands the collapsed group it is on, back on the node it was
+  collapsed from.
+- `g` goes from a node to its group, and from the group back to the node.
+- Tab and Shift+Tab step through the legend's entries linked to the selection (its symbols and equations), and
+  then back to the node. Enter selects the entry, and Esc goes back to the node.
+
+The page's header says which version of headway built it.
+
 ## A spec
 
 ```python

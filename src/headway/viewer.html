@@ -162,6 +162,11 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 
 .edge path { fill: none; stroke: var(--edge); stroke-width: 1.3; }
 .edge.hl path { stroke: var(--accent); stroke-width: 2; }
+/* the keyboard: the edge it is aimed along, the copy of a value it is on, the legend entry it is at */
+.edge.aim path { stroke: var(--accent); stroke-width: 3.5; }
+#vp.kbcur .node.sel:not(.cur) .n { outline-style: dashed; }
+#legend tr.kbd td:first-child, .eqrow.kbd { box-shadow: inset 3px 0 0 var(--accent); }
+#legend tr.kbd td, .eqrow.kbd { background: color-mix(in srgb, var(--accent) 22%, transparent); }
 .grp rect { fill: var(--group-bg); stroke: var(--border); stroke-width: 1.2; rx: 10; }
 .grp.sel rect { stroke: var(--accent); stroke-width: 2; }
 .grp .head { font-size: 12px; font-weight: 650; color: var(--muted); letter-spacing: 0.02em; display: flex; gap: 6px; align-items: center; padding: 5px 9px; cursor: pointer; white-space: nowrap; }
@@ -487,10 +492,10 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
       </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
       <span class="grp"><button id="copygraph" class="copybig" title="copy an image of the whole graph (every lane, as drawn now, at full size) to the clipboard"><span class="ico"></span> Copy image</button></span>
       <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
-    </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
+    </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker><marker id="arrowaim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
-    <div id="hint">click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom</div>
+    <div id="hint">click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom · arrows: walk the graph · c: collapse/expand · g: the group and back · Tab: its legend entries</div>
   </div>
   <div class="split v" id="vsplit" title="drag to resize the side panel; double-click to collapse it"><button id="vtog"></button></div>
   <aside id="detail"><p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p></aside>
@@ -1038,6 +1043,7 @@ function draw() {
     }
   };
   walk(laid, 0, 0);
+  current.boxes = boxes;
   const paths = [];
   const collect = (node) => {
     for (const e of node.edges ?? []) {
@@ -1111,7 +1117,7 @@ function draw() {
       const n = it.n;
       const el = svgEl(`node${ghost ? " ghost" : ""}`, `<foreignObject x="${ix - HALO}" y="${iy - HALO}" width="${fw + PAD + 2 * HALO}" height="${fh + PAD + 2 * HALO}"><div xmlns="http://www.w3.org/1999/xhtml" style="padding:${HALO}px">${nodeHTML(n, stretch ? [fw - 2, fh - 2] : null)}</div></foreignObject>`,
         {id: slotOf(it, lane), lane: lane.id, key: n.key});
-      el.addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); select(n.type === "cgroup" ? {type: "group", key: n.key} : {type: n.type, key: n.key}); });
+      el.addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); kb.id = n.id; kb.aim = null; select(n.type === "cgroup" ? {type: "group", key: n.key} : {type: n.type, key: n.key}); });
       if (n.type === "cgroup") el.addEventListener("dblclick", (e) => { e.stopPropagation(); toggle(n.key, lane); });
       nLayer.append(el);
       const m = vis.length > 1 && status(it);
@@ -1382,10 +1388,18 @@ function highlight() {
   const sid = selId(state.sel);
   const is = (id) => !!sid && (id === sid || id.startsWith(sid + "@"));
   document.querySelectorAll("#vp .node, #vp .grp").forEach((el) => el.classList.toggle("sel", is(el.dataset.id)));
+  // the keyboard's node, and the edge it is aimed along, in the active lane's slots
+  const map = current?.per.find((p) => p.lane === active)?.map, cur = map && kbNode();
+  const cid = cur && map.get(cur), aim = cur && kb.aim?.includes(cur) ? kb.aim.map((id) => map.get(id)) : null;
+  const here = (el) => +el.dataset.lane === active.id;
+  document.querySelectorAll("#vp .node").forEach((el) => el.classList.toggle("cur", !!cid && el.dataset.id === cid && here(el)));
+  $("vp").classList.toggle("kbcur", !!cid);
   document.querySelectorAll("#vp .edge").forEach((el) => {
     const on = is(el.dataset.from) || is(el.dataset.to);
+    const aimed = !!aim && here(el) && el.dataset.from === aim[0] && el.dataset.to === aim[1];
     el.classList.toggle("hl", !!on);
-    el.querySelector("path").setAttribute("marker-end", on ? "url(#arrowhl)" : "url(#arrow)");
+    el.classList.toggle("aim", aimed);
+    el.querySelector("path").setAttribute("marker-end", aimed ? "url(#arrowaim)" : on ? "url(#arrowhl)" : "url(#arrow)");
   });
   const rel = related(state.sel);
   document.querySelectorAll("[data-ref]").forEach((el) => {
@@ -1404,7 +1418,7 @@ function toggle(path, lane = active) {
   const paths = current && visibleLanes().length > 1 ? new Set([path, ...[...current.lin.members("group", current.lin.of(lane.id, "group", path)).values()].flat()]) : [path];
   const close = !state.collapsed.has(path);
   paths.forEach((p) => close ? state.collapsed.add(p) : state.collapsed.delete(p));
-  render();
+  return render();
 }
 function reveal(sel) {
   // open the groups that hide a selected op or value
@@ -1414,6 +1428,137 @@ function reveal(sel) {
   if (sel.type === "sym" && PARAM(SYM[sel.key]) && !state.settings) { state.settings = true; $("settings").checked = true; changed = true; }
   return changed;
 }
+
+/* ---------- the keyboard: walking the graph ----------
+   The arrows walk the graph as it is drawn. Along the flow (→ and ← when it runs right, ↓ and ↑ when it runs down),
+   to the node an edge leads to (downstream) or comes from (upstream). Across it, to aim at another of the node's
+   edges, its inputs and then its outputs, which the next step along the flow takes; arriving, the keyboard is aimed
+   back along the edge it came by, else a step takes the edge straightest ahead. A collapsed group is one node, and
+   stays collapsed when walked into. A hidden group is not drawn, so it is not walked into either: hiding it is how
+   to take it out of the way (the Groups menu shows it again). c: collapse the group the node is in, or expand the
+   collapsed group it is on (back on the node it was collapsed from); g: the node's group, and again back to the
+   node; Tab and Shift+Tab: the legend's entries linked to the selection, in turn, and back to the node (Enter
+   selects the entry, Esc goes back to the node). */
+const kb = {id: null, aim: null, back: null, inside: {}, entry: -1, entryFor: null};
+const kbSel = (n) => n.type === "cgroup" ? {type: "group", key: n.key} : {type: n.type, key: n.key};
+const sameSel = (a, b) => !!a && !!b && a.type === b.type && a.key === b.key;
+// the drawn node the keyboard is on: the one walked to or clicked last, while it is drawn and selected, else the
+// first drawn node of the selection (a value split into copies, one per group that uses it, has several)
+function kbNode() {
+  const v = current?.v;
+  if (!v || !state.sel) return null;
+  if (kb.id && v.nodes.has(kb.id) && sameSel(kbSel(v.nodes.get(kb.id)), state.sel)) return kb.id;
+  for (const n of v.nodes.values()) if (sameSel(kbSel(n), state.sel)) { kb.id = n.id; kb.aim = null; return n.id; }
+  return null;
+}
+const kbBox = (id) => current.boxes?.get(current.per.find((p) => p.lane === active)?.map.get(id));
+const across = (id) => { const b = kbBox(id); return !b ? 0 : state.dir === "RIGHT" ? b.y + b.h / 2 : b.x + b.w / 2; };
+const along = (id) => { const b = kbBox(id); return !b ? 0 : state.dir === "RIGHT" ? b.x : b.y; };
+const sameEdge = (a, b) => !!a && !!b && a[0] === b[0] && a[1] === b[1];
+// a node's edges in, and out, each in order across the flow
+function kbEdges(id) {
+  const by = (end) => (x, y) => across(x[end]) - across(y[end]);
+  return {ins: current.v.edges.filter(([, b]) => b === id).sort(by(0)), outs: current.v.edges.filter(([a]) => a === id).sort(by(1))};
+}
+const inGroup = (n, g) => within(n.type === "cgroup" ? n.key : n.container, g) && !(n.type === "cgroup" && n.key === g);
+async function kbShow(sel) {
+  state.sel = sel;
+  showDetail(sel);
+  if (state.focus) await render(); else highlight();
+  panTo();
+}
+function kbGo(id, aim = null) {
+  kb.id = id; kb.aim = aim;
+  return kbShow(kbSel(current.v.nodes.get(id)));
+}
+// where the keyboard starts: on a group, the node it left the group from, else the group's first step drawn;
+// with nothing selected, the graph's first node along the flow
+function kbStart() {
+  const v = current.v, g = state.sel?.type === "group" ? state.sel.key : null;
+  if (g !== null) {
+    const back = kb.back && v.nodes.get(kb.back);
+    if (back && inGroup(back, g)) return kb.back;
+    const k = ORDER.find((k) => v.nodes.has("o:" + k) && within(OP[k].group, g));
+    return k ? "o:" + k : [...v.nodes.values()].find((n) => inGroup(n, g))?.id ?? null;
+  }
+  return [...v.nodes.keys()].sort((a, b) => along(a) - along(b) || across(a) - across(b))[0] ?? null;
+}
+async function kbWalk(down) {
+  const id = kbNode();
+  if (!id) { const s = kbStart(); if (s) await kbGo(s); return; }
+  const {ins, outs} = kbEdges(id), list = down ? outs : ins;
+  if (!list.length) { note(down ? "Nothing is downstream of this." : "Nothing is upstream of this."); return; }
+  const far = (e) => down ? e[1] : e[0];
+  const e = list.find((x) => sameEdge(x, kb.aim)) ?? list.reduce((a, b) => Math.abs(across(far(b)) - across(id)) < Math.abs(across(far(a)) - across(id)) ? b : a);
+  await kbGo(far(e), e);
+}
+function kbAim(step) {
+  const id = kbNode();
+  if (!id) return;
+  const {ins, outs} = kbEdges(id), all = [...ins, ...outs];
+  if (!all.length) return;
+  const at = all.findIndex((x) => sameEdge(x, kb.aim));
+  kb.aim = all[at < 0 ? (step > 0 ? 0 : all.length - 1) : (at + step + all.length) % all.length];
+  highlight();
+  const el = document.querySelector(`#vp .edge.aim`);
+  if (el) { const g = $("graph").getBoundingClientRect(), r = el.getBoundingClientRect(); if (r.right < g.left || r.left > g.right || r.bottom < g.top || r.top > g.bottom) { T.x += (g.left + g.width / 2) - (r.left + r.width / 2); T.y += (g.top + g.height / 2) - (r.top + r.height / 2); applyT(); } }
+}
+async function kbFold() {
+  const id = kbNode(), n = id && current.v.nodes.get(id);
+  if (n?.type === "cgroup") {                            // on a collapsed group: expand it
+    const g = n.key, from = kb.inside[g];
+    await toggle(g);
+    if (from && current.v.nodes.has(from)) return kbGo(from);
+    state.sel = {type: "group", key: g}; kb.back = null;
+    const s = kbStart();
+    return s ? kbGo(s) : kbShow(state.sel);
+  }
+  const g = n ? n.container : state.sel?.type === "group" ? state.sel.key : "";
+  if (!g) { note(state.sel ? "This is at the top level, in no group." : "Select something first (an arrow key starts at the beginning)."); return; }
+  kb.inside[g] = id ?? (kb.back && current.v.nodes.has(kb.back) ? kb.back : null);
+  await toggle(g);
+  if (current.v.nodes.has("g:" + g)) await kbGo("g:" + g);
+}
+async function kbToGroup() {
+  const id = kbNode(), n = id && current.v.nodes.get(id);
+  if (n) {                                               // a node: its group
+    const g = n.type === "cgroup" ? parent(n.key) : n.container;
+    if (!g) { note("This is at the top level, in no group."); return; }
+    kb.back = id; kb.id = null; kb.aim = null;
+    return kbShow({type: "group", key: g});
+  }
+  if (state.sel?.type === "group") { const s = kbStart(); if (s) await kbGo(s); }      // a group: back on its node
+}
+const kbEntries = () => [...document.querySelectorAll("#legend [data-go].hl")];
+function kbEntry(step) {
+  if (kb.entryFor !== selName(state.sel)) { kb.entry = -1; kb.entryFor = selName(state.sel); }
+  document.querySelectorAll("#legend .kbd").forEach((el) => el.classList.remove("kbd"));
+  const els = kbEntries(), n = els.length + 1;            // the entries, then the node again
+  if (!els.length) { note("Nothing in the legend is linked to this."); return; }
+  kb.entry = ((kb.entry + 1 + step) % n + n) % n - 1;
+  if (kb.entry < 0) { panTo(); return; }
+  els[kb.entry].classList.add("kbd");
+  els[kb.entry].scrollIntoView({block: "nearest"});
+}
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
+  if (document.body.classList.contains("resultsview") || !$("library").hidden || $("lightbox") || !current) return;
+  const right = state.dir === "RIGHT";
+  const act = {ArrowRight: right ? "down" : "next", ArrowLeft: right ? "up" : "prev",
+               ArrowDown: right ? "next" : "down", ArrowUp: right ? "prev" : "up"}[e.key];
+  const atEntry = state.sel && kb.entry >= 0 && kb.entryFor === selName(state.sel) && kbEntries()[kb.entry];
+  if (act || e.key === "Tab" && state.sel || e.key === "c" || e.key === "g" || atEntry && (e.key === "Enter" || e.key === "Escape")) e.preventDefault();
+  else return;
+  if (e.key === "Tab") return kbEntry(e.shiftKey ? -1 : 1);
+  document.querySelectorAll("#legend .kbd").forEach((el) => el.classList.remove("kbd"));
+  kb.entry = -1;
+  if (e.key === "Enter") return go(atEntry.dataset.go);
+  if (e.key === "Escape") return panTo();
+  if (e.key === "c") return kbFold();
+  if (e.key === "g") return kbToGroup();
+  if (act === "down" || act === "up") return kbWalk(act === "down");
+  return kbAim(act === "next" ? 1 : -1);
+});
 
 /* ---------- detail panel ---------- */
 // a link that opens a file at a line in the chosen editor (headway build --editor)
@@ -1648,7 +1793,7 @@ async function go(spec) {
 }
 function panTo() {
   // bring the selection into view if it is off screen
-  const el = document.querySelector(`#vp .node.sel[data-lane="${active.id}"], #vp .grp.sel[data-lane="${active.id}"]`) ?? document.querySelector("#vp .node.sel, #vp .grp.sel");
+  const el = document.querySelector(`#vp .node.cur[data-lane="${active.id}"]`) ?? document.querySelector(`#vp .node.sel[data-lane="${active.id}"], #vp .grp.sel[data-lane="${active.id}"]`) ?? document.querySelector("#vp .node.sel, #vp .grp.sel");
   if (!el) return;
   const g = $("graph").getBoundingClientRect(), r = (el.querySelector("rect, foreignObject") ?? el).getBoundingClientRect();
   if (r.left >= g.left && r.right <= g.right && r.top >= g.top && r.bottom <= g.bottom) return;
@@ -2194,7 +2339,7 @@ function wireEyes(el, itemSel) {
     });
   });
 }
-const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom";
+const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom · arrows: walk the graph · c: collapse/expand · g: the group and back · Tab: its legend entries";
 function laneBar() {
   const el = $("lanes");
   $("hint").textContent = HINT; $("hint").title = "";
@@ -3178,7 +3323,7 @@ function header(buildError = "") {
   requestAnimationFrame(descFit);
   $("meta").innerHTML = (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span> · ` : "") +
     (D.live && D.draft ? `<button id="redraft" title="draft this spec again from the code, as headway init ${esc(D.draft.entry)} --depth ${esc(D.draft.depth ?? 2)} did">Redraft</button> · ` : "") +
-    `built ${esc(D.built)}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}`;
+    `built ${esc(D.built)}${D.headway ? ` with headway ${esc(D.headway)}` : ""}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}`;
   $("checks").innerHTML = buildError
     ? `<div class="checks"><b>The rebuild failed</b> (this is the last good build): ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
     : D.check.errors.length ? `<div class="checks"><b>${D.check.errors.length} check error${D.check.errors.length > 1 ? "s" : ""}:</b> the graph may not match the code.<pre>${esc(D.check.errors.join("\n"))}</pre></div>` : "";

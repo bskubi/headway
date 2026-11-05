@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import datetime
 import functools
+import importlib.metadata
 import inspect
 import json
 import os
@@ -31,6 +32,13 @@ EDITORS = {
     "pycharm": ("PyCharm", "pycharm://open?file={file}&line={line}"),
     "file": ("browser", "file://{file}"),
 }
+
+
+def _version() -> str:
+    try:
+        return importlib.metadata.version("headway")
+    except importlib.metadata.PackageNotFoundError:
+        return ""
 
 
 def editor(name: str | None = None) -> dict[str, str]:
@@ -74,6 +82,7 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
         "editor": editor_ or editor(),
         "desc": g.desc,
         "built": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "headway": _version(),                                  # the headway that built it
         "built_at": datetime.datetime.now().isoformat(),        # to order versions by when they were built
         "source": source(g),
         "indices": [vars(ix) | {"decl": decl("index:" + ix.key)} for ix in g.indices.values()],
