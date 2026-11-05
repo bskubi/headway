@@ -7,6 +7,10 @@
 <link rel="stylesheet" crossorigin="anonymous" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" crossorigin="anonymous" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
+<script>
+/* the theme chosen in this browser, set before the page is drawn (so a dark page never flashes light) */
+try { const t = localStorage.getItem("headway.theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -19,14 +23,25 @@
   --output: #8a4fbf; --output-bg: #f1e8fa; --setting: #a8650b; --setting-bg: #fbf0dd; --constant: #69707c; --constant-bg: #eef0f3;
   --op-bg: #f3f1ec; --group-bg: rgba(47, 95, 208, 0.035); --ok: #23863a; --bad: #c4352b; --find: #d6336c;
 }
+/* dark: as the system is (Auto), or chosen with the theme button (data-theme on the page, kept in the browser) */
+:root { color-scheme: light; }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #17171a; --panel: #1f1f23; --fg: #e8e6e1; --muted: #9b9a96; --border: #3a3a40; --grid: #26262b;
     --accent: #7ea2ff; --accent-soft: #263255; --edge: #6d6c69;
     --input: #6cc4b0; --input-bg: #1c302b; --value: #d4d2cc; --value-bg: #232328;
     --output: #c39af0; --output-bg: #2c2238; --setting: #e4aa55; --setting-bg: #33281a; --constant: #a3abb8; --constant-bg: #272a30;
     --op-bg: #2a2a2f; --group-bg: rgba(126, 162, 255, 0.05); --ok: #5cc173; --bad: #f07167; --find: #f783ac;
   }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+    --bg: #17171a; --panel: #1f1f23; --fg: #e8e6e1; --muted: #9b9a96; --border: #3a3a40; --grid: #26262b;
+    --accent: #7ea2ff; --accent-soft: #263255; --edge: #6d6c69;
+    --input: #6cc4b0; --input-bg: #1c302b; --value: #d4d2cc; --value-bg: #232328;
+    --output: #c39af0; --output-bg: #2c2238; --setting: #e4aa55; --setting-bg: #33281a; --constant: #a3abb8; --constant-bg: #272a30;
+    --op-bg: #2a2a2f; --group-bg: rgba(126, 162, 255, 0.05); --ok: #5cc173; --bad: #f07167; --find: #f783ac;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -204,12 +219,12 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 #detail .eq.spec .about { font-size: 12.5px; margin: 4px 0 2px; }
 #detail .status { font-size: 12.5px; margin: 6px 0 2px; }
 .origin { color: var(--muted); font-size: 12px; }
-#detail .status.failed { color: #b3261e; }
+#detail .status.failed { color: var(--bad); }
 #detail .status.unchecked { color: var(--muted); }
 #detail ul.evidence { list-style: none; padding: 0; margin: 4px 0 10px; font-size: 13px; }
 #detail ul.evidence li { margin: 4px 0; }
 #detail ul.evidence li.held { color: var(--fg); }
-#detail ul.evidence li.failed { color: #b3261e; }
+#detail ul.evidence li.failed { color: var(--bad); }
 #detail ul.evidence li.unchecked { color: var(--muted); }
 #detail ul.evidence .d { color: var(--muted); font-size: 11.5px; }
 #detail .fromcode .eq .about { font-size: 12.5px; margin: 2px 0 6px; padding-left: 10px; border-left: 2px solid var(--border); }
@@ -405,6 +420,7 @@ table.libtab tr.more:hover td { color: var(--accent); }
 .spin { width: 12px; height: 12px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 button.linkish { border: none; background: none; color: var(--accent); padding: 2px 4px; font-size: 12px; }
+button.themebtn { min-width: 34px; padding-left: 8px; padding-right: 8px; }
 button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
 table.libtab { width: 100%; border-collapse: collapse; font-size: 13px; }
 table.libtab th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 5px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
@@ -489,6 +505,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
       <label><input type="radio" name="view" value="results"><span>Results</span></label>
     </span>
     <button id="addlane" title="open other headways: beside this one, each in a lane of its own, or instead of it">Open…</button>
+    <button id="theme" class="themebtn"></button>
     <input type="file" id="lanefile" accept=".json,.html,.htm" multiple hidden>
   </div>
 </header>
@@ -547,6 +564,33 @@ const lib = {showEmpty: false, full: false, dir: null, list: null, recent: [], a
 const libPath = (abs) => LIB && abs.startsWith(LIB.root + "/") ? abs.slice(LIB.root.length + 1) : abs;
 const libDate = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
 const libType = (x) => x.kind === "spec" ? "spec · served live" : (x.suite ? "benchmark suite" : "headway") + (x.page ? " · page" : " · JSON");
+/* ---------- the theme: Auto (as the system is), Light or Dark; kept in this browser ---------- */
+const THEMES = {auto: ["◐", "Auto: as the system is"], light: ["☀", "Light"], dark: ["☾", "Dark"]};
+function theme() { try { const t = localStorage.getItem("headway.theme"); return t in THEMES ? t : "auto"; } catch { return "auto"; } }
+function applyTheme(t) {
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  // the code's highlighting: its light and dark stylesheets (linked, or written in by --offline) follow
+  for (const el of document.querySelectorAll('link[media*="prefers-color-scheme"], style[media*="prefers-color-scheme"], [data-media]')) {
+    el.dataset.media ??= el.media;
+    const light = el.dataset.media.includes("light");
+    el.media = t === "auto" ? el.dataset.media : (t === "light") === light ? "all" : "not all";
+  }
+  const b = document.getElementById("theme");
+  if (b) {
+    const next = {auto: "light", light: "dark", dark: "auto"}[t];
+    b.textContent = THEMES[t][0];
+    b.title = `theme: ${THEMES[t][1]} (click: ${THEMES[next][1].split(":")[0]})`;
+  }
+}
+function wireTheme() {
+  applyTheme(theme());
+  document.getElementById("theme").onclick = () => {
+    const t = {auto: "light", light: "dark", dark: "auto"}[theme()];
+    try { localStorage.setItem("headway.theme", t); } catch {}
+    applyTheme(t);
+  };
+}
+
 function libStoredDir() { try { return localStorage.getItem("headway.dir"); } catch { return null; } }
 function libStoreDir(d) { try { localStorage.setItem("headway.dir", d); } catch {} }
 
@@ -3665,6 +3709,7 @@ if (D.live && location.protocol.startsWith("http")) live();
 render(true).then(() => { if (rs.view === "results" && hasResults()) setView("results"); else if (LANES.length > 1) showDetail(state.sel); }).catch((e) => { console.error(e); $("vp").innerHTML = `<text x="10" y="20" fill="red">${esc(e)}</text>`; });
 </script>
 <script>
+wireTheme();
 libWire();
 if (D) { const main = document.createElement("script"); main.textContent = $("viewer-main").textContent; document.body.append(main); }
 else openLibrary(true);

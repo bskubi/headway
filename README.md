@@ -137,7 +137,7 @@ type. Case is ignored, and `_` and spaces count as the same.
 - Tab and Shift+Tab step through the legend's entries linked to the selection (its symbols and equations), and
   then back to the node. Enter selects the entry, and Esc goes back to the node.
 
-The page's header says which version of headway built it.
+The page's header says which version of headway built it. The button at the top right switches the page between Auto (light or dark as the system is), Light and Dark; the choice is kept in the browser.
 
 ## A spec
 
