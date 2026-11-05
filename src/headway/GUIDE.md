@@ -200,6 +200,73 @@ above the spec's outermost package, else to the spec's own folder; or absolute. 
 code with its language's highlighting. The equation checks (`@G.verify`) and the shape trace are for Python code
 only.
 
+## Documents and media
+
+A headway can draw on documents and show media: images, tables, sounds, videos, and excerpts of documents' pages,
+in the side panel of a step, a symbol or a group (`media=` on `G.op`, `G.symbol`, `G.setting`, `G.constant` and
+`G.group`: one medium or a list).
+
+```python
+paper = G.document("smith2024", "Smith et al. 2024, Nat. Methods", path="papers/smith2024.pdf",
+                   url="https://doi.org/10.1000/xyz", desc="The method's paper.")
+G.op("cluster", "clustering", ..., media=[
+    G.excerpt(paper, 4, (0.05, 0.08, 0.95, 0.52), "Fig. 2a: the clusters"),
+    G.table("tables/s3.csv", "Table S3", doc=paper, page=12),
+    G.table(rows=[["k", "AUROC"], [10, 0.91]], caption="Inline rows"),
+    G.image("figs/umap.png", "UMAP"), G.video("movies/t.mp4"), G.audio("https://example.org/s.mp3")])
+```
+
+- `G.document(key, title, *, path="", url="", desc="", sha256="")`: a paper, a supplement, a protocol, a report.
+  A path is relative to the file declaring it. Any number of documents.
+- `G.excerpt(doc, page=None, box=None, caption="", *, between=None, panel=None, dpi=150)`: a region of a page of
+  a PDF, rendered when the headway is built (poppler's `pdftoppm`, `pdftotext` and `pdfinfo`), so the page needs
+  the document only to open it. Say which region by one of:
+  - `between=("first words", "last words")`: a passage of text, the lines from where the first words start to
+    where the last ones end, in their column. Words are matched ignoring case, spaces, punctuation, ligatures and
+    line-break hyphens (a superscript reference number counts: "PBMC25" matches "PBMC" and a superscript 25). The
+    first words must occur once, on the page given or, with no page, in the whole document; the last words are
+    their first occurrence after them. A passage across both columns over the same lines (a two-column legend)
+    takes both; one that runs on into the next column at another height is an error: excerpt each column.
+  - `panel="c"`: a figure's panel, by its letter on the page: from the letter to the letters right of it and
+    below it (or to the running text or the next "Fig. N" legend), each edge moved to the blank gutter nearest
+    it, and off any line of text it would cut (the panel's own taken in, a neighbor's left out), then trimmed to
+    the ink. Where panels interleave (a legend reaching under the next panel's labels), a strip of the neighbor
+    can stay in; give a box there.
+  - `box=(left, top, right, bottom)`: fractions of the page's width and height from its top left.
+  - none of them: the whole page.
+
+  Anchored on the text, an excerpt stays right when the document is replaced by another version of it, and a
+  check fails (an error naming the anchor) when its text is gone, as a code reference's does.
+  `headway excerpt PAPER.pdf --page 4 --panels` lists the panels a page's figure has, with their boxes;
+  `headway excerpt PAPER.pdf --between "first words" "last words" -o x.png` (or `--panel c --page 4`) shows
+  where an excerpt is found and writes its image, to look at before putting it in the spec.
+- `G.image(src, caption="", *, doc=None, page=None, embed=None)`, `G.audio(...)`, `G.video(...)`: a file
+  (relative to the declaring file) or a URL. `embed=None` writes files up to 8 MB into the page and links larger
+  ones; `True` always writes it in, `False` always links it. A linked file is loaded from its path (a page opened
+  as a file), or through the server (`headway serve`, the library), which sends only the files the page declares.
+- `G.table(src="", caption="", *, rows=None, header=True, doc=None, page=None)`: a CSV or TSV file, or rows given
+  inline; `$...$` in a cell is TeX.
+- `doc=`, `page=` on any medium: where it comes from. The panel says so and links the document at that page.
+- `G.cite(doc, page=None, note="")`: a document a step draws on without showing part of it (another paper, a
+  protocol): listed under Sources in the panel, linked at its page.
+
+`headway check` (and build) errors on a medium whose file is missing or of the wrong kind, a `doc` that is not
+declared, a page the document does not have, and an excerpt of a document whose file is not found. A document not
+at its path is looked for in the project (the git work tree, else the spec's folder): by name, or by its content
+when `sha256=` is given (the built headway records each found document's sha256); found elsewhere, it is a
+warning naming the new path; not found, a warning, and the viewer links its `url`. In the viewer, **locate…**
+asks for the document's file, checks its sha256 against the one recorded, shows it, and keeps a copy in the
+browser (IndexedDB) that its links open from then on.
+
+### A headway of a paper
+
+A paper describes an analysis: many tools, steps and choices, without the code. A headway can describe it the
+same way: steps with equations and descriptions taken from the paper, symbols for its data and results, groups
+for its sections, and the paper (and its supplement, and other papers it builds on) as documents, with the
+figures and tables that show each step's results as excerpts beside it. A step without code but with media from a
+document needs no code reference (no warning). Where code exists for a step (the authors' repository, a tool's
+function), give its reference as usual, and the step is checked like any other.
+
 ## What `headway check` reports
 
 With `Headway(..., hints=True)`, each step's values given symbols by `bind=` or `names=` are also held to the shapes

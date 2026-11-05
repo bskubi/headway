@@ -5,6 +5,7 @@
                condition is an expression of symbols
   references   every code reference resolves (resolve.py): renamed or deleted code fails the check
   verifiers    the spec's @verify functions: the named ops' equations reproduce the code's results
+  media        every document is found (else a warning) and every medium can be shown (media.py)
 """
 from __future__ import annotations
 
@@ -12,7 +13,9 @@ import ast
 import traceback
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
+from headway import media
 from headway.files import bases
 from headway.resolve import Location, RefError, resolve
 from headway.spec import Headway
@@ -24,6 +27,8 @@ class Report:
     warnings: list[str] = field(default_factory=list)
     locations: dict[str, Location] = field(default_factory=dict)       # ref -> location
     verified: dict[str, tuple[bool, str]] = field(default_factory=dict)  # op -> (passed, message)
+    documents: dict[str, dict[str, Any]] = field(default_factory=dict)   # key -> the document as built (media.py)
+    media: dict[str, list[dict[str, Any]]] = field(default_factory=dict)  # "op:key" etc. -> its media as built
 
     @property
     def ok(self) -> bool:
@@ -144,7 +149,7 @@ def references(g: Headway, report: Report) -> None:
             except RefError as err:
                 report.errors.append(f"{owner}: {err}")
     for o in g.ops.values():
-        if not o.code:
+        if not o.code and not any(m.doc for m in o.media):        # a step a document describes: it is the reference
             report.warnings.append(f"op {o.key}: no code reference")
     for s in g.symbols.values():
         if s.role == "constant" and not s.code:
@@ -173,6 +178,7 @@ def check(g: Headway, run_verifiers: bool = True) -> Report:
     report = Report()
     structure(g, report)
     references(g, report)
+    media.resolve(g, report)
     if isinstance(g, Suite):
         check_suite(g, report.errors, report.warnings)
     if g.hints:

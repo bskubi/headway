@@ -190,6 +190,44 @@ step also uses should be a symbol, listed in both steps' inputs or outputs, so i
 headway does not read the TeX, so it cannot tell you which symbols lack a definition; it only checks that a
 where-entry is not written exactly as a declared symbol the step should list instead.
 
+### Documents, figures and media
+
+A step, a value or a group can show images, tables, sounds, videos and excerpts of documents in its side panel.
+Several documents can feed one headway (a paper, its supplement, a protocol), so a headway can describe an analysis
+as a paper does, with its figures and tables beside the steps:
+
+```python
+paper = G.document("smith2024", "Smith et al. 2024", path="papers/smith2024.pdf",
+                   url="https://doi.org/10.1000/xyz")
+lister = G.document("lister2013", "Lister et al. 2013", url="https://doi.org/10.1126/science.1237905")
+supp = G.document("smith2024s", "Smith et al. 2024, supplement", path="papers/smith2024_supp.pdf")
+G.op("cluster", "clustering", r"...", inputs=[...], outputs=[...],
+     media=[G.excerpt(paper, 4, panel="a", caption="Fig. 2a: the clusters"),          # found by its letter
+            G.excerpt(paper, between=("We clustered", "into 12 groups."), caption="Results"),  # by its text
+            G.cite(lister, note="the clusters it compares with"),                     # a source, linked
+            G.table("tables/s3.csv", "Table S3", doc=supp, page=12),
+            G.image("figs/umap.png", "UMAP of the clusters"),
+            G.video("movies/trajectory.mp4", "The trajectory over time"),
+            G.audio("https://example.org/sonified.mp3")])
+```
+
+- **An excerpt** is a region of a PDF page, rendered into the page when the headway is built (with poppler).
+  It can be found by what it says: `between=("Successful identification", "(Fig. 3a–c).")` takes the lines of
+  that passage, in its column, wherever it is in the document; `panel="c"` takes panel c of the figure on a page,
+  bounded by its neighbors' letters and the gutters between them. Or give a box: (left, top, right, bottom) as
+  fractions of the page. `headway excerpt PAPER.pdf --page 4 --panels` lists a page's panels, and
+  `headway excerpt ... -o x.png` previews one. Images, tables and sounds up to 8 MB are written into the page
+  too, so it stands alone. Larger files, and any with `embed=False`, are linked:
+  the page loads them from their files, or through `headway serve` and the library.
+- **Opening a document:** a medium that comes from a document says so, with a link that opens it at its page.
+  With nothing selected, the side panel lists the documents and what each is shown with, as does the legend.
+- **A document that has moved:** `headway build` looks for it in the project, by name, and by its content when
+  `sha256=` is given, and warns. In the viewer, **locate…** next to a document asks for its file, checks that it
+  is the same document, shows it in the page, and keeps a copy in the browser, which opens from then on. That is
+  how a page opened on another machine reaches the documents it was built from.
+- A step that a document describes needs no code reference.
+- Find, with **Text**, searches the captions too.
+
 ## Comparing versions
 
 A version is a built headway: the JSON from `build --json`, or a page from `build`. Keep one wherever it is useful

@@ -14,20 +14,23 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import mimetypes
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import webbrowser
 from collections.abc import Callable, Iterable, Sequence
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
-from headway import page
+from headway import media, page
 
 POLL = 0.4          # seconds between looks at the files
 QUIET = 0.3         # seconds of no further change before rebuilding
@@ -136,9 +139,14 @@ class Server:
         return {"version": self.version, "ok": not self.error, "error": self.error, "boot": BOOT}
 
     # ---------- serving ----------
-    def get(self, h: Handler, path: str) -> None:
-        """Answer a GET of `path` (the page, its data, the build state, the stream of rebuilds)."""
-        if path == "/":
+    def get(self, h: Handler, target: str) -> None:
+        """Answer a GET of `target` (the page, its data, the build state, the stream of rebuilds, a file the page
+        shows: one of its documents or linked media, /asset?path=...)."""
+        url = urllib.parse.urlsplit(target)
+        path = urllib.parse.unquote(url.path)
+        if path == "/asset":
+            h.send_asset(urllib.parse.parse_qs(url.query).get("path", [""])[0], media.assets(self.data or {}))
+        elif path == "/":
             h.send(self.page(), "text/html")
         elif path == "/data.json":
             h.send(json.dumps(self.data), "application/json")
@@ -218,7 +226,7 @@ class Server:
         class One(Handler):
             def do_GET(self) -> None:
                 if self.local():
-                    server.get(self, self.path.split("?")[0])
+                    server.get(self, self.path)
 
             def do_POST(self) -> None:
                 if self.writable():
@@ -277,6 +285,46 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(302)
         self.send_header("Location", to)
         self.end_headers()
+
+    def send_asset(self, path: str, allowed: set[str]) -> None:
+        """A file a page shows (a document, a linked image, sound or video), if the page declares it; with byte
+        ranges, so that a video can be sought in."""
+        if not path or path not in allowed or not os.path.isfile(path):
+            self.send("not a file of this headway", "text/plain", 404)
+            return
+        size = os.path.getsize(path)
+        start, end = 0, size - 1
+        ranged = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+        if ranged and (ranged.group(1) or ranged.group(2)):
+            if ranged.group(1):
+                start, end = int(ranged.group(1)), min(int(ranged.group(2) or end), end)
+            else:
+                start = max(size - int(ranged.group(2)), 0)
+            if start > end:
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return
+        self.send_response(206 if ranged else 200)
+        self.send_header("Content-Type", mimetypes.guess_type(path)[0] or "application/octet-stream")
+        self.send_header("Content-Length", str(end - start + 1))
+        self.send_header("Accept-Ranges", "bytes")
+        if ranged:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start)
+            left = end - start + 1
+            while left > 0:
+                chunk = f.read(min(left, 1 << 20))
+                if not chunk:
+                    break
+                try:
+                    self.wfile.write(chunk)
+                except (BrokenPipeError, ConnectionResetError):
+                    return
+                left -= len(chunk)
 
     def send(self, body: str | bytes, kind: str, status: int = 200) -> None:
         raw = body.encode() if isinstance(body, str) else body

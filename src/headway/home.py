@@ -28,7 +28,7 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
-from headway import api, page
+from headway import api, media, page
 from headway.serve import Handler, Server, boot_events, run
 
 SKIP = {".git", ".hg", ".venv", "venv", "env", "node_modules", "__pycache__", "site-packages", "dist", "build",
@@ -226,8 +226,15 @@ class Home:
                     raise FileNotFoundError(f"not a built headway: {q.get('path', [''])[0]}")
                 self.remember([f])
                 h.send(f.read_bytes(), "application/json" if f.suffix == ".json" else "text/html")
+            elif path == "/api/asset":                              # a file a built page shows (media.py)
+                f = self.path(q.get("file", [""])[0])
+                info = f and f.suffix in BUILT and self.what(f)
+                if not f or not info or info["kind"] != "built":
+                    raise FileNotFoundError(f"not a built headway: {q.get('file', [''])[0]}")
+                d, _, _ = api.read(f)
+                h.send_asset(q.get("path", [""])[0], media.assets(d))
             elif path.startswith("/live/"):
-                self.serve_live(h, path[len("/live/"):], q.get("open", []))
+                self.serve_live(h, path[len("/live/"):], q.get("open", []), url.query)
             elif path == "/api/events":                             # which server this is: a page that finds
                 boot_events(h)                                      # another (headway restarted) reloads
             else:
@@ -269,7 +276,7 @@ class Home:
             return
         server.post(h, sub)
 
-    def serve_live(self, h: Handler, rest: str, opened: list[str]) -> None:
+    def serve_live(self, h: Handler, rest: str, opened: list[str], query: str = "") -> None:
         rel, dot, sub = rest.partition(".py")
         if not dot or not sub:                                  # a relative URL in the page needs the slash
             h.redirect("/live/" + urllib.parse.quote(rel + dot) + "/")
@@ -283,7 +290,7 @@ class Home:
             lanes = api.lanes(str(p) for p in map(self.path, opened) if p)
             h.send(server.page(lanes, library=self.library()), "text/html")
         else:
-            server.get(h, sub)
+            server.get(h, sub + ("?" + query if query else ""))
 
     def server(self, f: Path, module: str | None = None, compare: list[dict[str, Any]] | None = None) -> Server | None:
         """The live server of the spec in file `f`, started on the first visit."""

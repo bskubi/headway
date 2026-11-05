@@ -87,10 +87,12 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
         "source": source(g),
         "indices": [vars(ix) | {"decl": decl("index:" + ix.key)} for ix in g.indices.values()],
         "symbols": [vars(s) | {"kind": s.kind, "code": code(s.code), "value": None if s.value is None else str(s.value),
+                               "media": report.media.get("sym:" + s.key, []),
                                "decl": decl("symbol:" + s.key), "code_name": coded[s.key]}
                     for s in g.symbols.values()],
         "ops": [{k: v for k, v in vars(o).items() if k not in ("bind", "names")} | {
                     "code": code(o.code),
+                    "media": report.media.get("op:" + o.key, []),
                     "code_tex": code_tex(g, o, report),
                     "code_tex_names": code_tex(g, o, report, code_names=True),
                     "code_doc": code_doc(o, report),
@@ -102,8 +104,10 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
                     "verified": None if o.key not in report.verified else report.verified[o.key][0],
                     "verify_msg": report.verified.get(o.key, (None, ""))[1]}
                 for o in g.ops.values()],
-        "groups": [vars(gr) | {"collapsed": gr.collapsed or path in collapse, "decl": decl("group:" + path)}
+        "groups": [vars(gr) | {"collapsed": gr.collapsed or path in collapse, "decl": decl("group:" + path),
+                               "media": report.media.get("group:" + path, [])}
                    for path, gr in groups.items()],
+        "documents": [doc | {"decl": decl("document:" + k)} for k, doc in report.documents.items()],
         "hidden": list(hide),
         "check": {"errors": report.errors, "warnings": report.warnings},
     } | ({"suite": suite_data(g, code, decl)} if isinstance(g, Suite) else {})

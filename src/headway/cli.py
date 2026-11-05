@@ -28,6 +28,10 @@ headway sets DIR [FUNCTION]        the index sets a trace's array sizes show, an
 headway verify DIR FUNCTION ...    the math shown for each function, checked on the calls the trace recorded
 headway options DIR FUNCTION ...   the settings each function was called with (values, objects' types), counted
 headway env DIR                    the environment a trace ran in (Python, packages, thread settings)
+headway excerpt PDF [--page N] (--between FIRST LAST | --panel LETTER | --box L T R B) [-o OUT.png]
+headway excerpt PDF --page N --panels
+                                   preview an excerpt of a document (G.excerpt): where it is found, as a box to
+                                   give, and its image; or the panel letters a page's figure has
 headway guide                      how headway works and how to write a headway for a codebase
 
 <spec module> is an importable module holding one Headway (or "module:attribute"). A VERSION is a built version: the
@@ -61,6 +65,38 @@ def built(target: str) -> dict[str, Any]:
         if run.returncode or not out.exists():
             raise SystemExit(f"could not build {target}:\n{run.stderr}")
         return json.loads(out.read_text())
+
+
+def excerpt_command(p: argparse.ArgumentParser, a: argparse.Namespace) -> int:
+    from headway import media, pdftext
+    from headway.spec import Media
+    pdf = Path(a.pdf)
+    if not pdf.is_file():
+        p.error(f"excerpt: {pdf} not found")
+    try:
+        if a.panels:
+            if a.page is None:
+                p.error("excerpt: --panels needs --page")
+            width, height, words = pdftext.pages(pdf)[a.page - 1]
+            for w in sorted(pdftext.labels(words), key=lambda w: (round(w.y0 / 12), w.x0)):
+                b = pdftext.panel(pdf, a.page, w.text)
+                print(f"{w.text}  box=({b[0] / width:.4f}, {b[1] / height:.4f}, {b[2] / width:.4f}, {b[3] / height:.4f})")
+            return 0
+        if sum(x is not None for x in (a.between, a.panel, a.box)) > 1:
+            p.error("excerpt: one of --between, --panel and --box")
+        m = Media("excerpt", page=a.page, box=tuple(a.box) if a.box else None,  # type: ignore[arg-type]
+                  between=tuple(a.between) if a.between else None, panel=a.panel)
+        if m.page is None and m.between is None:
+            p.error("excerpt: give --page (or find the text with --between)")
+        page, box = media.locate(pdf, m)
+        shown = "the whole page" if box is None else f"box=({', '.join(f'{v:.4f}' for v in box)})"
+        print(f"page {page}, {shown}")
+        if a.out:
+            Path(a.out).write_bytes(media.excerpt(pdf, page, box, a.dpi))
+            say(f"wrote {a.out}")
+    except (pdftext.FindError, RuntimeError) as e:
+        p.error(f"excerpt: {e}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -173,12 +209,23 @@ def main(argv: list[str] | None = None) -> int:
                     help="change a module constant before the run (e.g. a chunk size; repeatable)")
     tr.add_argument("--limit", type=int, default=50, help="calls of each function to check (default 50)")
     tr.add_argument("pytest_args", nargs="*", help="after --: the tests to run, as pytest takes them")
+    ex = sub.add_parser("excerpt", help="preview an excerpt of a PDF (G.excerpt), or list a page's panel letters")
+    ex.add_argument("pdf")
+    ex.add_argument("--page", type=int)
+    ex.add_argument("--between", nargs=2, metavar=("FIRST", "LAST"), help="the text from FIRST to LAST")
+    ex.add_argument("--panel", metavar="LETTER", help="a figure's panel, by its letter")
+    ex.add_argument("--box", nargs=4, type=float, metavar=("L", "T", "R", "B"), help="fractions of the page")
+    ex.add_argument("--panels", action="store_true", help="list the page's panel letters and their boxes")
+    ex.add_argument("-o", "--out", help="write the excerpt as a PNG")
+    ex.add_argument("--dpi", type=int, default=150)
     sub.add_parser("guide", help="how headway works and how to write a headway for a codebase (for people and "
                                  "for coding agents)")
     a = p.parse_args(argv)
     if a.command == "guide":
         print(resources.files("headway").joinpath("GUIDE.md").read_text())
         return 0
+    if a.command == "excerpt":
+        return excerpt_command(p, a)
     if a.command == "init":
         from headway.draft import DraftError, draft
         if a.out and Path(a.out).exists():

@@ -309,6 +309,29 @@ table.heat td.fig .more { font-size: 11px; color: var(--muted); }
 #detail .ev figure.on img { outline: 2px solid var(--accent); outline-offset: 1px; }
 #detail .ev figcaption { margin-top: 3px; color: var(--muted); overflow-wrap: anywhere; }
 #detail .ev figcaption b { color: var(--fg); font-weight: 600; }
+/* media in the side panel: images, tables, sounds, videos, excerpts of documents */
+figure.media { margin: 10px 0 16px; }
+figure.media img { display: block; max-width: 100%; max-height: 420px; border-radius: 4px; background: #fff; cursor: zoom-in; }
+figure.media video { display: block; width: 100%; max-height: 420px; border-radius: 4px; background: #000; }
+figure.media audio { display: block; width: 100%; }
+figure.media figcaption { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.45; }
+figure.media .msrc { display: block; margin-top: 2px; }
+.mediatable { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+.mediatable table { border-collapse: collapse; font-size: 12px; width: 100%; }
+.mediatable th, .mediatable td { padding: 3px 8px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+.mediatable thead th { position: sticky; top: 0; background: var(--panel); font-weight: 650; }
+.mediatable tbody tr:last-child td { border-bottom: none; }
+button.locate { color: var(--muted); font-size: 11px; margin-left: 4px; }
+a.doclink { color: var(--accent); text-decoration: none; }
+a.doclink:hover { text-decoration: underline; }
+.doclist { margin: 6px 0; padding: 0; list-style: none; }
+.doclist li { margin: 0 0 8px; font-size: 13px; }
+.doclist .d { color: var(--muted); font-size: 12px; }
+#docview { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.55); padding: 20px; display: flex; }
+#docview .dvbox { flex: 1; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); }
+#docview .dvhead { display: flex; gap: 10px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+#docview .dvhead .mu { color: var(--muted); }
+#docview iframe { flex: 1; border: 0; width: 100%; border-radius: 0 0 10px 10px; background: #fff; }
 #lightbox { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, 0.78); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; cursor: zoom-out; }
 #lightbox img { max-width: 100%; max-height: calc(100% - 48px); object-fit: contain; background: #fff; border-radius: 4px; }
 #lightbox div { color: #eee; font-size: 13px; text-align: center; }
@@ -491,7 +514,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
       </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
       <span class="grp"><button id="copygraph" class="copybig" title="copy an image of the whole graph (every lane, as drawn now, at full size) to the clipboard"><span class="ico"></span> Copy image</button></span>
-      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
+      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions and the captions of figures and media: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker><marker id="arrowaim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="note"></div>
@@ -502,7 +525,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
 </div>
 <div class="split h" id="hsplit" title="drag to resize the legend; double-click to collapse it"><button id="htog"></button></div>
 <section id="legend">
-  <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table><h2 id="fighead" hidden>Figures</h2><table id="figures"></table></div>
+  <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table><h2 id="fighead" hidden>Figures</h2><table id="figures"></table><h2 id="dochead" hidden>Documents</h2><table id="documents"></table></div>
   <div><h2>Equations</h2><div id="equations"></div></div>
 </section>
 </div>
@@ -1284,16 +1307,17 @@ function findMatches(q) {
   };
   const best = (...gs) => gs.includes("exact") ? "exact" : gs.includes("part") ? "part" : null;
   const named = (...names) => { const ns = names.map(findNorm).filter(Boolean); return ns.includes(q) ? "exact" : ns.some((n) => n.includes(q)) ? "part" : null; };
+  const caps = (x) => (x.media ?? []).map((m) => m.caption).filter(Boolean).join(" · ");
   const grade = (desc, ...names) => best(named(...names), inText(desc));
   const put = (id, g) => { if (id && g && out.get(id) !== "exact") out.set(id, g); };
   const shown = (id) => id && document.querySelector(`#vp [data-id="${CSS.escape(id)}"], #vp [data-id^="${CSS.escape(id)}@"]`);
-  for (const o of Object.values(OP)) put(selId({type: "op", key: o.key}), grade(noDesc(o.desc) && o.code_doc ? o.code_doc : o.desc, o.key, o.label));
+  for (const o of Object.values(OP)) put(selId({type: "op", key: o.key}), best(grade(noDesc(o.desc) && o.code_doc ? o.code_doc : o.desc, o.key, o.label), inText(caps(o))));
   for (const s of Object.values(SYM)) {
-    const g = grade(s.desc, s.key, s.name);
+    const g = best(grade(s.desc, s.key, s.name), inText(caps(s)));
     const id = selId({type: "sym", key: s.key});
     put(shown(id) || !PRODUCER[s.key] ? id : selId({type: "op", key: PRODUCER[s.key]}), g);    // in a collapsed group
   }
-  for (const gr of Object.values(GRP)) put(selId({type: "group", key: gr.path}), grade(gr.desc, gr.label, gr.path.split("/").pop()));
+  for (const gr of Object.values(GRP)) put(selId({type: "group", key: gr.path}), best(grade(gr.desc, gr.label, gr.path.split("/").pop()), inText(caps(gr))));
   return out;
 }
 let findAt = -1;                                        // the match jumped to (in reading order), -1 none
@@ -1542,7 +1566,7 @@ function kbEntry(step) {
 }
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-  if (document.body.classList.contains("resultsview") || !$("library").hidden || $("lightbox") || !current) return;
+  if (document.body.classList.contains("resultsview") || !$("library").hidden || $("lightbox") || $("docview") || !current) return;
   const right = state.dir === "RIGHT";
   const act = {ArrowRight: right ? "down" : "next", ArrowLeft: right ? "up" : "prev",
                ArrowDown: right ? "next" : "down", ArrowUp: right ? "prev" : "up"}[e.key];
@@ -1559,6 +1583,149 @@ document.addEventListener("keydown", (e) => {
   if (act === "down" || act === "up") return kbWalk(act === "down");
   return kbAim(act === "next" ? 1 : -1);
 });
+
+/* ---------- documents and media ----------
+   A step, value or group can carry media (an image, a table, a sound, a video, an excerpt of a document's page),
+   shown in its side panel. A medium written into the page is shown from it; a linked one from its file: through the
+   server that serves the page (headway serve, the library), else as a file:// URL (a page opened as a file). A
+   document opens at its page in a new tab, from its file or its URL. A document not where the headway was built
+   (another machine, a moved file) can be pointed at: Locate… asks for the file, checks it is the same document (its
+   sha256), shows it here, and keeps a copy in this browser (IndexedDB), opened from then on. */
+const docOf = (k) => (D.documents ?? []).find((d) => d.key === k);
+const docId = (doc) => doc.sha256 || `${doc.key}|${doc.declared || doc.url}`;
+const LOCATED = new Map();                              // docId -> a File chosen with Locate…
+const fileURL = (p) => "file://" + p.split("/").map(encodeURIComponent).join("/");
+function assetURL(path) {
+  if (D.live && location.protocol.startsWith("http")) return "asset?path=" + encodeURIComponent(path);
+  if (LIB && D.opened) return `/api/asset?file=${encodeURIComponent(D.opened)}&path=${encodeURIComponent(path)}`;
+  return fileURL(path);
+}
+function docHref(doc, page) {
+  const at = page ? "#page=" + page : "";
+  if (doc.found && doc.path) return assetURL(doc.path) + at;
+  return doc.url ? doc.url + (/\.pdf($|[?#])/i.test(doc.url) ? at : "") : "";
+}
+function docLink(doc, page, label) {
+  const href = docHref(doc, page), here = LOCATED.has(docId(doc));
+  const title = here ? "open the copy of it you pointed this browser at" : href ? `open ${doc.found ? doc.path : doc.url}${page ? `, at page ${page}` : ""}`
+    : "not found where the headway was built: choose its file";
+  return `<a class="doclink" data-doc="${esc(doc.key)}" data-page="${page ?? ""}" href="${esc(href || "#")}"${href ? ` target="_blank" rel="noopener"` : ""} title="${esc(title)}">${label}</a>` +
+    `<button class="linkish locate" data-locate="${esc(doc.key)}" data-page="${page ?? ""}" title="the document is somewhere else: choose its file (remembered in this browser)">${href || here ? "locate…" : "locate it…"}</button>`;
+}
+function idb() {
+  return new Promise((ok, no) => {
+    const r = indexedDB.open("headway-documents", 1);
+    r.onupgradeneeded = () => r.result.createObjectStore("files");
+    r.onsuccess = () => ok(r.result);
+    r.onerror = () => no(r.error);
+  });
+}
+async function loadLocated() {
+  try {
+    const db = await idb();
+    await Promise.all((D.documents ?? []).map((doc) => new Promise((ok) => {
+      const r = db.transaction("files").objectStore("files").get(docId(doc));
+      r.onsuccess = () => { if (r.result) LOCATED.set(docId(doc), r.result); ok(); };
+      r.onerror = () => ok();
+    })));
+  } catch {}                                            // no IndexedDB (a private window): Locate… lasts the visit
+}
+async function keepLocated(doc, file) {
+  LOCATED.set(docId(doc), file);
+  try { (await idb()).transaction("files", "readwrite").objectStore("files").put(file, docId(doc)); } catch {}
+}
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+function locate(doc, page) {
+  const input = document.createElement("input");
+  input.type = "file";
+  if (/\.pdf$/i.test(doc.declared || doc.url || "")) input.accept = ".pdf,application/pdf";
+  input.onchange = async () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    if (doc.sha256 && crypto?.subtle) {
+      const h = hex(await crypto.subtle.digest("SHA-256", await f.arrayBuffer()));
+      if (h !== doc.sha256 && !confirm(`${f.name} is not the file “${doc.title}” was when this headway was built (its content differs). Use it all the same?`)) return;
+    }
+    await keepLocated(doc, f);
+    showDoc(doc, f, page);
+    if (rs.view !== "results") showDetail(state.sel);
+    buildLegend();
+  };
+  input.click();
+}
+function showDoc(doc, file, page) {
+  $("docview")?.remove();
+  const url = URL.createObjectURL(file) + (page ? "#page=" + page : "");
+  const box = document.createElement("div");
+  box.id = "docview";
+  box.title = "click outside the document to close it";
+  box.innerHTML = `<div class="dvbox"><div class="dvhead"><b>${esc(doc.title)}</b><span class="mu">${esc(file.name)}${page ? ` · page ${page}` : ""} · the copy kept in this browser</span><span style="flex:1"></span>` +
+    `<button class="linkish" data-locate="${esc(doc.key)}" data-page="${page ?? ""}">another file…</button><button id="dvclose" title="close (Esc, or a click outside it)">×</button></div><iframe title="${esc(doc.title)}" src="${esc(url)}"></iframe></div>`;
+  box.querySelector("#dvclose").onclick = () => box.remove();
+  box.addEventListener("click", (e) => { if (e.target === box) box.remove(); });
+  document.body.append(box);
+  box.querySelector("#dvclose").focus();                // Esc closes it (until a click into the document takes the keys)
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("docview")?.remove(); });
+document.addEventListener("click", (e) => {
+  const loc = e.target.closest?.("[data-locate]");
+  if (loc) {
+    e.preventDefault();
+    const doc = docOf(loc.dataset.locate);
+    if (doc) locate(doc, +loc.dataset.page || null);
+    return;
+  }
+  const a = e.target.closest?.("a[data-doc]");
+  const doc = a && docOf(a.dataset.doc);
+  if (!doc) return;
+  const f = LOCATED.get(docId(doc)), page = +a.dataset.page || null;
+  if (f) { e.preventDefault(); showDoc(doc, f, page); }
+  else if (a.getAttribute("href") === "#") { e.preventDefault(); locate(doc, page); }
+});
+function tableHTML(m) {
+  const rows = m.rows ?? [], [head, body] = m.header && rows.length ? [rows[0], rows.slice(1)] : [null, rows];
+  return `<div class="mediatable"><table>${head ? `<thead><tr>${head.map((c) => `<th>${rich(c)}</th>`).join("")}</tr></thead>` : ""}` +
+    `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${rich(c)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function sourceHTML(m) {
+  const doc = m.doc && docOf(m.doc);
+  if (!doc) return "";
+  return `<span class="msrc">${m.excerpt ? "taken from" : "from"} ${docLink(doc, m.page, `${esc(doc.title)}${m.page ? `, p. ${m.page}` : ""} ↗`)}</span>`;
+}
+function mediaHTML(all, head = "Figures and media") {
+  const items = (all ?? []).filter((m) => m.kind !== "cite"), cites = (all ?? []).filter((m) => m.kind === "cite");
+  const sources = cites.length ? `<h3>Sources</h3><ul class="doclist">` + cites.map((m) => { const doc = docOf(m.doc);
+    return doc ? `<li>${docLink(doc, m.page, `${esc(doc.title)}${m.page ? `, p. ${m.page}` : ""} ↗`)}${m.caption ? `<div class="d">${rich(m.caption)}</div>` : ""}</li>` : ""; }).join("") + `</ul>` : "";
+  if (!items.length) return sources;
+  return `<h3>${head}</h3>` + items.map((m) => {
+    const src = m.src ?? (m.path ? assetURL(m.path) : "");
+    const body = m.kind === "table" ? tableHTML(m)
+      : m.kind === "audio" ? `<audio controls preload="metadata" src="${esc(src)}"></audio>`
+      : m.kind === "video" ? `<video controls preload="metadata" src="${esc(src)}"></video>`
+      : `<img src="${esc(src)}" alt="${esc(m.caption)}" loading="lazy">`;
+    return `<figure class="media ${esc(m.kind)}">${body}<figcaption>${m.caption ? rich(m.caption) : ""}${sourceHTML(m)}</figcaption></figure>`;
+  }).join("") + sources;
+}
+// the documents: where each is, and what of it the headway shows
+function docUses(doc) {
+  const all = [...D.ops.map((o) => ["op", o.key, o.label, o.media]), ...D.symbols.map((x) => ["sym", x.key, x.name, x.media]),
+    ...D.groups.map((g) => ["group", g.path, g.label, g.media])];
+  return all.filter(([, , , media]) => (media ?? []).some((m) => m.doc === doc.key));
+}
+function documentsHTML() {
+  const docs = D.documents ?? [];
+  if (!docs.length) return "";
+  return `<h3>Documents</h3><ul class="doclist">` + docs.map((doc) => {
+    const uses = docUses(doc);
+    const where = LOCATED.has(docId(doc)) ? "a copy kept in this browser" : doc.found ? doc.path + (doc.moved ? ` (moved: the spec says ${doc.declared})` : "") : doc.url ? doc.url : `not found (${doc.declared})`;
+    return `<li>${docLink(doc, null, esc(doc.title) + " ↗")}${doc.desc ? `<div class="d">${rich(doc.desc)}</div>` : ""}<div class="d">${esc(where)}${doc.pages ? ` · ${doc.pages} pages` : ""}</div>` +
+      (uses.length ? `<div class="chips">${uses.map(([type, key, label]) => `<span class="chip${type === "op" ? " op" : ""}" data-go="${type}:${esc(key)}">${esc(label)}</span>`).join("")}</div>` : "") + `</li>`;
+  }).join("") + `</ul>`;
+}
+function wireMedia(el) {
+  el.querySelectorAll("figure.media img").forEach((img) => img.addEventListener("click", () => lightbox(img, img.closest("figure").querySelector("figcaption")?.innerText.replace(/\n/g, " · ") ?? "")));
+}
+loadLocated().then(() => { if (LOCATED.size) { if (rs.view !== "results") showDetail(state.sel); buildLegend(); } });
 
 /* ---------- detail panel ---------- */
 // a link that opens a file at a line in the chosen editor (headway build --editor)
@@ -1600,8 +1767,9 @@ function showDetail(sel) {
   document.querySelectorAll("#datasets tr.sel, #figures tr.sel").forEach((tr) => tr.classList.remove("sel"));
   if (sel && !(sel.type === "op" ? OP : sel.type === "sym" ? SYM : GRP)[sel.key]) sel = state.sel = null;   // gone in a rebuild
   if (!sel) {
-    el.innerHTML = `<p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p>` + askHTML(SPEC);
+    el.innerHTML = `<p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p>` + documentsHTML() + askHTML(SPEC);
     wireAsk(SPEC);
+    el.querySelectorAll("[data-go]").forEach((c) => c.addEventListener("click", () => go(c.dataset.go)));
     return;
   }
   let h = "";
@@ -1613,6 +1781,7 @@ function showDetail(sel) {
     else if (o.code_doc) h += `<p class="codedoc" title="from the code's docstring or comments, until the spec describes the step">${esc(o.code_doc)}${pen(o.decl, "desc", "the description")}</p>`;
     if (o.tex) h += `<div class="eq">${tex(o.tex, true)}${pen(o.decl, "tex", "the equation")}</div>`;
     h += whereHTML(o, pen(o.decl, "where", "the definitions"));
+    h += mediaHTML(o.media);
     // a specification: what the step's code says its result is (an objective it maximizes, an equation it solves),
     // with whether the algorithm (below) bore it out on a run's calls
     const views = o.relation_views ?? [], spec = views.filter((r) => r.tex), standsFor = views.filter((r) => !r.tex);
@@ -1653,6 +1822,7 @@ function showDetail(sel) {
     const perDs = (D.suite?.datasets ?? []).filter((d) => d.values && s.key in d.values);
     if (perDs.length) h += `<h3>By dataset</h3><table class="wts">${perDs.map((d) => `<tr data-ds="${esc(d.key)}" style="cursor:pointer"><td>${esc(d.name)}${d.heldout ? " (held out)" : ""}</td><td><code>${esc(d.values[s.key])}</code></td></tr>`).join("")}</table>`;
     h += descHTML(s.desc).replace(/<\/p>$/, `${pen(s.decl, "desc", "the description")}</p>`);
+    h += mediaHTML(s.media);
     if (PRODUCER[s.key]) h += `<h3>Made by</h3><div class="chips">${opChip(PRODUCER[s.key])}</div>`;
     if (CONSUMERS[s.key]) h += `<h3>Used by</h3><div class="chips">${CONSUMERS[s.key].map(opChip).join("")}</div>`;
     if (s.code.length) h += `<h3>Code${pen(s.decl, "code", "the code references")}</h3>${codeHTML(s.code)}`;
@@ -1662,6 +1832,7 @@ function showDetail(sel) {
     const isOpen = !state.collapsed.has(sel.key);
     h += `<h2>${esc(g.label)}${pen(g.decl, "label", "the label")}</h2><div class="crumb">group · ${esc(sel.key)}</div>` + declHTML(g.decl);
     h += descHTML(g.desc).replace(/<\/p>$/, `${pen(g.decl, "desc", "the description")}</p>`);
+    h += mediaHTML(g.media);
     h += `<p><button id="gtoggle">${isOpen ? "Collapse" : "Expand"}</button> <button id="ghide">Hide</button></p>`;
     h += `<h3>Steps</h3><div class="chips">${ORDER.filter((k) => within(OP[k].group, sel.key)).map(opChip).join("")}</div>`;
   }
@@ -1676,6 +1847,7 @@ function showDetail(sel) {
     if (lane && counterpart(sel, lane)) { setActive(lane); panTo(); }
   }));
   wireAsk(sel);
+  wireMedia(el);
   el.querySelectorAll("[data-go]").forEach((c) => c.addEventListener("click", () => go(c.dataset.go)));
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => showDataset(c.dataset.ds)));
   $("gtoggle")?.addEventListener("click", () => { toggle(sel.key); showDetail(sel); });
@@ -2058,6 +2230,9 @@ function buildLegend() {
   $("fighead").hidden = !figs.length;
   $("figures").innerHTML = figs.map((f) => `<tr data-fig="${esc(f.key)}"><td><span class="name">${esc(f.name)}</span></td><td>${f.desc ? `<div class="d">${rich(f.desc)}</div>` : ""}</td><td class="act">${pen(f.decl, "desc", "the figure")}</td></tr>`).join("");
   document.querySelectorAll("#figures tr").forEach((tr) => tr.addEventListener("click", (e) => { if (!e.target.closest(".pen")) showFigure(tr.dataset.fig); }));
+  const docs = D.documents ?? [];
+  $("dochead").hidden = !docs.length;
+  $("documents").innerHTML = docs.map((doc) => `<tr><td><span class="name">${docLink(doc, null, esc(doc.title) + " ↗")}</span></td><td>${doc.desc ? `<div class="d">${rich(doc.desc)}</div>` : ""}<div class="d">${esc(LOCATED.has(docId(doc)) ? "a copy kept in this browser" : doc.found ? doc.path : doc.url || `not found (${doc.declared})`)}${docUses(doc).length ? ` · shown with ${docUses(doc).map(([, , label]) => esc(label)).join(", ")}` : ""}</div></td><td class="act">${pen(doc.decl, "path", "the document")}</td></tr>`).join("");
   let last = null, h = "";
   for (const k of ORDER) {
     const o = OP[k];
@@ -3110,16 +3285,18 @@ function figuresHTML(dk, rows, meta, head = "Figures", note = true) {
   return `<h3>${esc(head)}</h3>${note ? FIGURE_NOTE : ""}` + figs.map((fg) => `<div class="eqlbl">${esc(fg.name)}</div>${figureGrid(dk, fg, rows)}`).join("");
 }
 // click an image for it at full size; a click or Escape closes it
+function lightbox(img, caption) {
+  const box = document.createElement("div"), big = img.cloneNode(), cap = document.createElement("div");
+  big.removeAttribute("loading");
+  cap.textContent = caption;
+  box.id = "lightbox";
+  box.append(big, cap);
+  box.addEventListener("click", () => box.remove());
+  document.body.append(box);
+}
 function wireImages(el) {
-  el.querySelectorAll(".ev img").forEach((img) => img.addEventListener("click", () => {
-    const box = document.createElement("div"), big = img.cloneNode(), cap = document.createElement("div");
-    big.removeAttribute("loading");
-    cap.textContent = `${img.alt} · ${img.closest("figure").querySelector("figcaption").innerText.replace(/\n/g, " · ")}`;
-    box.id = "lightbox";
-    box.append(big, cap);
-    box.addEventListener("click", () => box.remove());
-    document.body.append(box);
-  }));
+  el.querySelectorAll(".ev img").forEach((img) => img.addEventListener("click", () =>
+    lightbox(img, `${img.alt} · ${img.closest("figure").querySelector("figcaption").innerText.replace(/\n/g, " · ")}`)));
 }
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") $("lightbox")?.remove(); });
 
@@ -3451,7 +3628,7 @@ function update(next) {
   const added = [...now.keys()].filter((k) => !old.has(k)).length, removed = [...old.keys()].filter((k) => !now.has(k)).length;
   const known = new Set(own.D.groups.map((g) => g.path));
   own.D = next;
-  if (active === own) { D = next; index(); }
+  if (active === own) { D = next; index(); loadLocated(); }
   for (const g of next.groups) if (g.collapsed && !known.has(g.path)) state.collapsed.add(g.path);     // new groups as declared
   header();
   buildLegend();
