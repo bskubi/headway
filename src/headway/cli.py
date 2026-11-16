@@ -217,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
     ex.add_argument("--box", nargs=4, type=float, metavar=("L", "T", "R", "B"), help="fractions of the page")
     ex.add_argument("--panels", action="store_true", help="list the page's panel letters and their boxes")
     ex.add_argument("-o", "--out", help="write the excerpt as a PNG")
-    ex.add_argument("--dpi", type=int, default=150)
+    ex.add_argument("--dpi", type=int, help="resolution (default: chosen to give about 2000 px on the longer side)")
     sub.add_parser("guide", help="how headway works and how to write a headway for a codebase (for people and "
                                  "for coding agents)")
     a = p.parse_args(argv)

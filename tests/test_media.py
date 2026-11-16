@@ -115,7 +115,7 @@ paper = G.document("p", "A paper", path="papers/paper.pdf", url="https://doi.org
 moved = G.document("m", "Moved", path="old/paper.pdf")
 by_hash = G.document("h", "Renamed", path="gone/renamed.pdf", sha256="{digest}")
 lost = G.document("l", "Lost", path="nowhere.pdf")
-G.op("o", "o", media=[G.excerpt(paper, 2, (0, 0, 0.5, 1), "left half"), G.excerpt(moved, 1, caption="whole"),
+G.op("o", "o", media=[G.excerpt(paper, 2, (0, 0, 0.5, 1), "left half"), G.excerpt(moved, 1, caption="whole", dpi=150),
                       G.image("https://example.org/f.png", doc=paper, page=1)])
 """)
     report, d = built(g)
@@ -128,8 +128,10 @@ G.op("o", "o", media=[G.excerpt(paper, 2, (0, 0, 0.5, 1), "left half"), G.excerp
     assert any("document l:" in w and "not found" in w for w in report.warnings)
     assert not any(w.startswith("op o: no code reference") for w in report.warnings)   # a document is its reference
     ex = d["ops"][0]["media"]
-    assert ex[0]["excerpt"] and size_of(ex[0]["src"]) == (round(100 * 150 / 72), round(100 * 150 / 72))
-    w, h = size_of(ex[1]["src"])                                   # the whole page (pdftoppm rounds up)
+    # no dpi: chosen to give about media.EXCERPT_PX pixels; a 100 pt square needs more than the cap, 600 dpi
+    assert ex[0]["excerpt"] and size_of(ex[0]["src"]) == (round(100 * 600 / 72), round(100 * 600 / 72))
+    assert media.excerpt_dpi(tmp_path / "papers" / "paper.pdf", 2, (0, 0, 0.5, 1)) == 600
+    w, h = size_of(ex[1]["src"])                                   # the whole page at dpi=150 (pdftoppm rounds up)
     assert abs(w - 200 * 150 / 72) <= 1 and abs(h - 100 * 150 / 72) <= 1
     assert media.assets(d) == {str(tmp_path / "papers" / "paper.pdf")}
     # a page the document does not have; an excerpt of a document not found

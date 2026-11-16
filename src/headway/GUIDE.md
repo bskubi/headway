@@ -218,7 +218,7 @@ G.op("cluster", "clustering", ..., media=[
 
 - `G.document(key, title, *, path="", url="", desc="", sha256="")`: a paper, a supplement, a protocol, a report.
   A path is relative to the file declaring it. Any number of documents.
-- `G.excerpt(doc, page=None, box=None, caption="", *, between=None, panel=None, dpi=150)`: a region of a page of
+- `G.excerpt(doc, page=None, box=None, caption="", *, between=None, panel=None, dpi=None)`: a region of a page of
   a PDF, rendered when the headway is built (poppler's `pdftoppm`, `pdftotext` and `pdfinfo`), so the page needs
   the document only to open it. Say which region by one of:
   - `between=("first words", "last words")`: a passage of text, the lines from where the first words start to
@@ -234,6 +234,10 @@ G.op("cluster", "clustering", ..., media=[
     can stay in; give a box there.
   - `box=(left, top, right, bottom)`: fractions of the page's width and height from its top left.
   - none of them: the whole page.
+
+  The excerpt is rendered at the resolution that gives it about 2000 pixels on its longer side (200 to 600 dpi),
+  so that a small panel stays legible enlarged; `dpi=` sets the resolution instead. A figure the PDF holds as a
+  low-resolution image stays as sharp as that image, whatever the resolution.
 
   Anchored on the text, an excerpt stays right when the document is replaced by another version of it, and a
   check fails (an error naming the anchor) when its text is gone, as a code reference's does.

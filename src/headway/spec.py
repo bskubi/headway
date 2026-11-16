@@ -43,7 +43,7 @@ class Media:
     rows: list[list[Any]] | None = None                  # a table given inline
     header: bool = True         # a table's first row is its header
     embed: bool | None = None   # written into the page (True), linked (False), or by size (None)
-    dpi: int = 150              # an excerpt's resolution
+    dpi: int | None = None      # an excerpt's resolution (None: chosen to give about 2000 px)
     base: str = ""
     between: tuple[str, str] | None = None               # an excerpt found by its text: first words, last words
     panel: str | None = None                             # an excerpt found by a figure panel's letter
@@ -264,7 +264,7 @@ class Headway:
 
     def excerpt(self, doc: Document | str, page: int | None = None, box: Sequence[float] | None = None,
                 caption: str = "", *, between: tuple[str, str] | None = None, panel: str | None = None,
-                dpi: int = 150) -> Media:
+                dpi: int | None = None) -> Media:
         """A region of a page of a PDF document, taken from it as an image when the headway is built (a figure, a
         table, a paragraph of a paper). Say which region by one of:
           box=(left, top, right, bottom)   fractions of the page's width and height from its top left corner
@@ -272,7 +272,8 @@ class Headway:
                                            the lines from where the first words start to where the last ones end,
                                            in their column; found anywhere in the document if no page is given
           panel="c"                        a figure's panel, found by its letter on the page
-        or none of them: the whole page. Text is matched ignoring case, spaces, punctuation and ligatures (see
+        or none of them: the whole page. The resolution is chosen to give the excerpt about 2000 pixels on its
+        longer side (200 to 600 dpi), so that a small panel stays legible when enlarged; dpi= sets it. Text is matched ignoring case, spaces, punctuation and ligatures (see
         headway.pdftext). `headway excerpt` previews one. Needs poppler (pdftoppm, pdftotext, pdfinfo)."""
         given = [x is not None for x in (box, between, panel)]
         assert sum(given) <= 1, "an excerpt takes one of box=, between= and panel="

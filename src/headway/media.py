@@ -232,12 +232,28 @@ def page_size(path: Path, page: int) -> tuple[float, float, int]:
     return (h, w, r) if r % 180 else (w, h, r)
 
 
-def excerpt(path: Path, page: int, box: tuple[float, float, float, float] | None, dpi: int) -> bytes:
-    """A region of a PDF page as a PNG (poppler's pdftoppm), `box` as fractions of the page as it is shown."""
+EXCERPT_PX = 2000           # an excerpt's longer side in pixels, when no dpi is given
+EXCERPT_DPI = (200, 600)    # the range that dpi is chosen in
+
+
+def excerpt_dpi(path: Path, page: int, box: tuple[float, float, float, float] | None) -> int:
+    """The resolution that gives an excerpt about EXCERPT_PX pixels on its longer side, within EXCERPT_DPI: a small
+    panel is rendered finely enough to read when enlarged, a whole page not needlessly large."""
+    w, h, _ = page_size(path, page)
+    l, t, r, b = box if box is not None else (0, 0, 1, 1)
+    inches = max((r - l) * w, (b - t) * h) / 72
+    return int(min(max(EXCERPT_PX / inches, EXCERPT_DPI[0]), EXCERPT_DPI[1]))
+
+
+def excerpt(path: Path, page: int, box: tuple[float, float, float, float] | None, dpi: int | None = None) -> bytes:
+    """A region of a PDF page as a PNG (poppler's pdftoppm), `box` as fractions of the page as it is shown; at `dpi`,
+    or by default at the resolution excerpt_dpi chooses."""
     exe = shutil.which("pdftoppm")
     if not exe:
         raise RuntimeError("an excerpt of a PDF needs poppler's pdftoppm (apt install poppler-utils, brew install "
                            "poppler)")
+    if dpi is None:
+        dpi = excerpt_dpi(path, page, box)
     crop: list[str] = []
     if box is not None:
         w, h, _ = page_size(path, page)
