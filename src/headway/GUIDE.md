@@ -24,6 +24,10 @@ headway then:
   and checks; its datasets are annotated), and each version's results are stored in its headway. The viewer shows
   a heatmap of versions × metrics × datasets, so you can see what each change gained or lost.
 
+The page has its own lessons. Click **?** in its top right corner, or press the `?` key. The lessons come in order:
+what the page shows, reading a step, comparing versions, benchmark results and, on an atlas's page, the atlas. Each
+lesson explains its ideas before it uses them, and points at the page's own controls so you can try them as you go.
+
 What headway does **not** do: it does not run your method, compute metrics, manage git or experiments, or read
 equations. Equations are TeX strings shown as written; headway never parses them. Whether an equation matches the
 code is established only by a check function you write (`@G.verify`).

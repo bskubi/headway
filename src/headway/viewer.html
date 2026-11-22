@@ -559,27 +559,66 @@ table.axsets td.rl { padding-right: 10px; white-space: nowrap; cursor: pointer; 
 #axmodal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; width: min(680px, 100%); max-height: 90%; overflow: auto; }
 #axmodal pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 @media (max-width: 900px) { #atlas { grid-template-columns: minmax(0, 1fr); grid-template-rows: 60vh auto auto auto; grid-template-areas: "main" "right" "left" "shelf"; overflow: auto; } }
+.rulepick { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 6px 0 2px; }
+.rulegrid { overflow-x: auto; }
+.rulegrid th { font-weight: 550; font-size: 11.5px; color: var(--muted); text-align: right; padding: 2px 6px; }
+.rulegrid th.on { color: var(--accent); }
+.rulegrid td.num { text-align: right; font-variant-numeric: tabular-nums; padding: 2px 6px; }
+.rulegrid td.first { color: var(--ok); font-weight: 600; }
+/* the guided tour (tour-main): a ring around the control it is about, which dims the rest but takes no clicks, and a card */
+#tourring { position: fixed; z-index: 80; pointer-events: none; border: 2px solid var(--accent); border-radius: 8px;
+  box-shadow: 0 0 0 4px var(--accent-soft), 0 0 0 9999px rgba(0, 0, 0, .45); transition: left .2s, top .2s, width .2s, height .2s; }
+#tourring.none { border: 0; width: 0; height: 0; left: 50%; top: 50%; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .45); }
+#tourcard, #tourmenu { position: fixed; z-index: 81; background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 12px 32px rgba(0, 0, 0, .3); font-size: 13.5px; line-height: 1.5; }
+#tourcard { width: min(370px, calc(100vw - 32px)); padding: 12px 16px; }
+#tourcard .tc-top { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+#tourcard .tc-top button { margin-left: auto; border: none; background: none; font-size: 16px; padding: 0 4px; color: var(--muted); }
+#tourcard h3 { margin: 2px 0 6px; font-size: 15px; }
+#tourcard p { margin: 0 0 7px; }
+#tourcard kbd, #tourmenu kbd { font: 11.5px ui-monospace, monospace; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--bg); }
+#tourcard .tc-task { display: flex; gap: 8px; align-items: center; margin: 8px 0 2px; padding: 6px 8px; border: 1px dashed var(--accent); border-radius: 6px; background: var(--accent-soft); }
+#tourcard .tc-task b { flex: 1; font-weight: 550; }
+#tourcard .tc-task.done { border: 1px solid var(--ok); }
+#tourcard .tc-task.done b::before { content: "✓ "; color: var(--ok); }
+#tourcard .tc-btns { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
+#tourcard .tc-bar { flex: 1; height: 3px; background: var(--grid); border-radius: 2px; overflow: hidden; }
+#tourcard .tc-bar i { display: block; height: 100%; background: var(--accent); }
+#tourmenu { padding: 10px; width: 320px; }
+#tourmenu button { display: block; width: 100%; text-align: left; margin: 0 0 6px; padding: 7px 10px; }
+#tourmenu button small { display: block; color: var(--muted); font-size: 11.5px; }
+#tourmenu p { margin: 4px 2px 0; font-size: 11.5px; color: var(--muted); }
+#tourmenu .tm-head { margin: 0 2px 8px; color: var(--fg); font-size: 12.5px; }
+#tourmenu .tm-n { display: inline-block; min-width: 18px; font-weight: 650; color: var(--muted); }
+#tourmenu button small { padding-left: 18px; }
+#tourmenu button.next { border-color: var(--accent); }
+#tourmenu .tm-done { color: var(--ok); }
+#tourmenu .tm-tag { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); margin-left: 4px; }
+#tourbtn.pulse { animation: tourpulse 1.4s ease-in-out 4; }
+@keyframes tourpulse { 50% { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); } }
+@media (prefers-reduced-motion: reduce) { #tourring { transition: none; } #tourbtn.pulse { animation: none; } }
 </style>
 </head>
 <body>
 <header>
   <div class="hl">
-    <div class="tline"><a id="home" href="/" hidden title="close everything and go to the library">←</a><h1 id="title"></h1><span id="meta"></span></div>
+    <div class="tline"><a id="home" href="/" hidden title="Close everything and go back to the library.">←</a><h1 id="title"></h1><span id="meta"></span></div>
     <div class="desc" id="desc"></div>
   </div>
   <div class="toolbar">
-    <span class="seg" id="viewseg" title="the methods' computation graph, or their benchmark results">
+    <span class="seg" id="viewseg" title="Switch between the graph of the computation and the benchmark results.">
       <label><input type="radio" name="view" value="graph" checked><span>Graph</span></label>
       <label><input type="radio" name="view" value="results"><span>Results</span></label>
-      <label id="atlasradio" hidden title="every version of the atlas: find them, then open some as a stack"><input type="radio" name="view" value="atlas"><span>Atlas</span></label>
+      <label id="atlasradio" hidden title="See every version in the atlas. Find the ones you want, then open them together."><input type="radio" name="view" value="atlas"><span>Atlas</span></label>
     </span>
-    <button id="addlane" title="open other headways: beside this one, each in a lane of its own, or instead of it">Open…</button>
+    <button id="addlane" title="Open other headways. Each one opens in its own lane beside this one, or in place of it.">Open…</button>
+    <button id="tourbtn" class="themebtn" hidden title="Take a guided tour of this page. The ? key opens it too.">?</button>
     <button id="theme" class="themebtn"></button>
     <input type="file" id="lanefile" accept=".json,.html,.htm" multiple hidden>
   </div>
 </header>
 <div id="library" hidden><div class="libbox">
-  <div class="libhead"><h2 id="libtitle">Open</h2><span class="mu" id="libsub"></span><span style="flex:1"></span><button id="libclose" title="close (Esc)">×</button></div>
+  <div class="libhead"><h2 id="libtitle">Open</h2><span class="mu" id="libsub"></span><span style="flex:1"></span><button id="libclose" title="Close (Esc).">×</button></div>
   <div id="libbody"></div>
   <div class="libfoot" id="libfoot" hidden><span id="libsel"></span><button class="linkish" id="libnone">clear</button><span style="flex:1"></span><button id="libaddall"></button><button id="libopenall" class="primary"></button></div>
 </div></div>
@@ -596,7 +635,7 @@ table.axsets td.rl { padding-right: 10px; white-space: nowrap; cursor: pointer; 
     <div class="axbar">
       <div class="axq"><input id="axq" type="text" spellcheck="false" autocomplete="off" aria-label="query" placeholder="key:K=V  near:NAME~2  path:A..B  changed:STEP  score>0.8  words…"><span id="axqstate"></span></div>
       <span class="axseg" id="axmodes"><button data-mode="graph">Graph</button><button data-mode="matrix">Matrix</button><button data-mode="sets">Sets</button></span>
-      <button id="axask" title="what you are looking at, as a prompt for your agent">Ask AI</button>
+      <button id="axask" title="Write what you are looking at as a prompt for your AI agent.">Ask AI</button>
     </div>
     <div class="axbar" id="axgctl">
       <label class="ctl">Arrange <select id="axarrange"><option value="tree">by derivation</option><option value="score">by the objective (left to right)</option></select></label>
@@ -607,15 +646,15 @@ table.axsets td.rl { padding-right: 10px; white-space: nowrap; cursor: pointer; 
     <div id="axcanvas"><svg id="axsvg" aria-label="the atlas's versions"></svg>
       <div id="axzoom"><button id="axzout" title="zoom out">−</button><button id="axzin" title="zoom in">+</button><button id="axfit">Fit</button></div>
       <div id="axlegend"></div>
-      <div id="axhint">click: inspect · shift-click or S: shelf · F: focus · ←→↑↓: walk · Enter or double-click: open</div>
+      <div id="axhint">Click to inspect · shift-click or S to shelve · F to focus · ←→↑↓ to walk · Enter or double-click to open</div>
       <div id="axpane" hidden></div>
     </div>
     <div id="axstatus"></div>
   </main>
   <aside id="axins"></aside>
   <footer id="axshelf"><span class="axlbl">Shelf</span><div id="axshelfitems"></div>
-    <button id="axfill" title="the shortest path through the relations from the first to the last">Fill the path between the ends</button>
-    <button id="axcmp">Compare the first two</button><button id="axstack" class="primary" title="the shelf's versions in lanes: the viewer, each compared with the one before">Open as stack</button><button id="axclear">Clear</button></footer>
+    <button id="axfill" title="Add the versions on the shortest path from the first version on the shelf to the last.">Fill the path between the ends</button>
+    <button id="axcmp">Compare the first two</button><button id="axstack" class="primary" title="Open the versions on the shelf in lanes. Each one is compared with the one before it.">Open as stack</button><button id="axclear">Clear</button></footer>
   <div id="axmodal" hidden></div>
 </div>
 <div id="lanes"></div>
@@ -623,27 +662,27 @@ table.axsets td.rl { padding-right: 10px; white-space: nowrap; cursor: pointer; 
 <div id="work">
 <div class="top">
   <div id="graph"><div id="gbar">
-      <span class="grp"><details class="menu" id="groupsmenu"><summary title="expand, collapse, show or hide the groups">Groups ▾</summary><div><div class="mbtns"><button id="expand">Expand all</button><button id="collapse">Collapse all</button><button id="unchanged" hidden title="collapse the groups in which nothing changed, in every lane">Collapse unchanged</button></div><div id="groupslist"></div></div></details></span>
-      <span class="grp" title="what is drawn"><label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Settings &amp; constants</span></label><label class="seg" title="On: a copy of each data input (and setting or constant) next to every group that uses it. Off: one node each, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label><label class="seg" title="On: each value as the code names it (in the graph, the legend, the panel and its From the code), instead of its symbol. The equations stay as written."><input type="checkbox" id="codenames"><span>Code names</span></label></span>
-      <span class="grp seg" id="focus" title="the selection's upstream or downstream only">
+      <span class="grp"><details class="menu" id="groupsmenu"><summary title="Expand, collapse, show or hide the groups.">Groups ▾</summary><div><div class="mbtns"><button id="expand">Expand all</button><button id="collapse">Collapse all</button><button id="unchanged" hidden title="Collapse the groups where nothing changed, in every lane.">Collapse unchanged</button></div><div id="groupslist"></div></div></details></span>
+      <span class="grp" title="Choose what the graph shows."><label class="seg" id="settingslabel"><input type="checkbox" id="settings"><span>Settings &amp; constants</span></label><label class="seg" title="When on, each data input, setting and constant is copied next to every group that uses it. When off, each one appears once, with edges across the graph."><input type="checkbox" id="split" checked><span>Local inputs</span></label><label class="seg" title="When on, values are labelled with their names in the code instead of their symbols. This applies to the graph, the legend and the side panel. Equations do not change."><input type="checkbox" id="codenames"><span>Code names</span></label></span>
+      <span class="grp seg" id="focus" title="Show only what the selection depends on (upstream) or what depends on it (downstream).">
         <label><input type="radio" name="focus" value="" checked><span>All</span></label>
         <label><input type="radio" name="focus" value="up"><span>Upstream</span></label>
         <label><input type="radio" name="focus" value="down"><span>Downstream</span></label>
       </span>
-      <span class="grp" title="layout"><span class="seg" id="dir">
+      <span class="grp" title="Layout and zoom."><span class="seg" id="dir">
         <label><input type="radio" name="dir" value="RIGHT" checked><span>→</span></label>
         <label><input type="radio" name="dir" value="DOWN"><span>↓</span></label>
-      </span><span class="zoom"><button id="zoomout" title="zoom out (or the mouse wheel)">−</button><button id="zoomin" title="zoom in (or the mouse wheel)">+</button></span><button id="fit" title="fit the whole graph in view">Fit</button></span>
-      <span class="grp"><button id="copygraph" class="copybig" title="copy an image of the whole graph (every lane, as drawn now, at full size) to the clipboard"><span class="ico"></span> Copy image</button></span>
-      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions and the captions of figures and media: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
+      </span><span class="zoom"><button id="zoomout" title="Zoom out. The mouse wheel zooms too.">−</button><button id="zoomin" title="Zoom in. The mouse wheel zooms too.">+</button></span><button id="fit" title="Fit the whole graph in the window.">Fit</button></span>
+      <span class="grp"><button id="copygraph" class="copybig" title="Copy an image of the whole graph to the clipboard. It includes every lane, at full size, as drawn now."><span class="ico"></span> Copy image</button></span>
+      <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="Find steps, values and groups by name or key. Exact matches get a solid outline and partial matches a dashed one. Press Enter or ↓ for the next match, Shift+Enter or ↑ for the previous one, and Esc to clear."><label class="seg" title="Match only names and keys that are exactly what you typed. With Text on, descriptions must contain it as whole words."><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="Also search descriptions and the captions of figures and media. Matches found this way get a dashed outline."><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="Go to the previous match (Shift+Enter or ↑).">‹</button><button id="findnext" title="Go to the next match (Enter or ↓).">›</button><button id="findall" title="Zoom to show all the matches.">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker><marker id="arrowaim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
     <div id="hint"></div>
   </div>
-  <div class="split v" id="vsplit" title="drag to resize the side panel; double-click to collapse it"><button id="vtog"></button></div>
-  <aside id="detail"><p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p></aside>
+  <div class="split v" id="vsplit" title="Drag to resize the side panel. Double-click to collapse it."><button id="vtog"></button></div>
+  <aside id="detail"><p class="empty">Select a step, a value or a group to see its equation, its code and where it fits.</p></aside>
 </div>
-<div class="split h" id="hsplit" title="drag to resize the legend; double-click to collapse it"><button id="htog"></button></div>
+<div class="split h" id="hsplit" title="Drag to resize the legend. Double-click to collapse it."><button id="htog"></button></div>
 <section id="legend">
   <div><h2>Indices</h2><table id="indices"></table><h2>Symbols</h2><table id="symbols"></table><h2 id="dshead" hidden>Datasets</h2><table id="datasets"></table><h2 id="fighead" hidden>Figures</h2><table id="figures"></table><h2 id="dochead" hidden>Documents</h2><table id="documents"></table></div>
   <div><h2>Equations</h2><div id="equations"></div></div>
@@ -683,7 +722,7 @@ function applyTheme(t) {
   if (b) {
     const next = {auto: "light", light: "dark", dark: "auto"}[t];
     b.textContent = THEMES[t][0];
-    b.title = `theme: ${THEMES[t][1]} (click: ${THEMES[next][1].split(":")[0]})`;
+    b.title = `Theme: ${THEMES[t][1]}. Click for ${THEMES[next][1].split(":")[0]}.`;
   }
 }
 function wireTheme() {
@@ -783,12 +822,12 @@ function libTable(items, {sortable, when, folders = ""}) {
   const body = rows.map((x) => {
     const isOpen = x.kind === "built" && libIsOpen(x);
     const acts = x.kind === "atlas"
-      ? `<button data-atlas="${esc(x.abs)}" title="explore the atlas: every version, its results and relations">Explore</button>`
+      ? `<button data-atlas="${esc(x.abs)}" title="Explore the atlas: every version, with its results and relations.">Explore</button>`
       : x.kind === "spec"
-      ? `<button data-live="${esc(x.abs)}" title="serve this spec live: rebuilt as it and its code change">Serve live</button>`
+      ? `<button data-live="${esc(x.abs)}" title="Serve this spec live. The page is rebuilt whenever the spec or its code changes.">Serve live</button>`
       : isOpen ? `<span class="mu">open</span>`
-      : `<button data-open="${esc(x.abs)}" title="open it instead of what is open">Open</button>` +
-        (open.length ? `<button data-add="${esc(x.abs)}" title="open it in a lane of its own, beside what is open">Add beside</button>` : "");
+      : `<button data-open="${esc(x.abs)}" title="Open it in place of what is open now.">Open</button>` +
+        (open.length ? `<button data-add="${esc(x.abs)}" title="Open it in its own lane, beside what is open now.">Add beside</button>` : "");
     return `<tr class="${isOpen ? "isopen" : ""}">` +
       `<td>${x.kind === "built" && !isOpen ? `<input type="checkbox" data-pick="${esc(x.abs)}" data-at="${esc(x.built_at)}">` : ""}</td>` +
       `<td><b>${esc(x.name)}</b>${Object.keys(x.keys ?? {}).length ? `<div class="mu">${esc(Object.entries(x.keys).map(([k, v]) => `${k}=${v}`).join(" "))}</div>` : ""}</td>` +
@@ -811,21 +850,21 @@ function libDraw() {
   const recent = lib.recent.slice(0, lib.allRecent ? lib.recent.length : 8);
   const title = window.HW?.title();
   $("libtitle").textContent = lib.full ? "headway" : "Open";
-  $("libsub").textContent = lib.full ? "open a built headway, several side by side, or serve a spec live" : `beside ${title}, or instead of it`;
+  $("libsub").textContent = lib.full ? "Open a built headway, open several side by side, or serve a spec live." : `Open beside ${title}, or in its place.`;
   $("libclose").hidden = lib.full;
   $("libbody").innerHTML =
     (lib.recent.length ? `<h3>Recent</h3>${libTable(recent, {sortable: false, when: "opened_at"})}` +
       (lib.recent.length > 8 ? `<button class="linkish" id="libmore">${lib.allRecent ? "fewer" : `all ${lib.recent.length}`}</button>` : "") : "") +
     `<h3>Folder</h3><div class="libpath"><button id="libup" title="the folder above"${L?.parent ? "" : " disabled"}>↑</button>` +
     `<span class="crumbs"><button class="crumb" data-dir="/">/</button>${crumbs}</span>` +
-    `<span style="flex:1"></span><button data-dir="${esc(LIB?.root ?? "")}" title="the folder headway serve was launched in">launch</button>` +
+    `<span style="flex:1"></span><button data-dir="${esc(LIB?.root ?? "")}" title="Go to the folder where headway serve was started.">launch</button>` +
     `<button data-dir="${esc(L?.home ?? "~")}" title="your home folder">home</button>` +
     `<input id="libgo" placeholder="go to a folder…" spellcheck="false"></div>` +
     (lib.error ? `<p class="liberr">${esc(lib.error)}</p>` : "") +
-    (lib.loading ? `<p class="libwait"><span class="spin"></span>Looking for specs and built headways in ${esc(lib.loading)} and the folders below it…</p>` : "") +
+    (lib.loading ? `<p class="libwait"><span class="spin"></span>Looking for specs and built headways in ${esc(lib.loading)} and its subfolders…</p>` : "") +
     (!L || lib.loading ? "" : L.items.length || L.folders.length ? libTable(L.items, {sortable: true, when: "built_at", folders: libFolderRows(L)}) +
-      (L.short ? `<p class="mu">Not everything below this folder was looked through (too many files, or too deep); open a subfolder for the rest.</p>` : "") : "") +
-    (L && !lib.loading && !L.items.length ? `<p class="mu">No specs or built headways in this folder or below it${L.short ? " (as far as was looked)" : ""}. <code>headway build SPEC -o FILE.html</code> (or <code>--json</code>) makes one.</p>` : "");
+      (L.short ? `<p class="mu">Some subfolders were not searched, because there were too many files or they were too deep. Open a subfolder to see the rest.</p>` : "") : "") +
+    (L && !lib.loading && !L.items.length ? `<p class="mu">No specs or built headways were found in this folder or its subfolders${L.short ? " (in the part that was searched)" : ""}. To make one, run <code>headway build SPEC -o FILE.html</code> (or add <code>--json</code>).</p>` : "");
   const body = $("libbody");
   body.querySelectorAll("[data-dir]").forEach((b) => b.onclick = () => libLoad(b.dataset.dir, true));
   body.querySelectorAll("[data-sub]").forEach((b) => b.onclick = () => libLoad(L.dir.replace(/\/$/, "") + "/" + b.dataset.sub, true));
@@ -1076,10 +1115,10 @@ function legendHTML() {
   const grad = `linear-gradient(90deg, ${SEQ.join(",")})`, c = AX.color;
   if (c === "obj") {
     const [lo, hi] = scoreRange(), o = objMeta(), rank = lowerBetter(o);
-    return o ? `<span>${esc(o.name)} (${esc(AX.suite)})${rank ? `, ${esc(o.how)}: fewer is better` : ""}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>${fmt(rank ? -lo : lo)}</span><span>${fmt(rank ? -hi : hi)}</span></div>` : `<span>No objective: the atlas has no results with one</span>`;
+    return o ? `<span>${esc(o.name)} (${esc(AX.suite)})${rank ? `, ${esc(o.how)}: fewer is better` : ""}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>${fmt(rank ? -lo : lo)}</span><span>${fmt(rank ? -hi : hi)}</span></div>` : `<span>No objective to colour by. None of the atlas's results has one.</span>`;
   }
   if (c === "date") return `<span>Built</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>earliest</span><span>latest</span></div>`;
-  if (c === "dist") return AX.focus ? `<span>Steps that differ from the focus, ${esc(AX.focus)}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>many</span><span>none</span></div>` : `<span>Distance from the focus: select a version and press F</span>`;
+  if (c === "dist") return AX.focus ? `<span>Steps that differ from the focus, ${esc(AX.focus)}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>many</span><span>none</span></div>` : `<span>To colour by distance, select a version and press F to focus on it.</span>`;
   if (c === "earlier") return `<div class="cats"><span style="--c:var(--ok)">results on this build</span><span style="--c:var(--setting)">on an earlier build</span><span style="--c:var(--border)">none</span></div>`;
   const k = c.slice(4);
   return `<span>Key ${esc(k)} (grey: not set)</span><div class="cats">${keyValues(k).map((v, i) => `<span style="--c:${CAT[i % CAT.length]}">${esc(v)}</span>`).join("")}</div>`;
@@ -1318,7 +1357,7 @@ function drawMatrix() {
   const ns = AN.filter((n) => shownSet().has(n)).slice(0, 120);
   const gains = ns.map(gainOf).filter((x) => x !== null), span = gains.length ? Math.max(...gains) - Math.min(...gains) : 1;
   let h = `<div class="axmxbar"><label class="ctl">Cells <select id="axmx"><option value="score"${AX.mx === "score" ? " selected" : ""}>${esc(objMeta()?.name ?? "objective")}: row − column (better is green)</option><option value="struct"${AX.mx === "struct" ? " selected" : ""}>steps that differ</option></select></label>
-    <span class="mu">${AX.mx === "score" ? "Faint: not every metric's paired difference supports it. " : ""}Click a cell to compare the two.${ns.length < shownSet().size ? ` The first ${ns.length} shown.` : ""}</span></div>
+    <span class="mu">${AX.mx === "score" ? "A faint cell means that not every metric's paired difference supports it. " : ""}Click a cell to compare the two.${ns.length < shownSet().size ? ` The first ${ns.length} shown.` : ""}</span></div>
     <div class="axscroll"><table class="axmx"><tr><th></th>${ns.map((n) => `<th class="col"><div>${esc(shortName(n))}</div></th>`).join("")}</tr>`;
   for (const a of ns) {
     h += `<tr class="${AX.shelf.includes(a) ? "hl" : ""}"><th>${esc(shortName(a))}</th>`;
@@ -1342,8 +1381,8 @@ function drawSets() {
   const cols = AN.filter((n) => shown.has(n) && rels.some((r) => r.members.some((m) => m.v === n)));
   const best = (r) => Math.max(...r.members.map((m) => gainOf(m.v) ?? -Infinity));
   rels.sort((a, b) => best(b) - best(a));
-  let h = `<p class="mu">Every relation but the steps, one row each; its members as dots, coloured as in the graph (a ring: the base). Rows by their best member. Click a row to inspect the relation.</p>`;
-  if (!rels.length) { $("axpane").innerHTML = h + `<p>No relations but steps yet. Make one with <code>headway relate ATLAS alternatives --base A B C D</code>, or a pair, a factorial, a group.</p>`; axStatus(); return; }
+  let h = `<p class="mu">Each row is one relation, other than the made-from steps. Its versions are dots, coloured as in the graph, and a ring marks the base. Rows are sorted by their best version. Click a row to inspect it.</p>`;
+  if (!rels.length) { $("axpane").innerHTML = h + `<p>There are no relations yet other than the made-from steps. To add one, run <code>headway relate ATLAS alternatives --base A B C D</code>. Pairs, factorials and groups work the same way.</p>`; axStatus(); return; }
   h += `<div class="axscroll"><table class="axmx axsets"><tr><th></th><th>best</th>${cols.map((n) => `<th class="col"><div>${esc(shortName(n))}</div></th>`).join("")}</tr>`;
   for (const r of rels) {
     const b = best(r);
@@ -1375,7 +1414,7 @@ function resultsTable(n, ref) {
       return `<td>${fmt(mean(v))}${ref ? `<br>${p ? pairedHTML(p, m.better) : `<span class="mu">–</span>`}` : ""}</td>`;
     }).join("") + "</tr>";
   }
-  return h + `</table>${ref ? `<p class="mu">Under each value: the difference from ${esc(ref)}, paired by replicate (agreeing/paired); ● ◐ ○: the benchmark's intervals of the difference exclude 0 for all, some, none.</p>` : ""}`;
+  return h + `</table>${ref ? `<p class="mu">Under each value is its difference from ${esc(ref)}, paired by replicate, with how many replicates agree. ● means every interval from the benchmark excludes 0, ◐ means some do, and ○ means none do.</p>` : ""}`;
 }
 function changesList(a, b) {
   const rel = relBetween(a, b), dd = rel && ATLAS.diffs[rel.id];
@@ -1383,7 +1422,7 @@ function changesList(a, b) {
     return `<ul class="axdiff">${dd.items.map(([st, kind, key, label, what]) => `<li><span class="m ${st}">${{added: "+", removed: "−", changed: "Δ", split: "⋔", merged: "⋔"}[st]}</span>${esc(kind)} ${esc(label || key)}${what.length ? ` <span class="mu">${esc(what.join(", "))}</span>` : ""}</li>`).join("") || `<li class="mu">no change (but wording)</li>`}</ul>`;
   }
   const fd = fpDiff(a, b);
-  return `<ul class="axdiff">${fd.map((d) => `<li><span class="m ${d.state}">${{added: "+", removed: "−", changed: "Δ"}[d.state]}</span>step ${esc(LINLABEL[d.lin] ?? d.lin)}</li>`).join("") || `<li class="mu">the same steps</li>`}</ul><p class="mu">Steps only; open the two as a stack for every change, symbol by symbol.</p>`;
+  return `<ul class="axdiff">${fd.map((d) => `<li><span class="m ${d.state}">${{added: "+", removed: "−", changed: "Δ"}[d.state]}</span>step ${esc(LINLABEL[d.lin] ?? d.lin)}</li>`).join("") || `<li class="mu">the same steps</li>`}</ul><p class="mu">This lists steps only. To see every change, symbol by symbol, open the two as a stack.</p>`;
 }
 function fpBox(n, ref) {
   const only = new Set([...Object.keys(AVS[n].ops), ...(ref ? Object.keys(AVS[ref].ops) : [])]);
@@ -1411,7 +1450,7 @@ function inspect() {
       ${resultsTable(n, AVS[par] ? par : null)}
       <div class="axbox"><h4>Steps${ref ? `, against ${esc(ref)}${ref === AX.focus ? " (the focus)" : " (made from)"}` : ""}</h4>${fpBox(n, ref)}${ref ? changesList(ref, n) : `<p class="mu">${Object.keys(v.ops).length} steps</p>`}</div>
       ${st ? `<div class="axbox"><h4>Made from ${vLink(st.members[0].v)}</h4>${st.label ? `<p><b>${esc(st.label)}</b></p>` : ""}
-        ${st.why ? `<p><em>why</em> ${esc(st.why)}</p>` : ""}${st.prediction ? `<p><em>prediction</em> ${esc(st.prediction)}</p>` : ""}<p><em>outcome</em> ${st.outcome ? esc(st.outcome) : `<span class="mu">not written yet (headway relate ATLAS update ${esc(st.id)} --outcome "…")</span>`}</p>
+        ${st.why ? `<p><em>why</em> ${esc(st.why)}</p>` : ""}${st.prediction ? `<p><em>prediction</em> ${esc(st.prediction)}</p>` : ""}<p><em>outcome</em> ${st.outcome ? esc(st.outcome) : `<span class="mu">not written yet. Add it with headway relate ATLAS update ${esc(st.id)} --outcome "…"</span>`}</p>
         <button class="linkish" data-r="${esc(st.id)}">inspect the step</button></div>` : ""}
       ${rels.length ? `<div class="axbox"><h4>Relations</h4>${rels.map((r) => `<div>${rLink(r)}</div>`).join("")}</div>` : ""}
       ${v.desc ? `<div class="axbox"><h4>About</h4><p class="mu">${esc(v.desc)}</p></div>` : ""}
@@ -1437,7 +1476,7 @@ function inspect() {
       const gs = sorted.map(gainOf).filter((x) => x !== null), lo = Math.min(...gs), hi = Math.max(...gs);
       const base = r.members.find((m) => m.role === "base")?.v;
       h += `<div class="axrank">${sorted.map((n) => `<span>${vLink(n)}${n === base ? " ◆" : ""}</span><div class="bar"><span style="width:${gainOf(n) === null ? 0 : 8 + 92 * (hi > lo ? (gainOf(n) - lo) / (hi - lo) : 1)}%;background:${colorOf(n)}"></span></div><span>${rawScore(n) === null ? "–" : fmt(rawScore(n))}</span>`).join("")}</div>
-        ${gs.length > 1 ? `<p class="mu">${base ? "◆ the base. " : ""}Spread of ${esc(objMeta()?.name ?? "the objective")}: ${fmt(hi - lo)} (from the stored values, by the viewer).</p>` : ""}`;
+        ${gs.length > 1 ? `<p class="mu">${base ? "◆ the base. " : ""}The spread of ${esc(objMeta()?.name ?? "the objective")} is ${fmt(hi - lo)}. The viewer computed it from the stored values.</p>` : ""}`;
     }
     const rr = ATLAS.relresults[r.id]?.[AX.suite], decl = suiteMeta()?.contrasts ?? [];
     for (const [ck, by] of Object.entries(rr?.contrasts ?? {})) {
@@ -1491,7 +1530,7 @@ function drawLeft() {
 }
 function drawShelf() {
   $("axshelfitems").innerHTML = AX.shelf.length ? AX.shelf.map((n, i) => `${i ? `<span class="mu">›</span>` : ""}<span class="axschip"><button class="linkish" data-v="${esc(n)}">${esc(n)}</button><button data-unshelf="${esc(n)}" title="off the shelf">×</button></span>`).join("")
-    : `<span class="mu">Shift-click versions, or press S, to collect them here.</span>`;
+    : `<span class="mu">Shift-click versions, or press S, to put them here.</span>`;
   $("axfill").disabled = AX.shelf.length < 2; $("axcmp").disabled = AX.shelf.length < 2;
   $("axstack").disabled = !AX.shelf.length; $("axclear").disabled = !AX.shelf.length;
 }
@@ -1580,7 +1619,7 @@ async function openStack(names, baseline = null, stack = false) {
   const got = [];
   for (const n of names) { const d = await fullVersion(n); if (d) got.push([n, d]); }
   const missing = names.filter((n) => !got.some(([x]) => x === n));
-  if (!got.length) { note(`Not in this page: ${missing.join(", ")}. Write it with headway page --full, or open the atlas with headway serve.`); return; }
+  if (!got.length) { note(`This page does not include ${missing.join(", ")}. Rebuild it with headway page --full, or open the atlas with headway serve.`); return; }
   LANES.splice(0, LANES.length, ...got.map(([n, d]) => ({id: ++laneSeq, name: n, from: "atlas " + ATLAS.name, src: null, D: snapshot(JSON.parse(JSON.stringify(d)))})));
   cmp.base = baseline ? LANES.find((l) => l.name === baseline)?.id ?? null : null;
   active = LANES.at(-1); use(active); state.sel = null;
@@ -1635,7 +1674,7 @@ function promptBox(title, intro, text) {
 function askAtlas() {
   const s = AX.sel, shown = [...shownSet()];
   const what = !s ? "nothing" : s.type === "v" ? `the version ${s.id}` : s.type === "rel" ? `the relation ${s.id} (${AREL[s.id]?.kind}${AREL[s.id]?.label ? ": " + AREL[s.id].label : ""})` : s.type === "cmp" ? `the two versions ${s.ids.join(" and ")}` : "a fold of versions";
-  promptBox("Ask AI about this view", "What you are looking at, for your agent. Add your question.",
+  promptBox("Ask AI about this view", "This describes what you are looking at, for your AI agent. Add your question at the end.",
 `I am exploring the headway atlas "${ATLAS.name}" (an atlas folder: atlas.json, versions/, results/, relations.jsonl; the format is in headway's docs/atlas.md, and \`headway guide\` explains headway).
 Query: ${AX.applied || "(none)"}; ${shown.length} of ${AN.length} versions shown${shown.length <= 30 ? ": " + shown.join(", ") : ""}.
 Compared on: ${AX.suite ?? "no suite"}${objMeta() ? `, objective ${objMeta().name}` : ""}.
@@ -1774,6 +1813,11 @@ if (ATLAS_VIEW) {
   if (base) { cmp.base = base.id; lanesChanged(false); }
 }
 showAtlas(true);
+// for the tour (tour-main): what is shown, selected and shelved, and selecting or shelving a version as a click would
+window.headwayAtlas = {
+  shown: () => AN.filter((n) => shownSet().has(n)), sel: () => AX.sel, shelf: () => AX.shelf,
+  select: (n) => { axSelect({type: "v", id: n}); centerOn(n).then(drawCanvas); }, shelve: toggleShelf,
+};
 
 })();
 </script>
@@ -1792,8 +1836,8 @@ const loadImageLib = () => imageLib ??= new Promise((ok, bad) => {
   if (window.htmlToImage) return ok(window.htmlToImage);
   const s = document.createElement("script");
   s.src = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js";
-  s.onload = () => window.htmlToImage ? ok(window.htmlToImage) : bad(new Error("the image library did not load"));
-  s.onerror = () => { imageLib = null; bad(new Error("could not load the image library (offline?)")); };
+  s.onload = () => window.htmlToImage ? ok(window.htmlToImage) : bad(new Error("The image library did not load."));
+  s.onerror = () => { imageLib = null; bad(new Error("Could not load the image library. Are you offline?")); };
   document.head.append(s);
 });
 // node: what to copy. It is drawn from a copy put beside it, out of sight (so the page's styles still apply), with
@@ -1835,7 +1879,7 @@ async function copyImage(node, what, btn, prepare = null) {
       const a = document.createElement("a"), name = `${what.replace(/^the /, "").replace(/[^\w.-]+/g, "-")}.png`;
       a.href = URL.createObjectURL(b); a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      note(`The clipboard took no image here, so it is saved as ${name}`);
+      note(`This browser's clipboard does not take images, so the image was saved as ${name}`);
     }
   } finally { btn?.classList.remove("busy"); }
 }
@@ -1844,13 +1888,13 @@ function addCopyButtons(root) {
   const button = (title) => { const b = document.createElement("button"); b.className = "copyimg"; b.title = title; b.innerHTML = COPY_ICON; return b; };
   root.querySelectorAll(".eq").forEach((eq) => {
     if (eq.querySelector(":scope > .copyimg") || eq.closest(".shot")) return;
-    const b = button("copy an image of this equation");
+    const b = button("Copy an image of this equation.");
     b.onclick = (e) => { e.stopPropagation(); copyImage(eq, "the equation", b); };
     eq.append(b);
   });
   root.querySelectorAll(".code > .where").forEach((where) => {
     if (where.querySelector(":scope > .copyimg") || where.closest(".shot")) return;
-    const b = button("copy an image of this code");
+    const b = button("Copy an image of this code.");
     b.onclick = (e) => { e.stopPropagation(); copyImage(where.parentElement, "the code", b); };
     where.firstElementChild ? where.firstElementChild.after(b) : where.append(b);
   });
@@ -1973,7 +2017,7 @@ function nodeHTML(n, fill = null) {
   if (n.type === "op") {
     const o = OP[n.key];
     // only a problem is marked: a step whose equation check fails (a passing one shows in its side panel)
-    const mark = o.verified === false ? `<span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
+    const mark = o.verified === false ? `<span class="bad" title="The equation check failed. The code does not compute the equation as written.">✗</span>` : "";
     const per = o.per ? `<span class="per">per ${tex(IDX[o.per]?.tex ?? o.per)}</span>` : "";
     // a step done only under a condition: dashed, with "if" (the condition in full in its side panel)
     const cond = o.condition ? `<span class="cond" title="only when ${esc(o.condition)}">if</span>` : "";
@@ -2130,7 +2174,7 @@ function draw() {
     use(lane);
     if (multi) {
       const band = svgEl(`lane${lane === active ? " on" : ""}`, `<rect x="${dx - 8}" y="${dy - head}" width="${W + 16}" height="${H + head + 8}"/>` +
-        `<foreignObject x="${dx - 8}" y="${dy - head}" width="${W + 16}" height="${head}"><div xmlns="http://www.w3.org/1999/xhtml" class="lanehead" title="click to read this version in the panels"><b>${esc(lane.name)}</b>${esc(laneMeta(lane))}${ref ? ` · against ${esc(ref.name)}` : cmp.base === lane.id ? " · the baseline" : ""}${score !== undefined && score !== null ? ` · ${esc(first.name)} ${fmt(score)}` : ""}</div></foreignObject>`, {lane: lane.id});
+        `<foreignObject x="${dx - 8}" y="${dy - head}" width="${W + 16}" height="${head}"><div xmlns="http://www.w3.org/1999/xhtml" class="lanehead" title="Click to read this version in the panels."><b>${esc(lane.name)}</b>${esc(laneMeta(lane))}${ref ? ` · against ${esc(ref.name)}` : cmp.base === lane.id ? " · the baseline" : ""}${score !== undefined && score !== null ? ` · ${esc(first.name)} ${fmt(score)}` : ""}</div></foreignObject>`, {lane: lane.id});
       band.querySelector(".lanehead").addEventListener("click", (e) => { e.stopPropagation(); setActive(lane); });
       bLayer.append(band);
     }
@@ -2152,7 +2196,7 @@ function draw() {
       if (items) placeItems(items, x, y, slot, lane, (it) => mark(it, ch, p));
       else if (multi && refP?.items.has(id) && gone(id, lane, lin)) {       // in the version it is compared with, not in this one
         use(ref);
-        placeItems(refP.items.get(id), x, y, slot, ref, () => ({status: "removed", title: `not in this version (it is in ${ref.name})`}), true);
+        placeItems(refP.items.get(id), x, y, slot, ref, () => ({status: "removed", title: `Not in this version. It is in ${ref.name}.`}), true);
         use(lane);
       }
     }
@@ -2573,7 +2617,7 @@ async function kbFold() {
     return s ? kbGo(s) : kbShow(state.sel);
   }
   const g = n ? n.container : state.sel?.type === "group" ? state.sel.key : "";
-  if (!g) { note(state.sel ? "This is at the top level, in no group." : "Select something first (an arrow key starts at the beginning)."); return; }
+  if (!g) { note(state.sel ? "This is at the top level, not in a group." : "Select something first. An arrow key starts at the beginning."); return; }
   kb.inside[g] = id ?? (kb.back && current.v.nodes.has(kb.back) ? kb.back : null);
   await toggle(g);
   if (current.v.nodes.has("g:" + g)) await kbGo("g:" + g);
@@ -2646,10 +2690,10 @@ function docHref(doc, page) {
 }
 function docLink(doc, page, label) {
   const href = docHref(doc, page), here = LOCATED.has(docId(doc));
-  const title = here ? "open the copy of it you pointed this browser at" : href ? `open ${doc.found ? doc.path : doc.url}${page ? `, at page ${page}` : ""}`
-    : "not found where the headway was built: choose its file";
+  const title = here ? "Open the copy you chose in this browser." : href ? `open ${doc.found ? doc.path : doc.url}${page ? `, at page ${page}` : ""}`
+    : "It is not where it was when the headway was built. Choose its file.";
   return `<a class="doclink" data-doc="${esc(doc.key)}" data-page="${page ?? ""}" href="${esc(href || "#")}"${href ? ` target="_blank" rel="noopener"` : ""} title="${esc(title)}">${label}</a>` +
-    `<button class="linkish locate" data-locate="${esc(doc.key)}" data-page="${page ?? ""}" title="the document is somewhere else: choose its file (remembered in this browser)">${href || here ? "locate…" : "locate it…"}</button>`;
+    `<button class="linkish locate" data-locate="${esc(doc.key)}" data-page="${page ?? ""}" title="If the document has moved, choose its file. This browser remembers your choice.">${href || here ? "locate…" : "locate it…"}</button>`;
 }
 function idb() {
   return new Promise((ok, no) => {
@@ -2683,7 +2727,7 @@ function locate(doc, page) {
     if (!f) return;
     if (doc.sha256 && crypto?.subtle) {
       const h = hex(await crypto.subtle.digest("SHA-256", await f.arrayBuffer()));
-      if (h !== doc.sha256 && !confirm(`${f.name} is not the file “${doc.title}” was when this headway was built (its content differs). Use it all the same?`)) return;
+      if (h !== doc.sha256 && !confirm(`${f.name} differs from the file “${doc.title}” that was used when this headway was built. Use it anyway?`)) return;
     }
     await keepLocated(doc, f);
     showDoc(doc, f, page);
@@ -2699,7 +2743,7 @@ function showDoc(doc, file, page) {
   box.id = "docview";
   box.title = "click outside the document to close it";
   box.innerHTML = `<div class="dvbox"><div class="dvhead"><b>${esc(doc.title)}</b><span class="mu">${esc(file.name)}${page ? ` · page ${page}` : ""} · the copy kept in this browser</span><span style="flex:1"></span>` +
-    `<button class="linkish" data-locate="${esc(doc.key)}" data-page="${page ?? ""}">another file…</button><button id="dvclose" title="close (Esc, or a click outside it)">×</button></div><iframe title="${esc(doc.title)}" src="${esc(url)}"></iframe></div>`;
+    `<button class="linkish" data-locate="${esc(doc.key)}" data-page="${page ?? ""}">another file…</button><button id="dvclose" title="Close (Esc, or click outside it).">×</button></div><iframe title="${esc(doc.title)}" src="${esc(url)}"></iframe></div>`;
   box.querySelector("#dvclose").onclick = () => box.remove();
   box.addEventListener("click", (e) => { if (e.target === box) box.remove(); });
   document.body.append(box);
@@ -2756,7 +2800,7 @@ function documentsHTML() {
   if (!docs.length) return "";
   return `<h3>Documents</h3><ul class="doclist">` + docs.map((doc) => {
     const uses = docUses(doc);
-    const where = LOCATED.has(docId(doc)) ? "a copy kept in this browser" : doc.found ? doc.path + (doc.moved ? ` (moved: the spec says ${doc.declared})` : "") : doc.url ? doc.url : `not found (${doc.declared})`;
+    const where = LOCATED.has(docId(doc)) ? "a copy kept in this browser" : doc.found ? doc.path + (doc.moved ? ` (moved; the spec says ${doc.declared})` : "") : doc.url ? doc.url : `not found (${doc.declared})`;
     return `<li>${docLink(doc, null, esc(doc.title) + " ↗")}${doc.desc ? `<div class="d">${rich(doc.desc)}</div>` : ""}<div class="d">${esc(where)}${doc.pages ? ` · ${doc.pages} pages` : ""}</div>` +
       (uses.length ? `<div class="chips">${uses.map(([type, key, label]) => `<span class="chip${type === "op" ? " op" : ""}" data-go="${type}:${esc(key)}">${esc(label)}</span>`).join("")}</div>` : "") + `</li>`;
   }).join("") + `</ul>`;
@@ -2790,14 +2834,14 @@ function codeHTML(refs) {
     const lines = (lang ? hljs.highlight(c.source.replace(/\n$/, ""), {language: lang, ignoreIllegals: true}).value : esc(c.source.replace(/\n$/, ""))).split("\n");
     const body = lines.map((l, n) => `<span class="ln">${c.start + n}</span>${l}`).join("\n");
     const range = c.end > c.start ? `${c.start}–${c.end}` : `${c.start}`;
-    const link = D.snapshot ? `<span title="as it was in this version; the file may have changed since">as of ${esc(D.built)}</span>` : `<a href="${editorURL(c.file, c.start)}" title="${esc(c.ref)}">open in ${esc(D.editor.name)} ↗</a>`;
+    const link = D.snapshot ? `<span title="The code as it was in this version. The file may have changed since.">as of ${esc(D.built)}</span>` : `<a href="${editorURL(c.file, c.start)}" title="${esc(c.ref)}">open in ${esc(D.editor.name)} ↗</a>`;
     return `<div class="code"><div class="where"><span>${esc(c.relpath)}:${range}</span>${link}</div><pre><code class="hljs">${body}</code></pre></div>`;
   }).join("");
 }
 // the symbols a step defines for its equation alone, as a paper does after it: "where μ_f  mean of …"
 const whereHTML = (o, edit = "") => !o.where?.length ? "" : `<div class="whr">${o.where.map(([t, def], n) =>
   `<span class="wl">${n ? "" : "where" + edit}</span><span class="wt">${tex(t)}</span><span>${rich(def)}</span>`).join("")}</div>`;
-const declHTML = (d) => d && D.snapshot ? `<div class="decl">declared at ${esc(d.relpath)}:${d.line}, in this version</div>` : d ? `<div class="decl"><a href="${editorURL(d.file, d.line, d.col)}" title="open the spec at this declaration">✎ declared at ${esc(d.relpath)}:${d.line}</a>${d.function !== "<module>" ? ` · in <code>${esc(d.function)}()</code>, which may declare more than this` : ""}</div>` : "";
+const declHTML = (d) => d && D.snapshot ? `<div class="decl">declared at ${esc(d.relpath)}:${d.line}, in this version</div>` : d ? `<div class="decl"><a href="${editorURL(d.file, d.line, d.col)}" title="Open the spec at this declaration.">✎ declared at ${esc(d.relpath)}:${d.line}</a>${d.function !== "<module>" ? ` · in <code>${esc(d.function)}()</code>. That function may declare other things too.` : ""}</div>` : "";
 // a step's equation check (@G.verify), at the bottom of its side panel
 const checkHTML = (o) => o?.verified === null || o?.verified === undefined ? ""
   : `<h3>Equation check</h3><div class="status ${o.verified ? "ok" : "bad"}">${o.verified ? "✓ " : "✗ "}${esc(o.verify_msg.split("\n")[0])}${o.verified ? "" : `<pre>${esc(o.verify_msg.split("\n").slice(1).join("\n"))}</pre>`}</div>`;
@@ -2806,7 +2850,7 @@ function showDetail(sel) {
   document.querySelectorAll("#datasets tr.sel, #figures tr.sel").forEach((tr) => tr.classList.remove("sel"));
   if (sel && !(sel.type === "op" ? OP : sel.type === "sym" ? SYM : GRP)[sel.key]) sel = state.sel = null;   // gone in a rebuild
   if (!sel) {
-    el.innerHTML = `<p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p>` + documentsHTML() + askHTML(SPEC);
+    el.innerHTML = `<p class="empty">Select a step, a value or a group to see its equation, its code and where it fits.</p>` + documentsHTML() + askHTML(SPEC);
     wireAsk(SPEC);
     el.querySelectorAll("[data-go]").forEach((c) => c.addEventListener("click", () => go(c.dataset.go)));
     return;
@@ -2817,7 +2861,7 @@ function showDetail(sel) {
     h += `<h2>${esc(o.label)}${pen(o.decl, "label", "the label")}</h2><div class="crumb">${esc(o.group || "top level")}${o.per ? " · once per " + tex(IDX[o.per]?.tex ?? o.per) + " (" + esc(IDX[o.per]?.name ?? "") + ")" : ""}</div>`;
     // what it is: the spec's description, else the code's own words (its docstring or comments)
     if (!noDesc(o.desc)) h += `<p>${rich(o.desc)}${pen(o.decl, "desc", "the description")}</p>`;
-    else if (o.code_doc) h += `<p class="codedoc" title="from the code's docstring or comments, until the spec describes the step">${esc(o.code_doc)}${pen(o.decl, "desc", "the description")}</p>`;
+    else if (o.code_doc) h += `<p class="codedoc" title="Taken from the code's docstring or comments, until the spec describes this step.">${esc(o.code_doc)}${pen(o.decl, "desc", "the description")}</p>`;
     if (o.tex) h += `<div class="eq">${tex(o.tex, true)}${pen(o.decl, "tex", "the equation")}</div>`;
     h += whereHTML(o, pen(o.decl, "where", "the definitions"));
     h += mediaHTML(o.media);
@@ -2838,13 +2882,13 @@ function showDetail(sel) {
     }
     if (o.code_tex) {
       const named = codeNames && o.code_tex_names;
-      const note = `the code of its first reference, written as math: ${named ? "its names as the code has them" : "its names as the graph's symbols, the others as short symbols"}${D.hints ? "; its type hints taken as assumptions (a number is a scalar; named axes are indices)" : ""}`;
+      const note = `The code of its first reference, written as math. ${named ? "Names are as the code has them." : "Values use the graph's symbols, and other names become short symbols."}${D.hints ? " Type hints are taken as assumptions: a number is a scalar, and named axes are indices." : ""}`;
       // whether the math shown computes what the code does: run on a checking run's calls (headway trace)
       const m = o.math_check, whose = m?.part ? ` (as part of <code>${esc(m.function)}</code>)` : "";
       const mathStatus = !m ? "" : m.passed === m.calls
         ? `<div class="status held" title="${esc(`checked by ${m.run}, ${m.when}: ${m.detail}`)}">✓ this math computes what the code computes${whose}, on all ${m.calls} traced calls</div>`
-        : `<div class="status failed" title="${esc(`checked by ${m.run}, ${m.when}`)}">✗ this math does not compute what the code computes${whose}: on ${m.calls - m.passed} of ${m.calls} traced calls, ${esc(m.detail)}</div>`;
-      h += `${spec.length ? "<h3>Algorithm</h3>" : ""}<details class="fromcode"${o.tex ? "" : " open"}><summary title="${esc(note)}">${spec.length ? "as the code computes it" : "from the code"} <button class="namesw" title="write the code's names as the code has them, or as short symbols">${named ? "short symbols" : "code names"}</button></summary><div class="eq">${tex(named ? o.code_tex_names : o.code_tex, true)}${(o.code_about ?? []).map((a) => `<div class="about">${rich(a.text)}</div>`).join("")}${mathStatus}</div></details>`;
+        : `<div class="status failed" title="${esc(`checked by ${m.run}, ${m.when}`)}">✗ This math does not compute what the code computes${whose}. It failed on ${m.calls - m.passed} of ${m.calls} traced calls: ${esc(m.detail)}</div>`;
+      h += `${spec.length ? "<h3>Algorithm</h3>" : ""}<details class="fromcode"${o.tex ? "" : " open"}><summary title="${esc(note)}">${spec.length ? "as the code computes it" : "from the code"} <button class="namesw" title="Switch between the names in the code and short symbols.">${named ? "short symbols" : "code names"}</button></summary><div class="eq">${tex(named ? o.code_tex_names : o.code_tex, true)}${(o.code_about ?? []).map((a) => `<div class="about">${rich(a.text)}</div>`).join("")}${mathStatus}</div></details>`;
     }
     h += `<h3>Inputs${pen(o.decl, "inputs", "the inputs")}</h3><div class="chips">${o.inputs.map(symChip).join("") || "<span class='empty'>none</span>"}</div>`;
     h += `<h3>Outputs${pen(o.decl, "outputs", "the outputs")}</h3><div class="chips">${o.outputs.map(symChip).join("")}</div>`;
@@ -2920,7 +2964,7 @@ function changeHTML(c, kind, ref) {
     if (d.cat === "wording" && !cmp.wording && d.field !== "label" && d.field !== "name") continue;
     if (d.field === "key") h.push(`<div class="chg"><span class="k">renamed</span>from <code>${esc(d.a)}</code></div>`);
     else if (d.field === "inputs" || d.field === "outputs")
-      h.push(`<div class="chg"><span class="k">${d.field}</span>${d.gone.map((k) => `<span class="chip gone" title="not in this version">${symLabel(ref, k)}</span>`).join(" ")} ${d.added.map((k) => `<span class="chip" title="new">+ ${symLabel(active, k)}</span>`).join(" ")}</div>`);
+      h.push(`<div class="chg"><span class="k">${d.field}</span>${d.gone.map((k) => `<span class="chip gone" title="Not in this version.">${symLabel(ref, k)}</span>`).join(" ")} ${d.added.map((k) => `<span class="chip" title="new">+ ${symLabel(active, k)}</span>`).join(" ")}</div>`);
     else if (d.field === "tex")
       h.push(`<div class="eqlbl">the equation in ${esc(ref.name)} (${esc(active.name)}'s is below)</div><div class="eq old">${tex(d.a ?? "", true)}</div>`);
     else if (d.field === "code") {
@@ -2987,7 +3031,7 @@ function versionLines() {
   const vis = visibleLanes();
   if (vis.length > 1 || active.D.snapshot) {
     L.push(`This is about the version "${active.name}" (${laneMeta(active) || "built " + D.built}), one of ${vis.length} versions shown side by side: ${vis.map((l) => `"${l.name}"`).join(", ")}.`);
-    if (D.snapshot) L.push(`"${active.name}" is a saved build${active.from ? ` (${fileName(active.from)})` : ""}, not necessarily what is on disk now: the declarations and code below are quoted as they were then.${D.source?.git ? " To read the files as they were, look at that commit." : ""}`);
+    if (D.snapshot) L.push(`"${active.name}" is a saved build${active.from ? ` (${fileName(active.from)})` : ""}. It may differ from the files on disk now. The declarations and code below are quoted as they were when it was built.${D.source?.git ? " To read the files as they were, look at that commit." : ""}`);
   } else if (D.source?.git) L.push(`The page was built from ${gitText(D)}.`);
   return L.length ? [...L, ""] : [];
 }
@@ -3020,17 +3064,17 @@ const SPEC = {type: "spec", key: ""};                   // nothing selected: the
 const scopeOf = (sel) => ({op: "this step", sym: "the steps that make and use this symbol", group: "the steps in this group"})[sel.type] ?? "every step of the spec";
 // common requests, worded for what is selected
 const PRESETS = [
-  ["Define local symbols", "explain the symbols an equation uses that the graph does not define", (S) =>
+  ["Define local symbols", "Explain the symbols an equation uses that the graph does not define", (S) =>
     `Find every symbol in the equations of ${S} that the spec does not explain: one that is not an input or output of its step, not an index, and not defined in the step's \`where=\`. Define each in \`where=\` with a short definition taken from what the code computes. If one is a value that another step also uses, declare it with \`G.symbol\` and list it in both steps' inputs or outputs instead. If an equation writes an input or output under another name than its declared symbol, use the declared symbol.`],
-  ["Add explanations", "write into the spec a sentence or two saying what each computation and output is, and what it is for", (S) =>
+  ["Add explanations", "Add a sentence or two to the spec on what each computation and output is, and what it is for", (S) =>
     `Add brief conceptual explanations to ${S}, for a reader who can follow the math but does not know this method. In each step's description, say in a sentence or two what the computation is in plain words and what it is for: what the later steps use it for, and why it is done this way when that is not obvious (a shrinkage, a centering, a clip). Confirm how to read the equation, e.g. which symbols are the quantities that matter and which are only intermediate. Give each output symbol a short description of what it represents (its \`desc\`). Base this on the code, its comments and docstrings, how the outputs are used downstream, and the project's own documentation (e.g. its README); if the purpose of something is not clear from these, say so to me rather than guessing. Do not restate the equation symbol by symbol, and keep what is already said and correct. Keep descriptions short, and list what you added.`],
-  ["Check descriptions", "check the labels, descriptions, equations and definitions against the code", (S) =>
+  ["Check descriptions", "Check the labels, descriptions, equations and definitions against the code", (S) =>
     `Check the labels, descriptions, equations and \`where=\` definitions of ${S} against the code they point to, and correct whatever the code does not do: steps in the wrong order, a missing or extra operation, the wrong set of cells, rows or columns, a wrong default or constant. Do not change the method's code. List each correction with the line of code that shows it.`],
-  ["Reconcile with the code", "bring the spec up to date with code that has changed", (S) =>
+  ["Reconcile with the code", "Bring the spec up to date with code that has changed", (S) =>
     `The method's code may have changed since the spec of ${S} was written. Read the code it points to as it is now (and the code that calls or is called by it, where that matters for an equation) and bring the spec up to date: equations, inputs and outputs, code references and their anchors, descriptions, \`where=\` definitions, and the @G.verify functions that cover them. If a step was added, removed or moved to another function, change the graph to match. The version history (e.g. \`git log -p\` on the referenced files) may show what changed. Summarize what changed in the code and what you changed in the spec.`],
-  ["Standardize notation", "write the same kind of operation the same way, and fixed numbers as constants", (S) =>
+  ["Standardize notation", "Write the same kind of operation the same way, and fixed numbers as constants", (S) =>
     `Make the notation ${S === scopeOf(SPEC) ? "of the spec consistent" : `of ${S} consistent with the rest of the spec`}: write the same kind of operation the same way everywhere (for example clipping as \\operatorname{clip} with its bounds in the subscript, logit and \\sigma, sums and means over the learning cells, conditions under sums), following the form most steps already use or the project's own documentation (e.g. its README). A symbol declared \`per=\` an index (one copy per fold, per seed, …) carries that index in its notation, the same way everywhere (for example a superscript, $A^{(\\varphi)}_{jg}$), and a step that combines the copies writes which copy each term is (e.g. $A^{(0)}$ and $A^{(1)}$, or the other fold's $\\beta^{(1-\\varphi_i)}_j$) rather than a prime or a separate name; keep one meaning per notation, so that a superscript used for the copies is not also used for something else (rename the other use). Where an equation or a description states a number that is fixed in the code (a clip bound, a tolerance, an iteration limit, a pseudocount), declare it with \`G.constant\` (with a code reference to the line that sets it), use its symbol in the equation and list it among the step's inputs; a number the user can change is a \`G.setting\` instead. Do not change what any equation means. List what you changed.`],
-  ["Regroup steps", "regroup the steps into groups that are each easy to take in, without changing any step", (S) =>
+  ["Regroup steps", "Regroup the steps so that each group is easy to take in, without changing any step", (S) =>
     `Regroup ${S === scopeOf(SPEC) ? "the spec's steps" : S} (\`G.group\` and each step's \`group=\`). Change only how the steps are grouped: keep every step, symbol, equation, input, output and code reference as it is, and do not change the method's code. Aim for groups that a reader can take in one at a time:
 - Each group holds steps that go together: they serve one purpose, and they are a connected stretch of the data flow, not steps scattered through it.
 - Groups are of a comprehensible and roughly even size, a handful of steps each (about 3 to 7); split a group that is much larger, and merge a lone step into its neighbors unless it deserves to stand out (below).
@@ -3039,59 +3083,59 @@ const PRESETS = [
 - Steps that do the actual modeling, or that carry an important link to the system being studied (an assumption about it, a quantity with a physical or biological meaning), get groups of their own so they stand out, labeled by what they model.
 - Nest groups (\`"phase/subphase"\`) only where a large phase has clear parts, and no more than two levels deep.
 Give each group a short label saying what it does and a one-sentence description. Where a group keeps the role of an existing one under a new path, add \`was="old/path"\` so versions of the spec still match it. Run \`headway check\` afterwards. Then list the groups with their steps and a phrase on why each step is where it is, and say which steps moved.`],
-  ["Disambiguate symbols", "make each symbol mean one thing across the spec", (S) =>
+  ["Disambiguate symbols", "Make each symbol mean one thing across the spec", (S) =>
     `Make sure every symbol in the equations of ${S} means one thing across the whole spec. Search the spec for the same TeX, and the same letter with other subscripts or accents, used for something else: in equations, \`where=\` definitions, symbol declarations and descriptions. Where one symbol has two meanings, rename one of them, keeping the notation the project's own documentation (e.g. its README) uses and choosing a replacement no other symbol uses. Update every place the renamed symbol appears, and list the renames.`],
 ];
 // an explanation instead of a change: what to ask, and how elaborate an answer to ask for (worded for any assistant)
 const explainScope = (sel) => ({op: "this step", sym: "this symbol", group: "this group of steps"})[sel.type] ?? "the method";
 const EXPLAIN = [
-  ["What is it for?", "what it is in plain words, and why it is needed", (S) =>
+  ["What is it for?", "Ask what it is in plain words, and why it is needed", (S) =>
     `What is ${S}, in plain words, and what is it for? Why is it needed, and what would go wrong without it?`],
-  ["Read the equation", "what each symbol stands for, and what the equation says in words", (S) =>
+  ["Read the equation", "Ask what each symbol stands for, and what the equation says in words", (S) =>
     `Walk me through ${S === "this symbol" ? "the equation that makes this symbol" : `the equation${S === "the method" ? "s" : ""} of ${S}`}: what each symbol stands for, which are the quantities that matter and which are only intermediate, and what it says in words.`],
-  ["Why this way?", "the choices made, their alternatives, and what each buys", (S) =>
+  ["Why this way?", "Ask about the choices made, their alternatives and what each one gives", (S) =>
     `Why is ${S} ${S === "this symbol" ? "computed" : "done"} this way? Name the choices made (a shrinkage, a centering, a weighting, a fixed number), their alternatives, and what each choice buys.`],
-  ["How it fits in", "where its inputs come from, and what later steps do with its outputs", (S) =>
+  ["How it fits in", "Ask where its inputs come from, and what later steps do with its outputs", (S) =>
     `How does ${S} fit into the method: what goes in and where it comes from, and what do the later steps do with what comes out?`],
-  ["Code vs. math", "the code against the equation, line by line", (S) =>
+  ["Code vs. math", "Compare the code with the equation, line by line", (S) =>
     `Show how the code computes ${S}, line by line against the equation, and point out what the code does that the equation does not show (clips, guards, chunking, defaults).`],
-  ["Check my understanding", "write your understanding below the question", (S) =>
+  ["Check my understanding", "Write your understanding below the question", (S) =>
     `Here is my understanding of ${S}. Tell me what is right, what is wrong and what is missing:\n\n`],
 ];
-const explainPresets = () => visibleLanes().length > 1 && refOf(active) ? [...EXPLAIN, ["What changed?", "what changed against the version this one is compared with, and what it does", (S) =>
+const explainPresets = () => visibleLanes().length > 1 && refOf(active) ? [...EXPLAIN, ["What changed?", "Ask what changed from the version this one is compared with, and what the change does", (S) =>
   `What changed in ${S} from the version "${refOf(active).name}" to "${active.name}", and what does the change do to the results? Say which reasons are documented and which are your reading.`]] : EXPLAIN;
 const FORMATS = [            // from the quickest answer to the most elaborate
-  ["quick", "Quick answer", "a few sentences in the chat",
+  ["quick", "Quick answer", "A few sentences in the chat.",
     "Answer in a few sentences, in the chat: the point first, no headings."],
-  ["full", "Full explanation", "a thorough answer in the chat",
+  ["full", "Full explanation", "A thorough answer in the chat.",
     "Explain it thoroughly, in the chat: the idea in plain words first, then the equation piece by piece, then how the code does it and how it fits into the method. Use headings and math where they help."],
-  ["tutor", "Tutoring session", "taught interactively, a piece at a time, with questions",
+  ["tutor", "Tutoring session", "A tutor that teaches one piece at a time and asks questions.",
     "Teach it to me as a tutor would, over several turns: first ask what I already know, then explain one piece at a time, each followed by a short question that checks my understanding, and adjust to my answers. Do not explain everything at once."],
-  ["example", "Worked example", "tiny made-up numbers, computed step by step",
+  ["example", "Worked example", "Tiny made-up numbers, computed step by step.",
     "Work through a small numerical example: make up tiny inputs (a few cells, windows or bins), compute each quantity step by step as the code does, and say what each number means. If you can run code, check the numbers with the method's own functions."],
-  ["notes", "Study notes", "a document to keep",
+  ["notes", "Study notes", "A document to keep.",
     "Write study notes I can keep, as a self-contained document (Markdown, math in $…$): the intuition, the definitions, the equation explained, a small worked example, easy misreadings, and how it connects to the steps before and after. Make it a document if your environment makes those, or else a new Markdown file outside the spec and the code."],
-  ["page", "Interactive page", "a visual, explorable web page",
+  ["page", "Interactive page", "A visual web page to explore.",
     "Make a self-contained interactive web page that explains it visually: the shapes of the data, a diagram of how it flows, controls for the settings that show their effect on a small example, and the equation with each term explained. Show it the way your environment shows pages (e.g. an artifact, a canvas or a preview), or else write it as one HTML file outside the spec and the code. Keep the math faithful to the code."],
 ];
 const ask = {mode: "change", format: "full"};        // remembered per browser
 try { Object.assign(ask, JSON.parse(localStorage.getItem("headway.ask") ?? "{}")); } catch {}
 const saveAsk = () => { try { localStorage.setItem("headway.ask", JSON.stringify(ask)); } catch {} };
 const draftKey = (sel) => selName(sel) + "|" + ask.mode;
-const MODES = [["change", "Change the spec", "a prompt for an assistant that edits the spec"],
-  ["explain", "Explain", "a prompt for an explanation, a separate product: the assistant changes nothing"]];
+const MODES = [["change", "Change the spec", "Write a prompt that asks an AI assistant to edit the spec."],
+  ["explain", "Explain", "Write a prompt that asks for an explanation. The assistant changes nothing."]];
 
 function askHTML(sel) {
   const about = {sym: "symbol", op: "step", group: "group"}[sel.type];
   const explain = ask.mode === "explain";
   const hint = (explain
-    ? (about ? `a question you typed, with this ${about}'s declaration, code and context` : "a question you typed, with the method's outline and where its spec is")
-    : (about ? `a request you typed, with this ${about}'s declaration, code and context` : "a request you typed, with where the spec is and what its checks report"))
-    + "; a whole prompt in the box (from a button), as it is";
+    ? (about ? `Copies your question, with the declaration, code and context of this ${about}.` : "Copies your question, with an outline of the method and where its spec is.")
+    : (about ? `Copies your request, with the declaration, code and context of this ${about}.` : "Copies your request, with where the spec is and what its checks report."))
+    + " A full prompt from one of the buttons is copied as it is.";
   return `<div class="ask" id="askbox"><h3>Ask an AI</h3>
     <div class="askmode">${MODES.map(([m, label, tip]) => `<button data-mode="${m}" class="${ask.mode === m ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>
-    <div class="presets">${(explain ? explainPresets() : PRESETS).map(([label, tip], n) => `<button data-preset="${n}" title="${esc(tip)}: adds the whole prompt to the box, below what is there">${esc(label)}</button>`).join("")}</div>
-    <textarea id="ask" placeholder="${explain ? "What do you want to understand? e.g. “why are the residuals shrunk?”, “what does this give the next step?”" : "What should change? e.g. “define the symbols in the equation that are not explained”, “split this into two steps”"}">${esc(drafts[draftKey(sel)] ?? "")}</textarea>
+    <div class="presets">${(explain ? explainPresets() : PRESETS).map(([label, tip], n) => `<button data-preset="${n}" title="${esc(tip)}. Click to add this prompt to the box, below what is there.">${esc(label)}</button>`).join("")}</div>
+    <textarea id="ask" placeholder="${explain ? "What do you want to understand? For example: “Why are the residuals shrunk?” or “What does this give the next step?”" : "What should change? For example: “Define the symbols in the equation that are not explained” or “Split this into two steps”."}">${esc(drafts[draftKey(sel)] ?? "")}</textarea>
     ${explain ? `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` : ""}
     <div class="row"><button id="askcopy">Copy prompt</button><span>${hint}</span></div>
     <details><summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-top:6px">preview</summary><pre id="askpreview"></pre></details></div>`;
@@ -3276,7 +3320,7 @@ function buildLegend() {
   for (const k of ORDER) {
     const o = OP[k];
     if (o.group !== last) { h += `<div class="eqgroup" data-ref="G:${esc(o.group)}">${esc(o.group ? o.group.split("/").map((p, n, a) => GRP[a.slice(0, n + 1).join("/")]?.label ?? p).join(" › ") : "top level")}</div>`; last = o.group; }
-    const mark = o.verified === false ? ` <span class="bad" title="its equation check failed: the code does not compute the equation as written">✗</span>` : "";
+    const mark = o.verified === false ? ` <span class="bad" title="The equation check failed. The code does not compute the equation as written.">✗</span>` : "";
     h += `<div class="eqrow" data-ref="o:${esc(k)}" data-go="op:${esc(k)}"><div class="lbl">${esc(o.label)}${mark}${o.per ? `<div class="d">per ${tex(IDX[o.per]?.tex ?? o.per)}</div>` : ""}${o.condition ? `<div class="d">only when ${o.condition_tex ? tex(o.condition_tex) : `<code>${esc(o.condition)}</code>`}</div>` : ""}</div><div>${o.tex ? `<div class="math">${tex(o.tex, true)}</div>` : ""}${whereHTML(o)}${!noDesc(o.desc) ? `<div class="d">${rich(o.desc)}</div>` : o.code_doc ? `<div class="d codedoc">${esc(o.code_doc)}</div>` : ""}</div><div class="act">${pen(o.decl, "tex", "the equation")}</div></div>`;
   }
   $("equations").innerHTML = h;
@@ -3555,7 +3599,7 @@ function wireEyes(el, itemSel) {
   });
 }
 // the graph's hint (laneBar puts it in, or the lanes' markers with it as their title)
-const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom · arrows: walk the graph · c: collapse/expand · g: the group and back · Tab: its legend entries";
+const HINT = "Click to select · double-click a group to collapse or expand it · drag to pan · wheel to zoom · arrow keys walk the graph · C collapses or expands · G goes to the group and back · Tab steps through the legend entries";
 function laneBar() {
   const el = $("lanes");
   $("hint").textContent = HINT; $("hint").title = "";
@@ -3563,15 +3607,15 @@ function laneBar() {
   if (LANES.length < 2) { el.innerHTML = ""; return; }
   const base = baseShown() ? LANES.find((l) => l.id === cmp.base) : null, nHidden = LANES.filter((l) => l.hidden).length;
   el.innerHTML = `<span class="lbl">Versions</span>` + LANES.map((l) =>
-    `<span class="lanechip${l === active ? " on" : ""}${l.hidden ? " hid" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;${l.hidden ? "hidden: left out of the graph and the results · click: show it" : "click: read this version in the panels"} · drag: reorder"><span class="grip">⠿</span>${eyeHTML(l)}<span class="nm">${esc(l.name)}</span>` +
-    `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="${cmp.base === l.id && l.hidden ? "the baseline, set aside while it is hidden: the others are compared with the shown version before them" : "compare every other version with this one"}">baseline</button>` +
-    `<button data-close="${l.id}" title="close this lane">×</button></span>`).join("") +
-    (nHidden ? `<button id="showall" title="show every open version again">Show all (${nHidden} hidden)</button>` : "") +
-    `<span class="lanectl gonly"><span class="seg" title="draw every open version, or only the one you are reading (the others stay open; click one to switch)">` +
+    `<span class="lanechip${l === active ? " on" : ""}${l.hidden ? " hid" : ""}" draggable="true" data-lane="${l.id}" title="${esc(laneMeta(l))}&#10;${l.hidden ? "Hidden from the graph and the results. Click to show it." : "Click to read this version in the panels."} Drag to reorder."><span class="grip">⠿</span>${eyeHTML(l)}<span class="nm">${esc(l.name)}</span>` +
+    `<button data-base="${l.id}" class="${cmp.base === l.id ? "on" : ""}" title="${cmp.base === l.id && l.hidden ? "This is the baseline, but it is hidden. Until you show it, each version is compared with the shown version before it." : "Compare every other version with this one."}">baseline</button>` +
+    `<button data-close="${l.id}" title="Close this lane.">×</button></span>`).join("") +
+    (nHidden ? `<button id="showall" title="Show every open version again.">Show all (${nHidden} hidden)</button>` : "") +
+    `<span class="lanectl gonly"><span class="seg" title="Draw every open version, or only the one you are reading. The others stay open, and you can click one to switch.">` +
     `<label><input type="radio" name="solo" value=""${cmp.solo ? "" : " checked"}><span>Side by side</span></label>` +
     `<label><input type="radio" name="solo" value="1"${cmp.solo ? " checked" : ""}><span>One at a time</span></label></span>` +
-    `<label class="seg" title="also mark changes to labels, names and descriptions"><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label></span>`;
-  $("hint").innerHTML = `marked against ${base ? esc(base.name) : `the shown version ${lanesDown() ? "above" : "to the left"}${cmp.base !== null ? " (the baseline is hidden)" : ""}`}: <span style="color:var(--ok)">+</span> added · <span style="color:var(--setting)">Δ</span> changed · <span style="color:var(--bad)">−</span> gone · <span style="color:var(--output)">⋔</span> split or merged`;
+    `<label class="seg" title="Also mark changes to labels, names and descriptions."><input type="checkbox" id="wording"${cmp.wording ? " checked" : ""}><span>Wording</span></label></span>`;
+  $("hint").innerHTML = `Changes are marked against ${base ? esc(base.name) : `the shown version ${lanesDown() ? "above" : "to the left"}${cmp.base !== null ? " (the baseline is hidden)" : ""}`}: <span style="color:var(--ok)">+</span> added · <span style="color:var(--setting)">Δ</span> changed · <span style="color:var(--bad)">−</span> gone · <span style="color:var(--output)">⋔</span> split or merged`;
   $("hint").title = HINT;
   let dragged = null;
   el.querySelectorAll(".lanechip").forEach((chip) => {
@@ -3612,7 +3656,7 @@ function laneBar() {
   document.querySelectorAll("input[name=solo]").forEach((r) => r.onchange = () => {
     cmp.solo = !!r.value;
     render(true);
-    note(cmp.solo ? `Showing ${active.name} only, marked against ${refOf(active)?.name ?? "nothing"}; click another version to switch` : "Showing every open version");
+    note(cmp.solo ? `Showing only ${active.name}, marked against ${refOf(active)?.name ?? "nothing"}. Click another version to switch.` : "Showing every open version");
   });
   $("unchanged").onclick = collapseUnchanged;
 }
@@ -3655,7 +3699,7 @@ async function addLanes(files) {
       if (!d || !Array.isArray(d.ops) || !Array.isArray(d.symbols) || !Array.isArray(d.groups)) throw new Error("not a headway");
       const name = d.name ?? f.name.replace(/\.(json|html?)$/i, "");
       const open = LANES.find((l) => sameBuild(l.D, d));
-      if (open?.own) { reloaded.push(`${name} (this page's own version, kept as built)`); continue; }
+      if (open?.own) { reloaded.push(`${name} (this page's own version, kept as it was built)`); continue; }
       if (open) {                                       // open already: take the file as it is now, in the same place
         Object.assign(open, {name, from: f.src ?? f.name, src: f.src ?? open.src, D: snapshot(d)});
         if (open === active) { D = open.D; index(); }
@@ -3674,9 +3718,9 @@ async function addLanes(files) {
     lanesChanged(!!added.length);
     if (active.D !== D) use(active);
     header(); buildLegend();
-    note([added.length && `Opened ${added.join(", ")}: each in a lane of its own`,
-          reloaded.length && `Open already: ${reloaded.join(", ")}; reloaded from the file`,
-          LANES.some((l) => l.hidden && added.includes(l.name)) && "hidden as before: show them from the version bar"].filter(Boolean).join("; "));
+    note([added.length && `Opened ${added.join(", ")}, each in its own lane.`,
+          reloaded.length && `${reloaded.join(", ")} ${reloaded.length > 1 ? "were already open, so they were" : "was already open, so it was"} reloaded from the file.`,
+          LANES.some((l) => l.hidden && added.includes(l.name)) && "Versions that were hidden stay hidden. Show them from the version bar."].filter(Boolean).join(" "));
   }
 }
 $("addlane").onclick = () => LIB ? openLibrary(false) : $("lanefile").click();
@@ -3773,7 +3817,19 @@ function parseExpr(src) {
 const MINE_KEY = "headway.objectives";
 const MINE = (() => { try { return JSON.parse(localStorage.getItem(MINE_KEY) ?? "{}") ?? {}; } catch { return {}; } })();   // suite id -> objectives
 const storeMine = () => { try { localStorage.setItem(MINE_KEY, JSON.stringify(MINE)); } catch {} };
-const objectivesOf = (sn) => [...sn.meta.objectives, ...(MINE[sn.id] ?? [])];
+// the rule chosen in this browser for a suite's objective, in place of the suite's own (suite id -> {objective: how})
+const RULES_KEY = "headway.rules";
+const RULES = (() => { try { return JSON.parse(localStorage.getItem(RULES_KEY) ?? "{}") ?? {}; } catch { return {}; } })();
+function setRule(sn, o, how) {
+  const r = RULES[sn.id] ??= {};
+  if (how === o.suiteHow || !o.suiteHow && how === o.how) delete r[o.key]; else r[o.key] = how;
+  try { localStorage.setItem(RULES_KEY, JSON.stringify(RULES)); } catch {}
+}
+const RANKERS = ["mean", "rank", "median", "worst", "wins", "kemeny", "pareto"];
+// the rules an objective can take: mean needs every metric it uses to have a range
+const rulesFor = (o, meta) => RANKERS.filter((h) => h !== "mean" || objVoters(o, meta).every(([, cs]) => cs.every(([, mk]) => meta.metrics.find((m) => m.key === mk)?.range)));
+const withRule = (sn, o) => { const h = RULES[sn.id]?.[o.key]; return h && h !== o.how && HOWS[h] ? {...o, how: h, suiteHow: o.how} : o; };
+const objectivesOf = (sn) => [...sn.meta.objectives.map((o) => withRule(sn, o)), ...(MINE[sn.id] ?? [])];
 function addMine(sn) {
   const list = MINE[sn.id] ??= [];
   const o = {key: "mine" + Date.now().toString(36), name: list.length ? `Mine ${list.length + 1}` : "Mine", how: "sum", desc: "",
@@ -3803,14 +3859,14 @@ function sumScores(rows, o, meta) {
 const objDatasets = (o, meta) => o.datasets ?? meta.datasets.filter((d) => !d.heldout).map((d) => d.key);
 // how each objective combines its voters, and whether fewer is better (bench.HOWS; keep the two in step)
 const HOWS = {
-  mean: ["higher", "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute: each version scored from its own values)"],
-  rank: ["lower", "a weighted mean rank (Borda), 1 is best; relative: showing or hiding a version can reorder two others"],
-  median: ["lower", "the weighted median rank, 1 is best: one metric far off does not move it (relative)"],
-  worst: ["lower", "the worst rank on any voter, 1 is best: a version is as good as its weakest metric (relative)"],
-  wins: ["higher", "Copeland: how many other versions it beats on more voters (by weight) than it loses, a tie counting a half (Condorcet-consistent; relative)"],
-  kemeny: ["lower", "the place in the Kemeny ranking: the order that disagrees least, summed over voters, with each voter's order (Condorcet-consistent; relative)"],
-  pareto: ["lower", "the Pareto layer: 1 if no other version is at least as good on every voter and better on one, 2 if only layer 1 is, and so on; versions in one layer are not ranked against each other"],
-  sum: ["higher", "your own: a sum of transforms of the metrics (kept in this browser)"],
+  mean: ["higher", "The weighted mean of the metrics, each scaled by its range so that 1 is best. It is absolute: a version's score depends only on its own values."],
+  rank: ["lower", "The weighted mean rank (a Borda count). 1 is best. It is relative: showing or hiding one version can change the order of two others."],
+  median: ["lower", "The weighted median rank. 1 is best. One metric that is far off does not move it. It is relative."],
+  worst: ["lower", "The worst rank on any voter. 1 is best. A version is only as good as its weakest metric. It is relative."],
+  wins: ["higher", "Copeland wins: how many other versions it beats on more voters than it loses to, by weight. A tie counts as a half. It is Condorcet-consistent and relative."],
+  kemeny: ["lower", "The place in the Kemeny ranking. That ranking is the order that disagrees least with the voters' own orders, summed over the voters. It is Condorcet-consistent and relative."],
+  pareto: ["lower", "The Pareto layer. A version is in layer 1 if no other version is at least as good on every voter and better on one. Layer 2 is the same, once layer 1 is set aside, and so on. Versions in one layer are not ranked against each other."],
+  sum: ["higher", "Your own objective: a sum of transforms of the metrics. It is kept in this browser."],
 };
 const lowerBetter = (o) => (HOWS[o?.how] ?? ["higher"])[0] === "lower";
 // an objective's voters: [weight, [[dataset, metric, weight]...]]: each metric on each dataset, or each category
@@ -3946,7 +4002,7 @@ const cellStyle = (g) => g === null ? "" : `background: color-mix(in srgb, var(-
 function deltaHTML(v, ref, better) {
   if (v === null || ref === null || ref === undefined) return "";
   const d = v - ref;
-  if (Math.abs(d) < 1e-12) return `<span class="dl same" title="the same as the version it is compared with">=</span>`;
+  if (Math.abs(d) < 1e-12) return `<span class="dl same" title="The same as the version it is compared with.">=</span>`;
   const good = better === "higher" ? d > 0 : d < 0;
   return `<span class="dl ${good ? "good" : "bad"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</span>`;
 }
@@ -3955,7 +4011,7 @@ function placeHTML(v, column, better) {
   const vs = column.filter((x) => x !== null && x !== undefined);
   if (!rs.ranks || v === null || vs.length < 2) return "";
   const ahead = vs.filter((x) => better === "higher" ? x > v : x < v).length, tied = vs.filter((x) => x === v).length - 1;
-  return `<span class="rk" title="${ahead + 1}${tied ? `, tied with ${tied} other${tied > 1 ? "s" : ""},` : ""} of the ${vs.length} versions shown with a value (${better} is better)">#${ahead + 1}${tied ? "=" : ""}</span>`;
+  return `<span class="rk" title="Place ${ahead + 1}${tied ? `, tied with ${tied} other${tied > 1 ? "s" : ""},` : ""} of the ${vs.length} versions shown that have a value. ${better[0].toUpperCase() + better.slice(1)} is better.">#${ahead + 1}${tied ? "=" : ""}</span>`;
 }
 // version b's difference from version a on a metric and dataset, paired by replicate id: bench.py's paired (keep
 // the two in step), and each replicate's difference with the benchmark's interval of it, for the plot
@@ -3987,9 +4043,9 @@ function pairedHTML(p, better) {
     ` <span class="ag">${p.paired ? `${p.agree}/${p.n}` : "unpaired"}${p.marker ? " " + p.marker : ""}</span></span>`;
 }
 function pairedTitle(p, bName, aName, m) {
-  const L = [`${bName} − ${aName}: ${p.d >= 0 ? "+" : "−"}${fmt(Math.abs(p.d))}` + (p.paired ? `, the mean of ${p.n} per-replicate difference${p.n > 1 ? "s" : ""}${p.sd !== null ? ` (s.d. ${fmt(p.sd)})` : ""}; ${p.agree} of ${p.n} agree in sign` : ", the difference of the means (unpaired: no replicate ids in common)")];
+  const L = [`${bName} − ${aName}: ${p.d >= 0 ? "+" : "−"}${fmt(Math.abs(p.d))}` + (p.paired ? `, the mean of ${p.n} per-replicate difference${p.n > 1 ? "s" : ""}${p.sd !== null ? ` (s.d. ${fmt(p.sd)})` : ""}; ${p.agree} of ${p.n} agree in sign` : ". This is the difference of the means. It is unpaired, because the two have no replicate ids in common.")];
   if (p.intervals.length) L.push(`the benchmark's interval${p.intervals.length > 1 ? "s" : ""} of the difference${p.pooled ? " (pooled over replicates)" : ""}${m.interval ? ` (${m.interval})` : ""}: ${p.excluding} of ${p.intervals.length} exclude 0`);
-  else if (p.paired) L.push("no interval of the difference for this pair from the benchmark");
+  else if (p.paired) L.push("The benchmark gave no interval of the difference for this pair.");
   L.push(p.supported ? "supported" : "not supported: shown in grey");
   return L.join("; ");
 }
@@ -4031,11 +4087,11 @@ function colsMenuHTML(sn) {
   const sym = (m) => sn.suite.symbols.find((x) => x.key === m.key);
   const label = (kind, x) => kind === "m" ? `${tex(sym(x)?.tex ?? x.key)} ${esc(sym(x)?.name ?? "")}` : esc(x.name) + (kind === "d" && x.heldout ? ` <span class="mu">(held out${rs.heldout ? "" : ", not shown"})</span>` : "");
   const nHid = colsOf(sn.id).hidden.length;
-  return `<details class="menu" id="colsmenu"${colsMenuOpen ? " open" : ""}><summary title="show, hide and reorder the columns (kept in this browser; the objectives are unchanged)">Columns${nHid ? ` (${nHid} hidden)` : ""} ▾</summary><div>` +
-    `<div class="mbtns"><button id="colsall">Show all</button><button id="colsreset" title="the suite's own order, every column shown">Reset</button></div>` +
+  return `<details class="menu" id="colsmenu"${colsMenuOpen ? " open" : ""}><summary title="Show, hide and reorder the columns. This browser keeps your choice. The objectives do not change.">Columns${nHid ? ` (${nHid} hidden)` : ""} ▾</summary><div>` +
+    `<div class="mbtns"><button id="colsall">Show all</button><button id="colsreset" title="Go back to the suite's own order, with every column shown.">Reset</button></div>` +
     kinds.filter(([k]) => colItems(sn, k).length).map(([k, name]) => `<div class="colkind">${name}</div><ul class="cols" data-kind="${k}">` +
       colOrder(sn.id, k, colItems(sn, k)).map((x) => `<li draggable="true" data-key="${esc(x.key)}"><span class="grip">⠿</span><label><input type="checkbox"${colShown(sn.id, k, x.key) ? " checked" : ""}> ${label(k, x)}</label></li>`).join("") + `</ul>`).join("") +
-    `<div class="mu" style="font-size:11.5px;margin-top:6px">drag to reorder, here or by a column's header</div></div></details>`;
+    `<div class="mu" style="font-size:11.5px;margin-top:6px">Drag to reorder, here or by a column's header.</div></div></details>`;
 }
 function wireColsMenu(sn) {
   const menu = $("colsmenu");
@@ -4122,13 +4178,13 @@ function renderResults() {
   if (!sn) {
     const hiddenWith = LANES.filter((l) => l.hidden && l.D.results?.length);
     if (hiddenWith.length) {
-      el.innerHTML = `<div class="noresults"><p><b>No benchmark results in the versions shown.</b></p><p>Hidden: ${hiddenWith.map((l) => esc(l.name)).join(", ")}, with results. <button id="noresultsshow">Show ${hiddenWith.length > 1 ? "them" : "it"}</button></p></div>`;
+      el.innerHTML = `<div class="noresults"><p><b>No benchmark results in the versions shown.</b></p><p>These hidden versions have results: ${hiddenWith.map((l) => esc(l.name)).join(", ")}. <button id="noresultsshow">Show ${hiddenWith.length > 1 ? "them" : "it"}</button></p></div>`;
       $("noresultsshow").onclick = () => setHidden(hiddenWith, false);
       return;
     }
     el.innerHTML = `<div class="noresults"><p><b>No benchmark results in ${LANES.length > 1 ? "any of the open versions" : "this headway"}.</b></p>` +
-      `<p>Results are put into a built headway by the benchmark: <code>headway build SPEC --results results.json</code>, <code>headway attach HEADWAY results.json</code>, or <code>headway.build(..., results=[...])</code> from Python (<code>headway guide</code>, “Benchmarks”).${D.live ? " A spec served live has none of its own: it is the code as it is now, not yet benchmarked." : ""}</p>` +
-      `<p><button id="noresultsopen">Open…</button> opens built versions that have results beside this one.</p></div>`;
+      `<p>The benchmark puts results into a built headway, with one of <code>headway build SPEC --results results.json</code>, <code>headway attach HEADWAY results.json</code> or <code>headway.build(..., results=[...])</code> in Python. See “Benchmarks” in <code>headway guide</code>.${D.live ? " A spec served live has no results of its own, because it shows the code as it is now, before any benchmark run." : ""}</p>` +
+      `<p><button id="noresultsopen">Open…</button> to open built versions that have results, beside this one.</p></div>`;
     $("noresultsopen").onclick = () => $("addlane").click();
     return;
   }
@@ -4150,37 +4206,37 @@ function renderResults() {
   const dirMark = (m) => `<span class="dir" title="${m.better} is better">${m.better === "higher" ? "↑" : "↓"}</span>`;
   const sorted = (kind, key, dataset) => rs.sort && rs.sort.kind === kind && rs.sort.key === key && (kind === "objective" || rs.sort.dataset === dataset) ? " sorted" : "";
   const focused = (kind, key, dataset) => rs.focus && rs.focus.kind === kind && rs.focus.key === key && (!dataset || rs.focus.dataset === dataset);
-  let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions shown have results on it${nHidden ? ` · ${nHidden} hidden, left out of the scores <button id="rshowall" title="show every open version again">Show all</button>` : ""}</span>` +
+  let h = `<div class="rbar"><span>Suite <b>${esc(sn.suite.title)}</b> (version ${esc(meta.version)}) · ${rows.filter((x) => x.r).length} of ${rows.length} versions shown have results on it${nHidden ? ` · ${nHidden} hidden, left out of the scores <button id="rshowall" title="Show every open version again.">Show all</button>` : ""}</span>` +
     `<span class="seg"><label><input type="radio" name="rby" value="metric"${rs.by === "metric" ? " checked" : ""}><span>By metric</span></label><label><input type="radio" name="rby" value="dataset"${rs.by === "dataset" ? " checked" : ""}><span>By dataset</span></label></span>` +
-    `<span class="seg" title="the shade of a cell: from the worst to the best of the versions shown, or across the metric's whole range"><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
-    `<label class="seg" title="under each value, its difference from the version it is compared with (the one above, or the baseline): the mean of the per-replicate differences ± their s.d. and how many replicates agree, paired by replicate id; ● every interval of the difference the benchmark gave excludes 0, ◐ some, ○ none; in color only when the difference is supported"><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
+    `<span class="seg" title="Shade each cell from the worst to the best of the versions shown, or across the metric's whole range."><label><input type="radio" name="rcolor" value="shown"${rs.color === "range" ? "" : " checked"}><span>Shade among versions</span></label><label><input type="radio" name="rcolor" value="range"${rs.color === "range" ? " checked" : ""}><span>by range</span></label></span>` +
+    `<label class="seg" title="Show each value's difference from the version it is compared with: the one above, or the baseline. Replicates are paired by id. The difference is the mean of the paired differences, ± their s.d., with how many replicates agree. ● means every interval from the benchmark excludes 0, ◐ means some do, and ○ means none do. A difference is coloured only when it is supported."><input type="checkbox" id="rdelta"${rs.delta ? " checked" : ""}><span>Differences</span></label>` +
     colsMenuHTML(sn) +
-    `<button id="addobj" title="make your own objective: the sum of a transform of each metric, typed in the panel (kept in this browser)">+ Objective</button>` +
-    `<label class="seg" title="beside each value, its place among the versions shown (#1 the best; = a tie)"><input type="checkbox" id="rranks"${rs.ranks ? " checked" : ""}><span>Ranks</span></label>` +
-    (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="the datasets kept out of development"><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
-    `<button id="copyresults" class="copybig" title="copy an image of the table (as shown) to the clipboard">${COPY_ICON} Copy image</button>` +
-    `<span>click a column's header to sort by it (again: unsort) and for what it measures; a metric's header, by the mean place over the datasets shown; click a value for the values' spread · drag a version or a column's header to reorder</span></div>`;
+    `<button id="addobj" title="Make your own objective: a sum of a transform of each metric, typed in the side panel. This browser keeps it.">+ Objective</button>` +
+    `<label class="seg" title="Show each value's place among the versions shown. #1 is the best, and = marks a tie."><input type="checkbox" id="rranks"${rs.ranks ? " checked" : ""}><span>Ranks</span></label>` +
+    (meta.datasets.some((d) => d.heldout) ? `<label class="seg" title="Also show the datasets kept out of development."><input type="checkbox" id="rheld"${rs.heldout ? " checked" : ""}><span>Held-out datasets</span></label>` : "") +
+    `<button id="copyresults" class="copybig" title="Copy an image of the table, as shown, to the clipboard.">${COPY_ICON} Copy image</button>` +
+    `<span>Click a column's header to sort by it and to see what it measures. Click it again to unsort. A metric's header sorts by the mean place over the datasets shown. Click a value to see the spread of the values. Drag a version or a header to reorder.</span></div>`;
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
     objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}"${dc("o", o.key)} title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${lowerBetter(o) ? o.how + " ↓" : o.how === "mean" || o.how === "sum" ? "↑" : o.how + " ↑"}</span></th>`).join("") +
     `<th rowspan="2" class="gap"></th>` +
-    groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}"${dc("f", g.head.key)} title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
-      : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}"${dc(rs.by === "metric" ? "m" : "d", g.head.key)} ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}click: sort by the mean place over the datasets shown"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
+    groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}"${dc("f", g.head.key)} title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="A figure, to look at. It is not ranked.">▣</span></th>`
+      : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}"${dc(rs.by === "metric" ? "m" : "d", g.head.key)} ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}Click to sort by the mean place over the datasets shown."` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
     `</tr><tr>` + cols.map(({m, f, d}) => f ? `<th class="sub" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}"${rs.by === "metric" ? dc("d", d.key) : dc("f", f.key)} title="${esc(f.desc ?? "")}">${rs.by === "metric" ? esc(d.name) : `${esc(f.name)}<span class="dir">▣</span>`}</th>`
       : `<th class="sub${sorted("metric", m.key, d.key)}" data-metric="${esc(m.key)}" data-dataset="${esc(d.key)}"${rs.by === "metric" ? dc("d", d.key) : dc("m", m.key)}>${rs.by === "metric" ? esc(d.name) : `${tex(title(m)?.tex ?? m.key)}${dirMark(m)}`}</th>`).join("") + `</tr></thead><tbody>`;
   for (const [n, row] of rows.entries()) {
     const rr = resultRef(rows, row);
-    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}&#10;click: read this version · drag: reorder (the graph's lanes too)" draggable="true"><span class="grip">⠿</span>${eyeHTML(row.lane)}${esc(row.lane.name)}</th>`;
+    h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}&#10;Click to read this version. Drag to reorder it here and in the graph." draggable="true"><span class="grip">⠿</span>${eyeHTML(row.lane)}${esc(row.lane.name)}</th>`;
     for (const ob of objectives) {
       const v = ob.scores[n], g = v === null ? null : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : goodness(v, {better: lowerBetter(ob.o) ? "lower" : "higher"}, ob.scores);
       const rv = rr ? ob.scores[rows.indexOf(rr)] : null;
-      h += v === null ? `<td class="cell obj missing" data-obj="${esc(ob.o.key)}" title="incomplete: no ${esc(ob.missing[n].join(", "))}">${row.r ? "incomplete" : "–"}</td>`
+      h += v === null ? `<td class="cell obj missing" data-obj="${esc(ob.o.key)}" title="Incomplete. It has no ${esc(ob.missing[n].join(", "))}.">${row.r ? "incomplete" : "–"}</td>`
         : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${placeHTML(v, ob.scores, lowerBetter(ob.o) ? "lower" : "higher")}${rs.delta ? deltaHTML(v, rv, lowerBetter(ob.o) ? "lower" : "higher") : ""}</td>`;
     }
     h += `<td class="gap"></td>`;
     for (const {m, f, d} of cols) {
       if (f) {
         const imgs = row.r?.figures?.[d.key]?.[f.key];
-        h += imgs?.length ? `<td class="cell fig${focused("figure", f.key, d.key) ? " sel" : ""}" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.name)} on ${esc(d.name)}: ${imgs.length} image${imgs.length > 1 ? "s" : ""}; click to compare the versions'"><img src="${esc(imgs[0].src)}" alt="" loading="lazy">${imgs.length > 1 ? `<span class="more">+${imgs.length - 1}</span>` : ""}</td>`
+        h += imgs?.length ? `<td class="cell fig${focused("figure", f.key, d.key) ? " sel" : ""}" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="${esc(f.name)} on ${esc(d.name)}: ${imgs.length} image${imgs.length > 1 ? "s" : ""}. Click to compare the versions' images."><img src="${esc(imgs[0].src)}" alt="" loading="lazy">${imgs.length > 1 ? `<span class="more">+${imgs.length - 1}</span>` : ""}</td>`
           : `<td class="cell missing" data-fig="${esc(f.key)}" data-dataset="${esc(d.key)}" title="no image">–</td>`;
         continue;
       }
@@ -4243,7 +4299,7 @@ function renderResults() {
       const after = tr.classList.contains("after");
       tr.classList.remove("over", "after");
       if (!dragged || dragged === lane) return;
-      if (rs.sort) { adoptOrder(rows.map((x) => x.lane)); rs.sort = null; note("The sorted order is now the versions' order"); }
+      if (rs.sort) { adoptOrder(rows.map((x) => x.lane)); rs.sort = null; note("The versions now keep the sorted order."); }
       moveLane(dragged, lane, after);
     });
   });
@@ -4255,6 +4311,21 @@ function renderResults() {
   }));
 }
 
+// each version's place under every rule this objective can take, so you can see where the ranking depends on the rule
+function everyRuleHTML(rows, o, meta) {
+  const hows = rulesFor(o, meta), rs_ = rows.map((x) => x.r);
+  const places = hows.map((h) => {
+    const sc = objScores(rs_, {...o, how: h}, meta).scores, low = (HOWS[h] ?? ["higher"])[0] === "lower";
+    return sc.map((v) => v === null ? null : 1 + sc.filter((w) => w !== null && (low ? w < v : w > v)).length);
+  });
+  const shown = rows.map((_, n) => n).filter((n) => places.some((p) => p[n] !== null));
+  if (shown.length < 2) return "";
+  const firsts = hows.map((h, j) => shown.filter((n) => places[j][n] === 1).map((n) => rows[n].lane.name).join(" and "));
+  const agree = new Set(firsts).size === 1;
+  return `<h3>Under every rule</h3><p class="empty">Each version's place under each rule, over the same metrics and weights. ${agree ? `Every rule puts ${esc(firsts[0])} first.` : "The rules disagree about which version is first, so the ranking depends on the rule."}</p>` +
+    `<div class="rulegrid"><table class="wts"><tr><th></th>${hows.map((h) => `<th${h === o.how ? ' class="on"' : ""}>${h}</th>`).join("")}</tr>` +
+    shown.map((n) => `<tr><td>${esc(rows[n].lane.name)}</td>${places.map((p) => `<td class="num${p[n] === 1 ? " first" : ""}">${p[n] === null ? "–" : "#" + p[n]}</td>`).join("")}</tr>`).join("") + `</table></div>`;
+}
 const objVersionsHTML = (rows, scores, missing) => `<table class="wts">${rows.map((x, n) => `<tr><td>${esc(x.lane.name)}</td><td>${scores[n] === null ? `<span class="empty">incomplete${x.r ? `: no ${esc(missing[n].join(", "))}` : ": no results on this suite"}</span>` : fmt(scores[n])}</td></tr>`).join("")}</table>`;
 // one's own objective in the panel: its name and a transform of each metric, applied as they are typed
 function mineEditor(o, sn, rows) {
@@ -4262,7 +4333,7 @@ function mineEditor(o, sn, rows) {
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
   const scoresHTML = () => { const {scores, missing} = objScores(rows.map((x) => x.r), o, meta); return objVersionsHTML(rows, scores, missing); };
   el.innerHTML = `<h2><input id="minename" class="minename" value="${esc(o.name)}" aria-label="the objective's name"></h2>` +
-    `<div class="crumb">your objective · kept in this browser · <button class="linkish" id="mineremove">remove</button></div>` +
+    `<div class="crumb">Your objective · kept in this browser · <button class="linkish" id="mineremove">remove</button></div>` +
     `<p>The sum, over the metrics and the datasets shown (${datasets.map((d) => esc(d.name)).join(", ")}), of each metric's transform of the version's mean: higher is better. Each version is scored from its own values, so two versions keep their order whatever others are shown.</p>` +
     `<table class="wts mine">${meta.metrics.map((m) => { const sy = suite.symbols.find((x) => x.key === m.key), c = compileExpr(o.f[m.key]);
       return `<tr><td>${tex(sy?.tex ?? m.key)}</td><td>${esc(sy?.name ?? m.key)}<span class="dir">${m.better === "higher" ? " ↑" : " ↓"}</span></td>` +
@@ -4292,8 +4363,8 @@ function mineEditor(o, sn, rows) {
 // the side panel in the Results view: what a metric or objective is, and the values' spread
 function showResultDetail() {
   const el = $("detail"), sn = suiteNow(), f = rs.focus;
-  if (!sn) { el.innerHTML = `<p class="empty">Nothing to compare yet: no open version has benchmark results.</p>`; return; }
-  if (!f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version for what it is and how the versions compare on it.</p>`; return; }
+  if (!sn) { el.innerHTML = `<p class="empty">Nothing to compare yet. No open version has benchmark results.</p>`; return; }
+  if (!f) { el.innerHTML = `<p class="empty">Click a metric, a figure, an objective, a dataset or a version. This panel shows what it is and how the versions compare on it.</p>`; return; }
   const {meta, suite} = sn;
   const rows = resultRows(sn);
   const datasets = meta.datasets.filter((d) => rs.heldout || !d.heldout);
@@ -4307,7 +4378,7 @@ function showResultDetail() {
     if (m.source) h += `<p class="empty">Source: ${rich(m.source)}</p>`;
     h += `<h3>Values${f.dataset ? "" : ", by dataset"}</h3>`;
     for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
-      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key], ivs: x.r?.intervals?.[d.key]?.[m.key]}))) + diffsHTML(m, d.key, rows);
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="What this dataset is.">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + stripHTML(m, rows.map((x) => ({lane: x.lane, v: x.r?.values[d.key]?.[m.key] ?? null, ids: x.r?.replicates?.[d.key]?.[m.key], ivs: x.r?.intervals?.[d.key]?.[m.key]}))) + diffsHTML(m, d.key, rows);
     if (op) {
       last = checkHTML(op);
       h += `<h3>Code</h3>${codeHTML(op.code) || "<span class='empty'>no reference</span>"}`;
@@ -4326,20 +4397,24 @@ function showResultDetail() {
     if (fg.source) h += `<p class="empty">Source: ${rich(fg.source)}</p>`;
     h += `<h3>The versions${f.dataset ? "" : ", by dataset"}</h3>${FIGURE_NOTE}`;
     for (const d of f.dataset ? meta.datasets.filter((x) => x.key === f.dataset) : datasets)
-      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="what this dataset is">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + figureGrid(d.key, fg, rows, true);
+      h += `<div class="eqlbl"><span class="chip" data-ds="${esc(d.key)}" title="What this dataset is.">${esc(d.name)}</span>${d.heldout ? " (held out)" : ""}${d.desc ? ` — ${rich(d.desc)}` : ""}</div>` + figureGrid(d.key, fg, rows, true);
     if (fg.code?.length) h += `<h3>Code${pen(fg.decl, "code", "the code references")}</h3>${codeHTML(fg.code)}`;
   } else if (f.kind === "objective") {
     const o = objectivesOf(sn).find((x) => x.key === f.key);
     if (!o) { rs.focus = null; return showResultDetail(); }
     if (o.how === "sum") return mineEditor(o, sn, rows);
     const {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
-    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${esc(HOWS[o.how]?.[1] ?? o.how)}${o.how !== "mean" ? " · over the versions shown" : ""}</div>`;
-    if (o.desc) h += `<p>${rich(o.desc)}</p>`;
-    if (o.tex) h += `<div class="eq">${tex(o.tex, true)}</div>`;
+    const own = o.suiteHow ?? o.how;
+    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective${o.how !== "mean" ? " · over the versions shown" : ""}</div>`;
+    h += `<div class="rulepick"><label class="ctl">Rule <select id="objrule">${rulesFor(o, meta).map((x) => `<option value="${x}"${x === o.how ? " selected" : ""}>${x}${x === own ? " (the suite's rule)" : ""}</option>`).join("")}</select></label>` +
+      (o.suiteHow ? ` <button class="linkish" id="objruleback">Use the suite's rule (${esc(own)})</button>` : "") + `</div>` +
+      `<p class="empty">${esc(HOWS[o.how]?.[1] ?? o.how)}${o.suiteHow ? ` You chose this rule in this browser. The suite uses ${esc(own)}, and the atlas view still does.` : ""}</p>`;
+    if (o.desc) h += `<p>${rich(o.desc)}${o.suiteHow ? ` <span class="empty">(The suite's description, written for the rule ${esc(own)}.)</span>` : ""}</p>`;
+    if (o.tex && !o.suiteHow) h += `<div class="eq">${tex(o.tex, true)}</div>`;      // the suite's formula is for its own rule
     const symRow = (k, w) => { const sy = suite.symbols.find((x) => x.key === k); return `<tr><td>${tex(sy?.tex ?? k)}</td><td>${esc(sy?.name ?? k)}</td><td>× ${w}</td></tr>`; };
     if (o.categories) {
       const scaled = o.how === "mean";
-      h += `<h3>Categories and weights</h3><p class="empty">Each category is one voter: ${scaled ? "the mean of its metrics, each scaled by its range so that 1 is best" : "it ranks the versions by its metrics' mean rank"}, so a category of many metrics counts no more than a category of one.</p>`;
+      h += `<h3>Categories and weights</h3><p class="empty">Each category is one voter. ${scaled ? "Its score is the mean of its metrics, each scaled by its range so that 1 is best." : "It ranks the versions by the mean rank of its metrics."} So a category of many metrics counts no more than a category of one.</p>`;
       const complete = missing.map((m) => !m.length);
       for (const [ck, w] of Object.entries(o.categories)) {
         const c = (meta.categories ?? []).find((x) => x.key === ck);
@@ -4352,6 +4427,7 @@ function showResultDetail() {
     } else h += `<h3>Metrics and weights</h3><table class="wts">${Object.entries(o.weights).map(([k, w]) => symRow(k, w)).join("")}</table>`;
     h += `<p class="empty">Over ${objDatasets(o, meta).map((k) => esc(meta.datasets.find((d) => d.key === k)?.name ?? k)).join(", ")}, each metric's mean over its replicates.</p>`;
     h += `<h3>Versions</h3>` + objVersionsHTML(rows, scores, missing);
+    h += everyRuleHTML(rows, o, meta);
   } else {
     const lane = LANES.find((l) => l.id === f.key) ?? active, ref = refOf(lane), r = resultsOf(lane, sn.id);
     h += `<h2>${esc(lane.name)}</h2><div class="crumb">${esc(laneMeta(lane))}</div>`;
@@ -4370,6 +4446,9 @@ function showResultDetail() {
   el.innerHTML = h;
   el.scrollTop = 0;
   $("togarph")?.addEventListener("click", () => setView("graph"));
+  const ruled = () => objectivesOf(sn).find((x) => x.key === f.key);
+  $("objrule")?.addEventListener("change", (e) => { setRule(sn, ruled(), e.target.value); renderResults(); showResultDetail(); });
+  $("objruleback")?.addEventListener("click", () => { const o = ruled(); setRule(sn, o, o.suiteHow); renderResults(); showResultDetail(); });
   wireImages(el);
   el.querySelectorAll("[data-ds]").forEach((c) => c.addEventListener("click", () => { rs.focus = {kind: "dataset", key: c.dataset.ds}; renderResults(); showResultDetail(); }));
   wireResultsAsk();
@@ -4391,8 +4470,8 @@ function datasetHTML(d, suite, meta, extra = "") {
   if (d.source) h += `<p class="empty">Source: ${rich(d.source)}</p>`;
   const vals = Object.entries(d.values ?? {});
   if (vals.length) {
-    h += `<h3>Settings${pen(d.decl, "values", "the values")}</h3><table class="wts">` + vals.map(([k, v]) => `<tr${varies(k) ? ` class="varies" title="differs between the datasets"` : ""}><td>${tex(sym(k)?.tex ?? k)}</td><td>${esc(sym(k)?.name ?? k)}</td><td><code>${esc(v)}</code></td></tr>`).join("") + `</table>`;
-    if (vals.some(([k]) => varies(k)) && vals.some(([k]) => !varies(k))) h += `<p class="empty">In bold, the settings that differ between the datasets.</p>`;
+    h += `<h3>Settings${pen(d.decl, "values", "the values")}</h3><table class="wts">` + vals.map(([k, v]) => `<tr${varies(k) ? ` class="varies" title="This setting differs between the datasets."` : ""}><td>${tex(sym(k)?.tex ?? k)}</td><td>${esc(sym(k)?.name ?? k)}</td><td><code>${esc(v)}</code></td></tr>`).join("") + `</table>`;
+    if (vals.some(([k]) => varies(k)) && vals.some(([k]) => !varies(k))) h += `<p class="empty">Settings in bold differ between the datasets.</p>`;
   }
   const facts = Object.entries(d.facts ?? {});
   if (facts.length) h += `<h3>Facts${pen(d.decl, "facts", "the facts")}</h3><table class="wts">${facts.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${rich(v)}</td></tr>`).join("")}</table>`;
@@ -4419,7 +4498,7 @@ function showFigure(key) {
   let h = `<h2>${esc(f.name)}${pen(f.decl, "name", "the name")}</h2><div class="crumb">figure · to look at, not ranked · ${esc(D.title)}</div>` + declHTML(f.decl);
   if (f.desc) h += `<p>${rich(f.desc)}${pen(f.decl, "desc", "the description")}</p>`;
   if (f.source) h += `<p class="empty">Source: ${rich(f.source)}</p>`;
-  h += `<p class="empty">The benchmark draws it for each dataset. Each method's images are in its headway's results: a column of thumbnails in the Results view, beside the metrics.</p>`;
+  h += `<p class="empty">The benchmark draws it for each dataset. Each method's images are stored with its results. The Results view shows them as a column of thumbnails beside the metrics.</p>`;
   if (f.code?.length) h += `<h3>Code${pen(f.decl, "code", "the code references")}</h3>${codeHTML(f.code)}`;
   $("detail").innerHTML = h;
   $("detail").scrollTop = 0;
@@ -4433,7 +4512,7 @@ const datasetLines = (d, suite) => [`- ${d.name} (\`${d.key}\`)${d.heldout ? ", 
 // a version's keys: free-form labels (a hyperparameter, a variant) given when it was built
 const keysText = (k) => Object.entries(k ?? {}).map(([n, v]) => `${n}=${v}`).join(", ");
 // the images the versions' benchmark made on a dataset, side by side by title: to look at, not ranked
-const FIGURE_NOTE = `<p class="empty">Made by the benchmark, to look at; not ranked. Click one to enlarge it.</p>`;
+const FIGURE_NOTE = `<p class="empty">The benchmark made these to look at. They are not ranked. Click one to enlarge it.</p>`;
 // a figure on a dataset: every version's images side by side
 function figureGrid(dk, fg, rows, big = false) {
   const items = rows.flatMap(({lane, r}) => (r?.figures?.[dk]?.[fg.key] ?? []).map((e) => ({lane, e})));
@@ -4541,20 +4620,20 @@ function diffsHTML(m, dk, rows) {
     [lo, 0, hi].map((v, k) => `<text x="${x(v)}" y="${yAxis + 14}" text-anchor="${["start", "middle", "end"][k]}" class="mu">${k === 1 ? "0" : fmt(v)}</text>`).join("");
   const none = pairs.filter(({p}) => p.paired && !p.intervals.length).map(({row, ref}) => `${row.lane.name} − ${ref.name}`);
   const extra = pairs.some((x) => x.extra);
-  return `<div class="eqlbl" style="margin-top:2px">Differences from the version each is compared with${extra ? ", then (in grey) the other pairs the benchmark compared" : ""}${m.interval ? `; whiskers: ${esc(m.interval)}` : ""}</div><svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>` +
-    (none.length ? `<p class="empty" style="margin-top:-6px">No interval of the difference from the benchmark for ${esc(none.join(", "))}.</p>` : "");
+  return `<div class="eqlbl" style="margin-top:2px">Differences from the version each is compared with${extra ? ", then the other pairs the benchmark compared (in grey)" : ""}.${m.interval ? ` Whiskers show ${esc(m.interval)}.` : ""}</div><svg class="strip" viewBox="0 0 ${W} ${H}">${g}</svg>` +
+    (none.length ? `<p class="empty" style="margin-top:-6px">The benchmark gave no interval of the difference for ${esc(none.join(", "))}.</p>` : "");
 }
 
 // prompts from the Results view: why the versions differ on what is selected, and what to try next
 const RESULT_ASKS = [
-  ["Why do they differ?", "explain the differences between the versions from what changed in each", "Explain why the versions differ on this, step by step through what changed from each version to the next. Separate differences that the replicates' spread could explain from real ones. For each real difference, point to the change in the method that most likely caused it, and say how sure you are and how to confirm it (e.g. an ablation)."],
-  ["What to try next?", "propose the next changes to try, and what each should do to the results", "Propose two or three changes to the method to try next, to do better on this without doing worse elsewhere. For each: what to change (in the spec's terms: which step, which equation), why, the effect you expect on each metric, and the experiment that would show it. Do not make any change yet."],
+  ["Why do they differ?", "Explain the differences between the versions from what changed in each", "Explain why the versions differ on this, step by step through what changed from each version to the next. Separate differences that the replicates' spread could explain from real ones. For each real difference, point to the change in the method that most likely caused it, and say how sure you are and how to confirm it (e.g. an ablation)."],
+  ["What to try next?", "Propose the next changes to try, and what each should do to the results", "Propose two or three changes to the method to try next, to do better on this without doing worse elsewhere. For each: what to change (in the spec's terms: which step, which equation), why, the effect you expect on each metric, and the experiment that would show it. Do not make any change yet."],
 ];
 function resultsAskHTML() {
-  return `<div class="ask" id="askbox"><h3>Ask an AI</h3><div class="presets">${RESULT_ASKS.map(([label, tip], n) => `<button data-rask="${n}" title="${esc(tip)}: adds the whole prompt to the box, below what is there">${esc(label)}</button>`).join("")}</div>` +
+  return `<div class="ask" id="askbox"><h3>Ask an AI</h3><div class="presets">${RESULT_ASKS.map(([label, tip], n) => `<button data-rask="${n}" title="${esc(tip)}. Click to add this prompt to the box, below what is there.">${esc(label)}</button>`).join("")}</div>` +
     `<textarea id="ask" placeholder="Or ask your own question about these results"></textarea>` +
     `<div class="formats"><span>Answer as</span>${FORMATS.map(([k, label, tip]) => `<button data-format="${k}" class="${ask.format === k ? "on" : ""}" title="${esc(tip)}">${esc(label)}</button>`).join("")}</div>` +
-    `<div class="row"><button id="askcopy">Copy prompt</button><span>a question you typed, with the results, the metric's definition and what changed between the versions; a whole prompt in the box (from a button), as it is</span></div>` +
+    `<div class="row"><button id="askcopy">Copy prompt</button><span>Copies your question, with the results, the metric's definition and what changed between the versions. A full prompt from one of the buttons is copied as it is.</span></div>` +
     `<details><summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-top:6px">preview</summary><pre id="askpreview"></pre></details></div>`;
 }
 function wireResultsAsk() {
@@ -4658,15 +4737,15 @@ function header(buildError = "") {
   $("desc").innerHTML = rich(D.desc);
   $("desc").hidden = !D.desc;
   requestAnimationFrame(descFit);
-  $("meta").innerHTML = (D.live ? `<span id="live" class="on" title="headway serve: the page updates when the spec or the code changes">live</span> · ` : "") +
-    (D.live && D.draft ? `<button id="redraft" title="draft this spec again from the code, as headway init ${esc(D.draft.entry)} --depth ${esc(D.draft.depth ?? 2)} did">Redraft</button> · ` : "") +
+  $("meta").innerHTML = (D.live ? `<span id="live" class="on" title="Served by headway serve. The page updates when the spec or the code changes.">live</span> · ` : "") +
+    (D.live && D.draft ? `<button id="redraft" title="Draft this spec again from the code, the way headway init ${esc(D.draft.entry)} --depth ${esc(D.draft.depth ?? 2)} did.">Redraft</button> · ` : "") +
     `built ${esc(D.built)}${D.headway ? ` with headway ${esc(D.headway)}` : ""}${gitText(D) ? " · " + esc(gitText(D)) : ""}${D.snapshot ? ` · a saved version (${esc(active.name)})` : ""}`;
   $("checks").innerHTML = buildError
-    ? `<div class="checks"><b>The rebuild failed</b> (this is the last good build): ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
-    : D.check.errors.length ? `<div class="checks"><b>${D.check.errors.length} check error${D.check.errors.length > 1 ? "s" : ""}:</b> the graph may not match the code.<pre>${esc(D.check.errors.join("\n"))}</pre></div>` : "";
+    ? `<div class="checks"><b>The rebuild failed.</b> This page shows the last good build. The error: ${esc(buildError.trim().split("\n").pop())}<details><summary>output</summary><pre>${esc(buildError)}</pre></details></div>`
+    : D.check.errors.length ? `<div class="checks"><b>${D.check.errors.length} check error${D.check.errors.length > 1 ? "s" : ""}.</b> The graph may not match the code.<pre>${esc(D.check.errors.join("\n"))}</pre></div>` : "";
   const names = (role) => D.symbols.filter((s) => s.role === role).map((s) => s.name).join(", ") || "none";
-  $("settingslabel").title = "Add to the graph, with edges to the steps that use them, the settings (configurable; amber, dashed): "
-    + names("setting") + " — and the constants (fixed in the code; grey, dotted): " + names("constant");
+  $("settingslabel").title = "Draw the settings and constants in the graph, with edges to the steps that use them. Settings can be changed by the user and are amber and dashed: "
+    + names("setting") + ". Constants are fixed in the code and are grey and dotted: " + names("constant") + ".";
 }
 // the description takes one line; when it does not fit, a click shows all of it, and another click one line again
 function descFit() {
@@ -4687,12 +4766,12 @@ $("settings").onchange = (e) => {
   state.settings = e.target.checked;
   render(false, true);
   const n = (role) => D.symbols.filter((s) => s.role === role).length;
-  note(state.settings ? `Added ${n("setting")} setting${n("setting") === 1 ? "" : "s"} (dashed) and ${n("constant")} constant${n("constant") === 1 ? "" : "s"} (dotted) to the graph` : `Settings and constants hidden; they are listed in the legend below`);
+  note(state.settings ? `Added ${n("setting")} setting${n("setting") === 1 ? "" : "s"} (dashed) and ${n("constant")} constant${n("constant") === 1 ? "" : "s"} (dotted) to the graph.` : `Settings and constants are hidden. The legend below still lists them.`);
 };
 $("split").onchange = (e) => {
   state.split = e.target.checked;
   render(false, true);
-  note(state.split ? "Each input is drawn next to every group that uses it" : "One node per input, with edges across the graph");
+  note(state.split ? "Each input is now drawn next to every group that uses it." : "Each input is now drawn once, with edges across the graph.");
 };
 let noteTimer;
 async function redraftSpec(force = false) {
@@ -4701,7 +4780,7 @@ async function redraftSpec(force = false) {
                                     body: JSON.stringify({force})});
   const got = await r.json().catch(() => ({error: `${r.status} ${r.statusText}`}));
   if (r.status === 409 && got.edited) {
-    if (confirm("This spec has been edited since it was drafted. Drafting it again from the code replaces those edits; the edited version is kept beside it, as .bak.\n\nRedraft it anyway?")) redraftSpec(true);
+    if (confirm("This spec has been edited since it was drafted. Drafting it again from the code replaces those edits. The edited version is kept beside it, with the extension .bak.\n\nRedraft it anyway?")) redraftSpec(true);
     return;
   }
   note(got.ok ? `Redrafted${got.backup ? "; the edited version is kept as " + got.backup.split(/[\\/]/).pop() : ""}. Rebuilding…` : "Redraft failed: " + (got.error ?? "unknown"));
@@ -4822,6 +4901,346 @@ showDetail(null);
 if (D.live && location.protocol.startsWith("http")) live();
 render(true).then(() => { if (rs.view === "results" && hasResults()) setView("results"); else if (LANES.length > 1) showDetail(state.sel); }).catch((e) => { console.error(e); $("vp").innerHTML = `<text x="10" y="20" fill="red">${esc(e)}</text>`; });
 </script>
+<!-- the guided tour: run after the viewer (and the atlas explorer), whose controls it points at and drives -->
+<script type="text/plain" id="tour-main">
+(() => {
+"use strict";
+/* ---------- the guided tour: the page's controls, one at a time ----------
+   A step rings a control (the rest dimmed, but still usable) and says what it does; some ask you to try it, and go
+   on once you have ("Show me" does it for you). A step whose control is not on this page (no results, one lane, not
+   an atlas) is left out. ? opens the tours; ← → move; Esc closes. */
+const inField = (e) => e.target.closest?.("input, textarea, select, [contenteditable]");
+const shown = (el) => { const r = el?.getBoundingClientRect(); return r && r.width > 0 && r.height > 0 ? el : null; };
+const q = (sel) => shown(document.querySelector(sel));
+const view = (v) => { const r = document.querySelector(`input[name=view][value="${v}"]`); if (r && !r.checked) r.click(); };
+const click = (el) => el?.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window}));
+const AT = () => window.headwayAtlas;
+const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+// a node of the graph in view (a step's, if one is), for "Show me"
+function graphNode() {
+  const box = $("svg").getBoundingClientRect(), all = [...document.querySelectorAll("#vp .node")];
+  const inView = all.filter((el) => { const r = el.getBoundingClientRect(); return r.left >= box.left && r.right <= box.right && r.top >= box.top && r.bottom <= box.bottom; });
+  return inView.find((el) => el.querySelector(".n.op")) ?? inView[0] ?? all[0];
+}
+// the atlas's version to try things on: the latest shown not yet on the shelf
+const atlasPick = () => AT().shown().filter((n) => !AT().shelf().includes(n)).at(-1);
+
+const KEYS = (s) => s.split(" ").map((k) => `<kbd>${k}</kbd>`).join(" ");
+const center = (html) => html;      // a card with no control to point at: it explains an idea, in the middle
+const more = () => LANES.length > 1;
+/* The lessons, in order. Each builds on the ones before it, and each idea is explained before a step uses it:
+   a step lists the ideas it explains (teach) and the earlier ones it relies on (uses), and checkLessons() below
+   warns, in the console, of a step that uses an idea nothing before it has explained. */
+const TOURS = {
+  basics: {
+    title: "What this page shows", about: "Steps, values and groups: the ideas the other lessons build on",
+    steps: [
+      {before: () => view("graph"), title: "A method, drawn", teach: ["method"],
+       body: center(`<p>This page describes a method. A method is a procedure in some code that turns data into results.</p><p>headway draws the method so that you can follow it without reading the code first. This lesson covers the few ideas that every other lesson builds on.</p><p>${KEYS("← →")} move between cards, and ${KEYS("Esc")} closes the lesson.</p>`)},
+      {title: "Steps and values", teach: ["step", "value"], uses: ["method"],
+       body: center(`<p>A method is a chain of steps. A step is one operation, such as normalizing counts or fitting a model.</p><p>Each step takes some values in and gives other values out. A value is a number, an array or a table.</p>`)},
+      {target: "#svg", title: "The graph", teach: ["graph", "symbol"], uses: ["step", "value"],
+       body: `<p>The graph draws the steps and the values. Each step is a box with a name. The values are the smaller shapes between the steps, and the arrows show which step makes a value and which steps use it.</p><p>A value is labelled with its symbol, its short name in the math. Drag to move around, and scroll to zoom.</p>`},
+      {target: "#symbols", title: "Kinds of value", teach: ["input", "setting", "constant", "intermediate", "output"], uses: ["value", "symbol", "step"],
+       body: `<p>A data input comes from outside the method. A setting is a number that the user can change. A constant is a number fixed in the code.</p><p>An intermediate value is made by one step and used by later ones. An output is a result the method gives back. Each kind has its own colour, and this list names every value under its kind.</p>`},
+      {target: "#svg", title: "Select a step", uses: ["step", "value", "graph"],
+       body: `<p>Click a box to select it. Its connections light up in the graph.</p>`,
+       task: {label: "Click a step or a value", start: () => state.sel, done: (s) => state.sel && !same(state.sel, s), show: () => click(graphNode())}},
+      {target: "#detail", title: "The side panel", teach: ["equation", "code reference"], uses: ["step"],
+       body: `<p>The side panel shows what you selected. For a step, it shows the step's equation and the lines of code that compute it. The link to those lines is the step's code reference.</p><p>With both side by side, you can check one against the other.</p>`},
+      {target: () => q("#vp .grp .head") ?? q("#svg"), title: "Groups", teach: ["group"], uses: ["step"],
+       body: `<p>Steps are collected in groups. A group is usually one function or module of the code, and it is drawn as a frame around its steps.</p><p>Double-click a group to collapse it into one box. Double-click the box to open it again.</p>`},
+      {target: "header .hl", title: "Where this page comes from", teach: ["spec", "headway"], uses: ["method", "step", "value", "equation", "code reference"],
+       body: `<p>Someone wrote a spec for this method. A spec is a Python file, kept next to the code, that lists the method's steps, values and equations with their code references.</p><p>The command <code>headway build</code> turns a spec into a page like this one, called a headway. The top of the page says when it was built.</p>`},
+      {target: "#tourbtn", title: "Next", uses: ["step"],
+       body: () => `<p>Those are the main ideas. The next lesson, <b>${esc(TOURS.read.title)}</b>, looks at one step closely. Go on now, or come back to it later with this button or the ${KEYS("?")} key.</p>`},
+    ],
+  },
+  read: {
+    title: "Reading a step", about: "A step's equation and code, its inputs and outputs, finding things, and asking an AI",
+    steps: [
+      {before: () => view("graph"), when: () => state.sel?.type !== "op", target: "#svg", title: "Pick a step", uses: ["step", "graph"],
+       body: `<p>This lesson looks at one step closely. Click a step to select it.</p>`,
+       task: {label: "Click a step", start: () => state.sel, done: (s) => state.sel?.type === "op" && !same(state.sel, s), show: () => click(graphNode())}},
+      {before: () => view("graph"), when: () => state.sel?.type === "op", target: "#svg", title: "The selected step", uses: ["step", "graph"],
+       body: `<p>This lesson looks at the step you selected. Click another step at any time to look at it instead.</p>`},
+      {target: "#detail", title: "Equation and code", teach: ["equation check"], uses: ["step", "equation", "code reference", "spec"],
+       body: `<p>At the top is the step's equation, as the spec writes it. Below it, headway rewrites the code itself as math, so you can compare the two.</p><p>The spec can also include a check that runs the code and tests the equation. The panel shows ✓ if the check passed and ✗ if it failed.</p>`},
+      {target: "#detail", title: "Inputs and outputs", uses: ["step", "value", "input", "output"],
+       body: `<p>Further down, the panel lists the step's inputs and outputs as chips. Click a chip to go to that value. A value's own panel lists the step that makes it and the steps that use it.</p>`},
+      {target: "#focus", title: "Upstream and downstream", teach: ["upstream", "downstream"], uses: ["value", "step", "graph"],
+       body: `<p>Upstream of a step is everything it depends on. Downstream is everything that depends on it. These buttons draw only one side, for the selected step or value.</p><p><b>All</b> brings the whole graph back.</p>`},
+      {target: "#legend", title: "Symbols, indices and equations", teach: ["index"], uses: ["symbol", "value", "equation", "graph"],
+       body: `<p>An index names one axis of an array, such as i for cells and g for genes. So X with indices i and g is a table with a row for each cell and a column for each gene.</p><p>The legend lists every index and symbol, and every equation in order. Click an entry to find it in the graph.</p>`},
+      {target: () => $("find").parentElement, title: "Find", uses: ["step", "value", "group"],
+       body: `<p>Press ${KEYS("/")} and type part of a name. Matching steps, values and groups are outlined. <b>Exact</b> keeps only exact names, and <b>Text</b> also searches descriptions. ${KEYS("Enter")} goes to the next match.</p>`,
+       task: {label: "Type a few letters in Find", done: () => $("find").value.trim() !== "", show: () => $("find").focus(), showLabel: "Go there"}},
+      {target: () => $("settingslabel").parentElement, title: "What the graph draws", uses: ["setting", "constant", "input", "group", "symbol"],
+       body: `<p><b>Settings &amp; constants</b> adds those values to the graph. <b>Local inputs</b> draws a copy of each input beside every group that uses it, instead of long edges. <b>Code names</b> labels values with their names in the code instead of their symbols.</p>`},
+      {target: "#askbox", title: "Ask an AI", uses: ["step", "equation", "code reference", "spec"],
+       body: `<p>Type a question about the selected step, or a change you want. <b>Copy prompt</b> puts it on the clipboard. It adds what an AI agent needs to know: the step's equation, its code and where it sits in the method.</p><p>The buttons above the box are ready-made requests.</p>`},
+      {target: () => $("dir").parentElement, title: "Layout and images", uses: ["graph"],
+       body: `<p>Lay the graph out left to right or top to bottom, zoom, or click <b>Fit</b> to see all of it. <b>Copy image</b>, to the left, copies the whole graph for a slide or a message.</p>`},
+      {target: "#tourbtn", title: "Next",
+       body: () => `<p>The next lesson, <b>${esc(TOURS.versions.title)}</b>, shows how to put several versions of the method side by side. ${KEYS("/")} finds, and ${KEYS("← ↑ → ↓")} walk the graph from the selection.</p>`},
+    ],
+  },
+  versions: {
+    title: "Comparing versions", about: "Versions of a method side by side, and what changed between them",
+    steps: [
+      {before: () => view("graph"), title: "Versions", teach: ["version"], uses: ["method", "spec", "headway"],
+       body: center(`<p>A method changes over time. Each time its spec is built, for example at a commit or for an experiment, the result is one version of the method.</p><p>headway can open several versions together and show what changed from one to the next.</p>`)},
+      {target: "#addlane", title: "Open another version", teach: ["lane"], uses: ["version", "headway"],
+       body: `<p><b>Open…</b> opens other built headways. Each one opens in its own lane, beside this one. A lane is one open version.</p>`},
+      {when: () => !more(), title: "Only one version is open", uses: ["version", "lane"],
+       body: () => center(`<p>Only one version is open on this page, so there is nothing to compare yet. Open another version with <b>Open…</b> and start this lesson again to see the rest.${ATLAS ? " The atlas lesson shows another way to open several versions of this atlas at once." : ""}</p>`)},
+      {target: "#lanes", when: more, title: "The open versions", uses: ["version", "lane"],
+       body: `<p>Each chip is one open version. Click one to read it in the side panel. The eye hides it from the graph, and you can drag the chips to reorder the lanes.</p>`},
+      {target: "#svg", when: more, title: "What changed", teach: ["change marks"], uses: ["lane", "step", "value", "version"],
+       body: `<p>headway lines the lanes up, so the same step sits in the same place in each. It marks each step and value against the version before it.</p><p><b>+</b> means added, <b>Δ</b> changed, <b>−</b> removed, and <b>⋔</b> split or merged. The line under the graph repeats this key.</p>`},
+      {target: "#lanes", when: more, title: "The baseline", teach: ["baseline"], uses: ["version", "change marks"],
+       body: `<p>Each version is compared with the one before it. Click <b>baseline</b> on a version to compare every other version with that one instead.</p>`},
+      {target: () => q("#lanes .lanectl"), when: more, title: "Fewer lanes at once", uses: ["version", "lane", "change marks"],
+       body: `<p><b>One at a time</b> draws only the version you are reading, still marked against the one before it. <b>Wording</b> also marks changes to labels and descriptions.</p>`},
+      {target: "#groupsmenu", when: more, title: "Only what changed", uses: ["group", "lane"],
+       body: `<p>In the <b>Groups</b> menu, <b>Collapse unchanged</b> folds every group where nothing changed, in every lane. What is left open is what changed.</p>`},
+      {target: "#tourbtn", title: "Next",
+       body: () => hasResults() ? `<p>The next lesson, <b>${esc(TOURS.results.title)}</b>, compares versions by how well they do.</p>` : `<p>That is all for this page. A page with benchmark results has a lesson on reading them.</p>`},
+    ],
+  },
+  results: {
+    title: "Benchmark results", about: "Metrics, replicates and differences, then objectives that rank the versions",
+    when: () => hasResults(),
+    steps: [
+      {title: "Benchmarks", teach: ["benchmark", "dataset", "metric", "suite"], uses: ["version", "method"],
+       body: center(`<p>A benchmark runs each version of a method on some datasets and scores it. Each score is a metric: a number that measures how well the version did on one dataset.</p><p>The suite is the benchmark's list of its datasets and metrics. headway does not run the benchmark. It shows the numbers that the benchmark computed.</p>`)},
+      {before: () => view("results"), target: "#results table.heat", title: "The table", uses: ["version", "metric", "dataset"],
+       body: `<p>Each row is a version, and each column is one metric on one dataset. A cell's shade runs from the worst to the best of the versions shown. <b>#1</b> beside a value is its place among them.</p><p>Click a column's header to sort by it.</p>`},
+      {target: "#results td.cell[data-metric]:not(.missing)", title: "Replicates", teach: ["replicate"], uses: ["benchmark", "dataset", "metric", "version"],
+       body: `<p>A benchmark often runs several times on one dataset, with a different seed or fold each time. Each run is a replicate.</p><p>A value in the table is the mean over the replicates, and <b>±</b> gives their standard deviation. Click a value to see each replicate.</p>`,
+       task: {label: "Click a value", start: () => rs.focus, done: (s) => rs.focus?.kind === "metric" && !same(rs.focus, s), show: () => click(q("#results td.cell[data-metric]:not(.missing)"))}},
+      {target: "#detail", title: "The spread", uses: ["replicate", "version", "metric"],
+       body: `<p>The side panel plots each version's values, so you can see whether two versions differ by more than their replicates vary. It also says what the metric measures.</p>`},
+      {target: () => $("rdelta")?.closest("label"), title: "Differences", teach: ["paired difference", "interval"], uses: ["replicate", "version", "baseline", "benchmark"],
+       body: `<p>Under each value is its difference from the version it is compared with. headway pairs the replicates that share an id, such as the same seed, and averages their differences.</p><p>The benchmark may also give an interval for each difference. ● means every interval excludes 0, ◐ means some do, and ○ means none do.</p>`},
+      {title: "Combining metrics", teach: ["objective"], uses: ["metric", "version"],
+       body: center(`<p>Often no version is best on every metric. An objective combines the metrics into one ranking of the versions.</p><p>There is more than one way to combine them, and the ways can disagree. The next cards show how headway handles that.</p>`)},
+      {target: "#results th.obj", title: "Objectives in the table", uses: ["objective", "suite"],
+       body: `<p>The suite's objectives are the first columns of the table. Under each name is the rule it uses and which way is better.</p>`,
+       task: {label: "Click an objective's header", start: () => rs.focus, done: (s) => rs.focus?.kind === "objective" && !same(rs.focus, s), show: () => click(q("#results th.obj"))}},
+      {target: "#detail", title: "Voters and categories", teach: ["voter", "category"], uses: ["objective", "metric", "version"],
+       body: `<p>An objective treats each metric as a voter that puts the versions in order. Its rule combines the voters' orders.</p><p>A category is a named set of metrics, such as biological or technical. An objective can count each category as one voter, so a category with many metrics does not outweigh a category with few.</p>`},
+      {title: "The rules", uses: ["objective", "voter", "metric"],
+       body: center(`<p><b>mean</b> averages the metrics, each scaled so that 1 is best. <b>rank</b> averages the places, <b>median</b> takes the middle place, and <b>worst</b> the lowest. <b>wins</b> counts how many other versions each one beats on more voters than it loses to. <b>kemeny</b> finds the order that the voters disagree with least. <b>pareto</b> puts first the versions that no other version beats on every voter, then repeats with the rest.</p><p>No rule is fair in every sense at once. This is Arrow's theorem. Where two rules agree, the ranking does not depend on the rule.</p>`)},
+      {target: "#objrule", title: "Choose the rule", uses: ["objective", "voter", "version"],
+       body: `<p>Pick a rule here to recompute this objective with it. This browser keeps your choice, and the suite's own rule is marked.</p><p>Below the versions, <b>Under every rule</b> shows each version's place under each rule, so you can see whether the winner depends on the rule.</p>`},
+      {target: "#addobj", title: "Your own objective", uses: ["objective", "metric"],
+       body: `<p>To weigh the metrics your own way, make an objective that adds up a transform of each metric. You type it in the side panel, and this browser keeps it.</p>`},
+      {target: "#colsmenu", title: "Columns", uses: ["objective", "metric"],
+       body: `<p>Hide and reorder the columns. This browser keeps your choice. The objectives still count every metric.</p>`},
+      {target: "#askbox", title: "Ask an AI about the results", uses: ["version", "metric"],
+       body: `<p>Pick a ready-made question or type your own. The prompt includes the results, what the metric measures and what changed between the versions.</p>`},
+      {target: "#viewseg", title: "Next",
+       body: () => `<p><b>Graph</b> takes you back to the computation.${ATLAS ? ` The last lesson, <b>${esc(TOURS.atlas.title)}</b>, shows every version of the method at once.` : ""}</p>`},
+    ],
+  },
+  atlas: {
+    title: "The atlas", about: "Every version of a method at once: finding, comparing and opening some together",
+    when: () => !!ATLAS && !!AT(),
+    steps: [
+      {title: "Atlases", teach: ["atlas", "relation"], uses: ["version", "method"],
+       body: center(`<p>An atlas is a folder that holds many versions of one method, with their results. It also records relations between versions.</p><p>The main relation is <i>made from</i>. Each new version is made from an earlier one, with a note on why. Other relations group versions to compare, such as alternatives to one step.</p>`)},
+      {before: () => view("atlas"), target: "#axcanvas", title: "Every version", uses: ["atlas", "version", "relation", "objective"],
+       body: `<p>Each card is one version. An arrow runs from a version to the versions made from it, so the cards form a tree. A card's shade shows its score on the objective chosen on the left.</p><p>Drag to move around, and scroll to zoom.</p>`},
+      {target: "#axleft", title: "Choosing what to see", teach: ["key", "view"], uses: ["suite", "objective", "relation", "version"],
+       body: `<p><b>Compared on</b> picks the suite and the objective that shade the versions. A key is a label on a version, such as <code>weighted=true</code>. <b>Keys</b>, <b>Relations</b> and <b>Tags</b> show only the versions you pick.</p><p>A view is a saved selection. <b>Views</b> lists them.</p>`},
+      {target: () => $("axq").parentElement, title: "Search", uses: ["version", "key", "step"],
+       body: `<p>Type to highlight versions, then press ${KEYS("Enter")} to keep only those. You can type <code>key:K=V</code>, <code>near:NAME~2</code>, <code>path:A..B</code>, <code>changed:STEP</code>, <code>score&gt;0.8</code> or plain words.</p>`},
+      {target: "#axmodes", title: "Other layouts", uses: ["version", "objective", "step", "relation"],
+       body: `<p><b>Matrix</b> shows every pair of versions, by their difference in the objective or by how many steps differ. <b>Sets</b> lists the relations, with their results.</p>`},
+      {target: "#axcanvas", title: "Inspect a version", uses: ["version"],
+       body: `<p>Click a version to read about it on the right.</p>`,
+       task: {label: "Click a version", start: () => AT().sel(), done: (s) => AT().sel()?.type === "v" && !same(AT().sel(), s), show: () => { const n = atlasPick(); if (n) AT().select(n); }}},
+      {target: "#axins", title: "The inspector", uses: ["version", "key", "relation"],
+       body: `<p>Here is the version: what it was made from and why, its keys, its scores and its relations. Its buttons put it on the shelf, focus on it or open it alone.</p>`},
+      {target: "#axcanvas", title: "Collect some", teach: ["shelf"], uses: ["version"],
+       body: `<p>The shelf collects versions to open together. Shift-click a version, or press ${KEYS("S")} with one selected, to put it on the shelf.</p>`,
+       task: {label: "Put a version on the shelf", start: () => AT().shelf().length, done: (n) => AT().shelf().length > n, show: () => { const n = atlasPick(); if (n) AT().shelve(n); }}},
+      {target: "#axshelf", title: "The shelf", uses: ["shelf", "version", "lane", "relation"],
+       body: `<p><b>Fill the path</b> adds the versions between the first and the last. <b>Compare the first two</b> shows what differs between them. <b>Open as stack</b> opens them all in lanes, each compared with the one before.</p>`},
+      {target: "#axask", title: "Ask AI", uses: ["version", "shelf"],
+       body: `<p>This writes what you are looking at as a prompt for your AI agent: the versions shown, the selection and the shelf.</p>`},
+      {target: "#axhint", title: "Keys", uses: ["version", "shelf"],
+       body: `<p>${KEYS("← → ↑ ↓")} walk from the selection to its parent, children and siblings. ${KEYS("S")} puts it on the shelf, ${KEYS("F")} focuses on it, and ${KEYS("Enter")} or a double-click opens it.</p>`},
+    ],
+  },
+};
+// each idea explained before a step uses it, across the lessons in order (a check for whoever edits them)
+(function checkLessons() {
+  const taught = new Set();
+  for (const [k, t] of Object.entries(TOURS)) t.steps.forEach((s, i) => {
+    for (const c of s.uses ?? []) if (!taught.has(c) && !(s.teach ?? []).includes(c)) console.warn(`tour ${k}, card ${i + 1} (${s.title}): uses “${c}” before any card explains it`);
+    for (const c of s.teach ?? []) { if (taught.has(c)) console.warn(`tour ${k}, card ${i + 1}: explains “${c}” again`); taught.add(c); }
+  });
+})();
+
+/* ---------- running a tour ---------- */
+let T = null;          // the tour running: {tour, steps, i, ctx, done, token}
+const ring = document.createElement("div"), card = document.createElement("div");
+ring.id = "tourring"; card.id = "tourcard"; card.setAttribute("role", "dialog");
+// a control at the foot of a panel (Ask an AI, below the side panel's fold): scroll that panel, only it and only down
+// or up, to show it (scrollIntoView would scroll every box around it, sideways too)
+function reveal(el) {
+  for (let p = el?.parentElement; p && p !== document.body; p = p.parentElement) {
+    if (!/auto|scroll/.test(getComputedStyle(p).overflowY) || p.scrollHeight <= p.clientHeight) continue;
+    const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect();
+    if (r.bottom > pr.bottom) p.scrollTop += Math.min(r.bottom - pr.bottom + 8, r.top - pr.top - 8);
+    else if (r.top < pr.top) p.scrollTop -= pr.top - r.top + 8;
+    return;
+  }
+}
+// the lessons this page has, in order; the ones finished in this browser; the one after a lesson
+const lessons = () => Object.keys(TOURS).filter((k) => !TOURS[k].when || TOURS[k].when());
+function doneLessons() { try { return new Set(JSON.parse(localStorage.getItem("headway.lessons") ?? "[]")); } catch { return new Set(); } }
+function markDone(k) { const d = doneLessons(); d.add(k); try { localStorage.setItem("headway.lessons", JSON.stringify([...d])); } catch {} }
+const nextLesson = (k) => { const a = lessons(); return a[a.indexOf(k) + 1] ?? null; };
+const targetOf = (s) => !s.target ? null : typeof s.target === "string" ? q(s.target) : shown(s.target());
+
+function start(key) {
+  closeMenu();
+  const tour = TOURS[key];
+  try { localStorage.setItem("headway.toured", "1"); } catch {}
+  $("tourbtn").classList.remove("pulse");
+  T = {key, tour, steps: tour.steps, i: 0, token: 0, seen: new Set(), next: nextLesson(key)};
+  document.body.append(ring, card);
+  go(0, 1);
+  requestAnimationFrame(track);
+}
+function end() {
+  T = null; ring.remove(); card.remove();
+}
+async function go(i, dir) {
+  if (!T) return;
+  const token = ++T.token;
+  while (i >= 0 && i < T.steps.length) {
+    const s = T.steps[i];
+    if (s.when && !s.when()) { i += dir; continue; }          // not for this page: at once, with no wait
+    await s.before?.();
+    // the control may come with a redraw: wait for it a little before leaving the step out
+    let el = null;
+    for (let t = 0; t < 12 && T?.token === token; t++) {
+      if (!s.when || s.when()) { el = targetOf(s); if (el || !s.target) break; }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    if (T?.token !== token) return;
+    if ((!s.when || s.when()) && (el || !s.target)) break;
+    i += dir;
+  }
+  if (i < 0 || i >= T.steps.length) { if (i < 0) return go(0, 1); return end(); }
+  T.i = i; T.done = false; T.ctx = T.steps[i].task?.start?.();
+  reveal(targetOf(T.steps[i]));
+  draw();
+}
+function draw() {
+  // counted: the steps shown so far, this one, and those after it that would be shown now
+  T.seen.add(T.i);
+  if (T.i === T.steps.length - 1) markDone(T.key);
+  const s = T.steps[T.i], at = [...T.seen].filter((k) => k < T.i).length + 1;
+  const n = at + T.steps.slice(T.i + 1).filter((x) => !x.when || x.when()).length, last = T.i === T.steps.length - 1, task = s.task;
+  const body = typeof s.body === "function" ? s.body() : s.body;
+  card.setAttribute("aria-label", s.title);
+  card.innerHTML = `<div class="tc-top"><span>${esc(T.tour.title)} · ${at} of ${n}</span><button data-t="close" title="Close the tour (Esc).">×</button></div>` +
+    `<h3>${esc(s.title)}</h3>${body}` +
+    (task ? `<div class="tc-task"><b>${esc(task.label)}</b>${task.show ? `<button data-t="show">${esc(task.showLabel ?? "Show me")}</button>` : ""}</div>` : "") +
+    `<div class="tc-btns"><button data-t="back"${T.i ? "" : " disabled"}>Back</button><span class="tc-bar"><i style="width:${(100 * at / n).toFixed(1)}%"></i></span>` +
+    (last && T.next ? `<button data-t="next">Done</button><button class="primary" data-t="lesson">Next lesson</button></div>`
+      : `<button class="primary" data-t="next">${last ? "Done" : task ? "Skip" : "Next"}</button></div>`);
+  T.placed = null;
+}
+card.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-t]");
+  if (!b || !T) return;
+  const t = b.dataset.t, s = T.steps[T.i];
+  if (t === "close") end();
+  else if (t === "back") go(T.i - 1, -1);
+  else if (t === "next") go(T.i + 1, 1);
+  else if (t === "show") s.task.show();
+  else if (t === "lesson") start(T.next);
+});
+// every frame: the ring follows its control (the graph pans, panels redraw), the card stays beside it, and a task
+// that has been done goes on by itself
+function track() {
+  if (!T) return;
+  const s = T.steps[T.i], el = targetOf(s);
+  const r = el?.getBoundingClientRect(), W = innerWidth, H = innerHeight, pad = 4;
+  let box = r && {left: Math.max(2, r.left - pad), top: Math.max(2, r.top - pad), right: Math.min(W - 2, r.right + pad), bottom: Math.min(H - 2, r.bottom + pad)};
+  if (box && (box.right - box.left < 4 || box.bottom - box.top < 4)) box = null;       // scrolled out of sight
+  const key = box ? `${box.left},${box.top},${box.right},${box.bottom},${W},${H},${card.offsetHeight}` : `none,${W},${H},${card.offsetHeight}`;
+  if (key !== T.placed) {
+    T.placed = key;
+    ring.classList.toggle("none", !box);
+    if (box) Object.assign(ring.style, {left: box.left + "px", top: box.top + "px", width: box.right - box.left + "px", height: box.bottom - box.top + "px"});
+    else Object.assign(ring.style, {left: "", top: "", width: "", height: ""});
+    const [x, y] = placeCard(box, W, H);
+    Object.assign(card.style, {left: x + "px", top: y + "px"});
+  }
+  if (s.task && !T.done && s.task.done(T.ctx)) {
+    T.done = true;
+    card.querySelector(".tc-task")?.classList.add("done");
+    card.querySelector('[data-t="show"]')?.remove();
+    const nx = card.querySelector('[data-t="next"]');
+    if (nx && T.i < T.steps.length - 1) nx.textContent = "Next";
+    const at = T.i, token = T.token;
+    setTimeout(() => { if (T && T.i === at && T.token === token && at < T.steps.length - 1) go(at + 1, 1); }, 900);
+  }
+  requestAnimationFrame(track);
+}
+// beside the control: below it, above, to the right or the left, whichever fits; over a large one, in a corner
+function placeCard(b, W, H) {
+  const cw = card.offsetWidth, ch = card.offsetHeight, m = 12, g = 8;
+  const cx = (x) => Math.max(g, Math.min(W - cw - g, x)), cy = (y) => Math.max(g, Math.min(H - ch - g, y));
+  if (!b) return [(W - cw) / 2, (H - ch) / 2];
+  if (b.bottom + m + ch <= H - g) return [cx(b.left), b.bottom + m];
+  if (b.top - m - ch >= g) return [cx(b.left), b.top - m - ch];
+  if (b.right + m + cw <= W - g) return [b.right + m, cy(b.top)];
+  if (b.left - m - cw >= g) return [b.left - m - cw, cy(b.top)];
+  return [cx(W - cw - 16), cy(H - ch - 16)];
+}
+
+/* ---------- the menu of tours, from the ? button or the ? key ---------- */
+const menu = document.createElement("div");
+menu.id = "tourmenu"; menu.setAttribute("role", "menu");
+function openMenu() {
+  if (T) end();
+  const avail = lessons(), done = doneLessons(), first = avail.find((k) => !done.has(k));
+  menu.innerHTML = `<p class="tm-head">Lessons, in order. Each one builds on those before it.</p>` +
+    avail.map((k, n) => `<button data-tour="${k}" role="menuitem"${k === first ? ' class="next"' : ""}><span class="tm-n">${n + 1}</span>${esc(TOURS[k].title)}${done.has(k) ? ' <span class="tm-done" title="You finished this lesson.">✓</span>' : ""}${k === first ? ` <span class="tm-tag">${done.size ? "next" : "start here"}</span>` : ""}<small>${esc(TOURS[k].about)}</small></button>`).join("") +
+    `<p>The lessons point at the page's own controls, and you can use them as you go. Press ${KEYS("?")} to open this menu.</p>`;
+  document.body.append(menu);
+  const r = $("tourbtn").getBoundingClientRect();
+  Object.assign(menu.style, {top: r.bottom + 6 + "px", left: Math.max(8, Math.min(innerWidth - menu.offsetWidth - 8, r.right - menu.offsetWidth)) + "px"});
+  (menu.querySelector("button.next") ?? menu.querySelector("button"))?.focus();
+}
+function closeMenu() { menu.remove(); }
+menu.addEventListener("click", (e) => { const b = e.target.closest("[data-tour]"); if (b) start(b.dataset.tour); });
+document.addEventListener("click", (e) => { if (menu.isConnected && !e.target.closest("#tourmenu, #tourbtn")) closeMenu(); });
+$("tourbtn").hidden = false;
+$("tourbtn").onclick = () => menu.isConnected ? closeMenu() : openMenu();
+try { if (!localStorage.getItem("headway.toured")) $("tourbtn").classList.add("pulse"); } catch {}
+// before the page's own keys (captured), so that while a tour runs its keys are the tour's
+document.addEventListener("keydown", (e) => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (menu.isConnected && e.key === "Escape") { e.preventDefault(); e.stopImmediatePropagation(); closeMenu(); return; }
+  if (inField(e)) return;
+  if (e.key === "?" && $("library").hidden) { e.preventDefault(); e.stopImmediatePropagation(); menu.isConnected ? closeMenu() : openMenu(); return; }
+  if (!T) return;
+  const act = {Escape: "close", ArrowRight: "next", ArrowLeft: "back"}[e.key];
+  if (!act) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (act === "close") end(); else if (act === "next") go(T.i + 1, 1); else go(T.i - 1, -1);
+}, true);
+})();
+</script>
 <script>
 wireTheme();
 libWire();
@@ -4835,10 +5254,10 @@ if (D && D.atlas) {
   const start = path.length ? path : ATLAS.order.filter((n) => ATLAS_V[n]).slice(-1);
   const copy = (n) => JSON.parse(JSON.stringify(ATLAS_V[n]));
   D = start.length ? Object.assign(copy(start.at(-1)), {lanes: start.slice(0, -1).map((n) => ({name: n, from: "atlas " + ATLAS.name, data: copy(n)}))}) : null;
-  if (!D) document.body.innerHTML = `<p style="padding:20px">The atlas ${esc(ATLAS.name)} has no versions yet: add one with headway build SPEC --atlas DIR --name NAME.</p>`;
+  if (!D) document.body.innerHTML = `<p style="padding:20px">The atlas ${esc(ATLAS.name)} has no versions yet. Add one with headway build SPEC --atlas DIR --name NAME.</p>`;
 }
 const runScript = (id) => { const s = document.createElement("script"); s.textContent = $(id).textContent; document.body.append(s); };
-if (D) { runScript("viewer-main"); if (ATLAS) runScript("atlas-main"); }
+if (D) { runScript("viewer-main"); if (ATLAS) runScript("atlas-main"); runScript("tour-main"); }
 else if (!ATLAS) openLibrary(true);
 </script>
 </body>
