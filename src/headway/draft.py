@@ -18,8 +18,10 @@ import copy
 import hashlib
 import importlib.util
 import io
+import itertools
 import keyword
 import re
+import sys
 import tokenize
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
@@ -29,7 +31,7 @@ from typing import Any
 import beniget  # type: ignore[import-untyped]
 
 from headway import shapes
-from headway.codetex import MODULES, SAME, _notation, _output_only, neighbours
+from headway.codetex import _notation, _output_only, neighbours
 from headway.resolve import RefError, _anchored
 from headway.typeinfo import Types
 
@@ -173,20 +175,6 @@ def _locate(top: str, search: list[Path]) -> Path:
     raise DraftError(f"no package {top} under {', '.join(map(str, search))} or on the Python path")
 
 
-def axes_reader(file: str, name: str = "") -> Callable[[ast.expr], list[str] | None]:
-    """The named axes a type hint in the file gives an array (shapes.py): read with the file's imports and type
-    aliases (codetex's indices, with hints). name: the file's module, for its relative imports."""
-    try:
-        m = _parse(name, Path(file))
-    except (OSError, SyntaxError, UnicodeDecodeError):
-        return lambda ann: None
-
-    def full(dotted: str) -> str:
-        head, _, rest = dotted.partition(".")
-        return m.imports.get(head, head) + ("." + rest if rest else "")
-    return lambda ann: shapes.dims(ann, full, m.aliases.get)
-
-
 def _parse(name: str, file: Path) -> Module:
     text = file.read_text()
     tree = ast.parse(text, str(file))
@@ -212,7 +200,7 @@ def _parse(name: str, file: Path) -> Module:
                 imports[a.asname or a.name] = f"{source}.{a.name}"
     aliases: dict[str, ast.expr] = {}
     for st in tree.body:
-        if isinstance(st, getattr(ast, "TypeAlias", ())) and isinstance(st.name, ast.Name):   # `type X = ...` (3.12+)
+        if sys.version_info >= (3, 12) and isinstance(st, ast.TypeAlias):     # `type X = ...`
             aliases[st.name.id] = st.value
         elif isinstance(st, ast.AnnAssign) and isinstance(st.target, ast.Name) and st.value is not None \
                 and (st.annotation.attr if isinstance(st.annotation, ast.Attribute) else
@@ -283,14 +271,17 @@ class Drafter:
         self.hints = hints                      # type hints taken as assumptions (headway init --hints)
         self.lines = lines                      # an assignment by other code: a step of its own (--clean)
         self.opening: list[str] = []                # the functions being opened up, outermost first
-        self.skipped: set[int] = set()              # the nodes of branches that are not taken (decided by literals)
-        # an assignment in a loop that iterates -> (the loop's last line, what assigned the variable before it)
+        # an assignment in a loop that iterates, or in an if that decides values (clean code) -> (the loop's or
+        # the if's last line, what assigned the variable before it)
         self.exits: dict[int, tuple[int, set[int]]] = {}
         self.per_element: dict[ast.expr, str | None] = {}   # a comprehension -> the index it is done per
         self.types = Types.of_package(package.folder) if hints and infer else None   # what mypy infers from them
-        self.changing: dict[str, dict[str, int]] = {}   # a function -> the parameters it changes, and where
+        self.changing: dict[str, dict[str, int]] = {}   # a function -> the parameters it changes, and where first
+        self.param_lines: dict[str, dict[str, list[int]]] = {}  # a function -> each parameter -> every line changing it
         self.change_lines: dict[str, set[int]] = {}     # a function -> every line that changes a parameter
-        self.overrides: list[tuple[Function, str, ast.stmt, list[Held]]] = []   # a call changed a variable
+        # a call changed a variable: (the function, the group of its call, the variable, the call's statement, what
+        # it holds after)
+        self.overrides: list[tuple[Function, str, str, ast.stmt, list[Held]]] = []
         self.drawn: set[tuple[str, int]] = set()    # (function, line): changes in place drawn as edges
         self.symbols: dict[str, Sym] = {}
         self.steps: list[Step] = []
@@ -324,13 +315,10 @@ class Drafter:
         key = self.symbol(name, "setting")
         sym = self.symbols[key]
         sym.code = [ref]
-        try:
-            value = _fields(s.node)[name].value
-            sym.value = ast.literal_eval(value) if value is not None else None
-        except ValueError:
-            pass
-        field_line = _fields(s.node)[name].lineno if name in _fields(s.node) else 0
-        said = _comment(s.module.lines, field_line) or _documented(_docs(s.node), name)
+        a = _fields(s.node)[name]                       # (a settings field always has a default)
+        with contextlib.suppress(ValueError, TypeError, SyntaxError):
+            sym.value = ast.literal_eval(a.value)       # type: ignore[arg-type]
+        said = _comment(s.module.lines, a.lineno) or _documented(_docs(s.node), name)
         if said:
             sym.desc = said
         return key
@@ -374,8 +362,7 @@ class Drafter:
         argument with no indices yet takes them from the annotation."""
         if not self.hints:
             return {}
-        annotations = {a.arg: a.annotation for a in (*f.node.args.posonlyargs, *f.node.args.args,
-                                                     *f.node.args.kwonlyargs)}
+        annotations = _param_annotations(f)
         bound: dict[str, str] = {}
         pending = []
         for p, a in _given(f, call):
@@ -395,8 +382,7 @@ class Drafter:
 
     def param_axes(self, f: Function) -> set[str]:
         """The axis names f's parameters' annotations use."""
-        return {n for a in (*f.node.args.posonlyargs, *f.node.args.args, *f.node.args.kwonlyargs)
-                for n in self.shape(f.module, a.annotation) or ()}
+        return {n for ann in _param_annotations(f).values() for n in self.shape(f.module, ann) or ()}
 
     def axes(self, axes: list[str] | None, bound: dict[str, str], params: set[str], ref: str) -> list[str]:
         """A shape's indices, all or none: an axis name bound in the call is the caller's index; one only the result
@@ -408,6 +394,12 @@ class Drafter:
         for d in out:
             self.indices.setdefault(d, f"an axis named in the type hints of {ref}")
         return out
+
+    def scope_axes(self, scope: Scope, ann: ast.expr | None) -> list[str]:
+        """The indices of a value of the walked function annotated with a shape (axes()): its axis names bound as
+        the call bound them; in the entry function, the names are its own indices."""
+        params = self.param_axes(scope.fn) - set(scope.axes) if scope.group else set()
+        return self.axes(self.shape(scope.fn.module, ann), scope.axes, params, scope.fn.ref)
 
     def give(self, key: str, axes: list[str] | None, bound: dict[str, str], ref: str, params: set[str]) -> None:
         """A symbol's indices from a shape (axes()), if it has none yet."""
@@ -433,8 +425,7 @@ class Drafter:
         if where not in self.gaps:
             key = self.symbol(p.name, "input")
             sym = self.symbols[key]
-            anchor = _anchor(p.fn, p.st)
-            sym.code = [f"{p.fn.ref}#{anchor}" if anchor else p.fn.ref]
+            sym.code = [_located(p.fn, p.st)]
             sym.desc = (f"TODO. Made by the code at {p.fn.module.file.name}:{p.st.lineno}, not by a step: headway "
                         "init does not follow values through code between steps.")
             sym.dims = list(p.dims)
@@ -502,7 +493,7 @@ class Drafter:
             if ann is None:
                 return None
             kinds.append(self.kind(where, ann))
-        return kinds[0] if kinds and all(k is kinds[0] or k == kinds[0] for k in kinds) else None
+        return kinds[0] if kinds and all(k == kinds[0] for k in kinds) else None
 
     def kind(self, m: Module, ann: ast.expr) -> str | ast.ClassDef | None:
         if isinstance(ann, ast.Constant) and isinstance(ann.value, str):     # "NDArray[np.float64]"
@@ -543,6 +534,7 @@ class Drafter:
         if f.ref in seen:
             return {}
         out: dict[str, int] = {}
+        lines: dict[str, list[int]] = {}
         m = f.module
         params = set(f.params)
 
@@ -576,9 +568,10 @@ class Drafter:
                 for sub in ast.walk(t):
                     if isinstance(sub, (ast.Subscript, ast.Attribute)) and isinstance(sub.ctx, ast.Store):
                         found.append(param(_root(sub)))
+            # (beniget chains the target name of x += e to its earlier definitions, as it does a read)
             if isinstance(st, ast.AugAssign) and isinstance(st.target, ast.Name) and self.hints \
-                    and self.hint(f, _load(st.target)) == "array":
-                found.append(param(_load(st.target)))
+                    and self.hint(f, st.target) == "array":
+                found.append(param(st.target))
             for c in (n for e in ast.iter_child_nodes(st) if isinstance(e, ast.expr) for n in ast.walk(e)
                       if isinstance(n, ast.Call)):
                 if _module_call(m, c, "numpy"):
@@ -596,8 +589,11 @@ class Drafter:
             for hit in found:
                 if hit is not None:
                     out.setdefault(hit, st.lineno)
+                    if st.lineno not in lines.setdefault(hit, []):
+                        lines[hit].append(st.lineno)
                     self.change_lines.setdefault(f.ref, set()).add(st.lineno)
         self.changing[f.ref] = out
+        self.param_lines[f.ref] = lines
         return out
 
     def view_of(self, f: Function, e: ast.expr) -> ast.Name | None:
@@ -628,9 +624,11 @@ class Drafter:
             return self.types.kind(f.module.file, i.lineno, i.col_offset, i.id) in ("slice", "scalar")
         return False
 
-    def changed_by(self, scope: Scope, f: Function, call: ast.Call, st: ast.stmt, made: Callable[[str], Held]) -> None:
-        """After a call to f, each variable it was given for a parameter it changes holds what made(variable)
-        gives: the step's changed value, or, for a group, a gap (changed by plain code within it)."""
+    def changed_by(self, scope: Scope, f: Function, call: ast.Call, st: ast.stmt,
+                   made: Callable[[str, str], Held]) -> None:
+        """After a call to f, each variable it was given for a parameter it changes holds what
+        made(variable, parameter) gives: the step's changed value, or, for a group, a gap (changed by plain code
+        within it)."""
         changed = self.changes(f)
         rebound = {n.id for t in getattr(st, "targets", [getattr(st, "target", None)]) if t is not None
                    for n in ast.walk(t) if isinstance(n, ast.Name)}
@@ -639,14 +637,16 @@ class Drafter:
                 self.drawn.add((scope.fn.ref, st.lineno))
                 self.drawn |= {(f.ref, line) for line in self.change_lines.get(f.ref, ())}
                 if a.id not in rebound:                 # x = f(x): x is rebound to the result anyway
-                    self.overrides.append((scope.fn, a.id, st, [made(a.id)]))
+                    self.overrides.append((scope.fn, scope.group, a.id, st, [made(a.id, p)]))
 
     def opens(self, f: Function, depth: int) -> bool:
         """Whether a call to f is opened up into a group: it calls the package's functions itself (and is not
         being opened already: a recursive call is a step)."""
-        if self.lines and any(isinstance(n, (ast.For, ast.While)) and _carried(n) for n in _own_nodes(f.node)):
+        if self.lines and any(isinstance(n, (ast.For, ast.While)) and _carried(n, f.module)
+                              for n in _own_nodes(f.node)):
             return False                                # clean code: a function that iterates is one action
-        return depth > 0 and f.ref not in self.opening and any(isinstance(n, ast.Call) and self.is_step(f, n) for n in _own_nodes(f.node))
+        return depth > 0 and f.ref not in self.opening and any(
+            isinstance(n, ast.Call) and self.is_step(f, n) for n in _own_nodes(f.node))
 
     def is_step(self, fn: Function, call: ast.Call) -> bool:
         t = self.target(fn, call.func)
@@ -661,7 +661,7 @@ class Drafter:
         m = scope.fn.module
         mine = {id(n) for n in ast.walk(scope.fn.node)}
         defs = [d.node for d in m.chains().get(use, []) if (outside is None or id(d.node) not in outside)
-                and id(d.node) not in self.skipped]     # what a branch that is not taken assigns: never
+                and id(d.node) not in scope.skipped]    # what a branch that is not taken assigns: never
         for node in list(defs):
             if id(node) in self.exits and use.lineno > self.exits[id(node)][0]:
                 # after an iteration: what it left (which comes from what came into it), not what came in
@@ -670,12 +670,14 @@ class Drafter:
             if node in self.held:
                 out += self.held[node]
             elif isinstance(node, ast.arg) and node.arg in scope.params:
-                line = self.changes(scope.fn).get(node.arg)
-                if line is not None and line < use.lineno:
-                    # changed in place before here (on some path): what it holds then is made by this code
-                    at = next(n for n in _own_nodes(scope.fn.node) if isinstance(n, ast.stmt) and n.lineno == line)
-                    out.append(Plain(scope.fn, at, node.arg, scope.group))  # type: ignore[arg-type]
+                at = self.changed_here(scope, node.arg, use.lineno)
+                if at is not None:
+                    # changed in place before here by this code: what it holds then is made by it; and, if the
+                    # change is not on every path to here (in a branch, a loop), what it was given too
+                    out.append(Plain(scope.fn, at, node.arg, scope.group))
                     self.drawn |= {(scope.fn.ref, n) for n in self.change_lines.get(scope.fn.ref, ())}
+                    if not _branches(m, at) <= _branches(m, use):
+                        out += scope.params[node.arg]
                 else:
                     out += scope.params[node.arg]
             elif isinstance(node, ast.Name) and isinstance(_unpacked(m, node), ast.comprehension):
@@ -690,16 +692,30 @@ class Drafter:
                 out.append(frozenset([self.constant(m, node.id, st)]))
         return self.changed(scope, use, out)
 
+    def changed_here(self, scope: Scope, param: str, before: int) -> ast.stmt | None:
+        """The first statement of the walked function, before line `before`, that changes the parameter in place by
+        its own code: not by a step's call (changed() puts that in), nor in a branch this call does not take."""
+        self.changes(scope.fn)
+        for line in sorted(self.param_lines.get(scope.fn.ref, {}).get(param, [])):
+            if line >= before:
+                break
+            at = next((n for n in _own_nodes(scope.fn.node) if isinstance(n, ast.stmt) and n.lineno == line), None)
+            by_step = any(fn.node is scope.fn.node and group == scope.group and name == param and st.lineno == line
+                          for fn, group, name, st, _ in self.overrides)
+            if at is not None and not by_step and id(at) not in scope.skipped:
+                return at
+        return None
+
     def changed(self, scope: Scope, use: ast.Name, out: list[Held]) -> list[Held]:
         """A variable read after a call that changed it in place holds what the call made of it: instead of what
         it held, if the call is on every path from its assignment to here; as well, if not (in a branch, a loop)."""
         m = scope.fn.module
-        defs = [d.node for d in m.chains().get(use, [])]
-        for fn, name, st, held in self.overrides:
-            if fn.node is not scope.fn.node or name != use.id or st.lineno >= use.lineno \
+        defs = [d.node for d in m.chains().get(use, []) if id(d.node) not in scope.skipped]
+        for fn, group, name, st, held in self.overrides:
+            if fn.node is not scope.fn.node or group != scope.group or name != use.id or st.lineno >= use.lineno \
                     or any(getattr(d, "lineno", 0) > st.lineno for d in defs):
                 continue
-            if _blocks(m, st) <= _blocks(m, use):
+            if _branches(m, st) <= _branches(m, use):
                 out = list(held)
             else:
                 out = out + held
@@ -710,10 +726,9 @@ class Drafter:
         for sym in self.symbols.values():
             if sym.code == [ref]:
                 return sym.key
-        try:
+        value = None
+        with contextlib.suppress(ValueError, TypeError, SyntaxError):
             value = ast.literal_eval(st.value)
-        except ValueError:
-            value = None
         key = self.symbol(name, "constant" if value is not None else "input")
         self.symbols[key].code, self.symbols[key].value = [ref], value
         return key
@@ -849,21 +864,32 @@ class Drafter:
         if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Import, ast.ImportFrom,
                            ast.Global, ast.Nonlocal, ast.Pass, ast.Break, ast.Continue)):
             return
+        # a parameter assigned here no longer holds the literal it was given, so the ifs after it are not decided
+        # by it. A loop's or an undecided if's assignments count before its body is walked: a loop runs its body
+        # again (an if early in it comes after an assignment later in it); for an if, conservatively, as in clean
+        # code it may be one step (decides()), its branches not walked one by one. A with's and a try's bodies are
+        # walked in order.
+        known = _evaluated(st.test, scope.constants) if isinstance(st, ast.If) else None
+        stores: list[ast.AST] = [] if isinstance(st, ast.Try) else \
+            [w.optional_vars for w in st.items if w.optional_vars] if isinstance(st, (ast.With, ast.AsyncWith)) \
+            else [st.test] if isinstance(st, ast.If) and known is not None else [st]
+        for n in (n for h in stores for n in ast.walk(h)):
+            if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store):
+                scope.constants.pop(n.id, None)
         if self.lines and isinstance(st, (ast.For, ast.While)) and not st.orelse and self.loop(scope, st):
             return
         if isinstance(st, ast.If):
             self.calls(scope, st.test, st)
-            known = _evaluated(st.test, scope.constants)
             if known is not None:
                 # decided by literals alone (this call's, or the defaults it leaves): only the branch taken
-                skipped = st.orelse if known else st.body
-                self.skipped |= {id(n) for b in skipped for n in ast.walk(b)}
+                skipped, taken = (st.orelse, st.body) if known else (st.body, st.orelse)
+                scope.skipped |= {id(n) for b in skipped for n in ast.walk(b)}
                 if skipped:
                     given = ", ".join(f"{k} = {scope.constants[k]!r}" for k in sorted(
                         {n.id for n in ast.walk(st.test) if isinstance(n, ast.Name)} & set(scope.constants)))
                     self.note(scope, f"the branch at line {skipped[0].lineno} is not drafted: `{ast.unparse(st.test)}` "
                                      f"is {known} here ({given})")
-                self.body(scope, st.body if known else st.orelse)
+                self.body(scope, taken)
                 return
             if self.lines and self.decides(scope, st):
                 return
@@ -885,7 +911,7 @@ class Drafter:
             self.body(inner, st.body)
             self.body(scope, st.orelse)
             return
-        if isinstance(st, (ast.If, ast.While)):
+        if isinstance(st, ast.While):
             self.calls(scope, st.test, st)
             self.body(scope, st.body)
             self.body(scope, st.orelse)
@@ -914,13 +940,8 @@ class Drafter:
             if by_line is not None:
                 scope.returned[:] = _join(scope.returned, [by_line])
                 return
-        if isinstance(st, ast.Return):
-            items = value.elts if isinstance(value, ast.Tuple) else [value]
-            got = [h for e in items for h in (self.held_by(scope, e, scope.fn.node.name, st)
-                                             if not isinstance(e, ast.Tuple) else [[]])]
-            if not isinstance(value, ast.Tuple):
-                got = self.held_by(scope, value, scope.fn.node.name, st)
-            scope.returned[:] = _join(scope.returned, got)
+        if isinstance(st, ast.Return):                  # a tuple: one item per element (held_by)
+            scope.returned[:] = _join(scope.returned, self.held_by(scope, value, scope.fn.node.name, st))
             return
         if isinstance(st, ast.Expr):
             return
@@ -965,19 +986,17 @@ class Drafter:
         names = {n.id: same for n in ast.walk(value) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                  and (same := self.identity(scope, n)) is not None}
         names |= {n.id: o for n, o in zip(assigned, outs)}
-        anchor = _anchor(scope.fn, st)
         label = ", ".join(n.id for n in assigned)
         key = self._key("_".join(n.id for n in assigned), {x.key for x in self.steps})
         self.record(scope, Step(key, label.replace("_", " "), sorted(inputs), outs,
-                               [f"{scope.fn.ref}#{anchor}" if anchor else scope.fn.ref], scope.group, per,
+                               [_located(scope.fn, st)], scope.group, per,
                                None, names))
         for n, o in zip(assigned, outs):
             self.held[n] = [frozenset([o])]
         if self.hints and isinstance(value, ast.Name) and isinstance(targets[0], (ast.Tuple, ast.List)):
             # unpacking a parameter: each part shaped as the parameter's annotation says its items are
             for n, part in self.parts(scope.fn.module, targets[0], _param_annotation(scope.fn, value.id)):
-                axes = self.axes(self.shape(scope.fn.module, part), scope.axes, self.param_axes(scope.fn) - set(
-                    scope.axes) if scope.group else set(), scope.fn.ref)
+                axes = self.scope_axes(scope, part)
                 o = outs[assigned.index(n)]
                 self.symbols[o].dims = self.symbols[o].dims or axes
         return True
@@ -1009,10 +1028,9 @@ class Drafter:
         out = self.symbol(name, per=scope.per)
         names = {n.id: same for n in ast.walk(e) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                  and (same := self.identity(scope, n)) is not None} | {"return": out}
-        anchor = _anchor(scope.fn, st)
         key = self._key(name, {x.key for x in self.steps})
         self.record(scope, Step(key, name.replace("_", " "), sorted(inputs), [out],
-                               [f"{scope.fn.ref}#{anchor}" if anchor else scope.fn.ref], scope.group, scope.per,
+                               [_located(scope.fn, st)], scope.group, scope.per,
                                None, names))
         return [frozenset([out])]
 
@@ -1020,8 +1038,7 @@ class Drafter:
         """x: Float[np.ndarray, "cells genes"] = ...: the value assigned has that shape (bound as the function's
         own axis names are; in the entry function, the names are its own indices)."""
         assert isinstance(st.target, ast.Name) and st.value is not None
-        axes = self.axes(self.shape(scope.fn.module, st.annotation), scope.axes, self.param_axes(scope.fn) - set(
-            scope.axes) if scope.group else set(), scope.fn.ref)
+        axes = self.scope_axes(scope, st.annotation)
         if not axes:
             return
         for h in self.held.get(st.target, []):          # what the assignment bound
@@ -1076,21 +1093,34 @@ class Drafter:
         self.step(scope, t, e, st)
 
     def loop(self, scope: Scope, st: ast.For | ast.While) -> bool:
-        """In clean code, a for loop whose body carries values from turn to turn (assigns a variable and reads it
-        back: an iteration): one step, as an iteration is one action. Its inputs are what comes into the loop (the
-        start values, and what every turn reads), its outputs the variables it assigns that are read after it; its
-        equation is the loop written as an algorithm (codetex). The calls inside it are part of it, not steps. False if it carries
-        nothing: its steps are then done per its index, as any loop's."""
-        if not _carried(st):
+        """In clean code, a for or while loop whose body carries values from turn to turn (assigns a variable and
+        reads it back: an iteration): one step, as an iteration is one action. Its inputs are what comes into the
+        loop (the start values, and what every turn reads), its outputs the variables it assigns that are read after
+        it; its equation is the loop written as an algorithm (codetex). The calls inside it are part of it, not
+        steps. False if it carries nothing: its steps are then done per its index, as any loop's."""
+        if not _carried(st, scope.fn.module):
             return False
         inside = {id(n) for n in ast.walk(st)}
         inputs = self.reads(scope, st, outside=inside)
+        for t in (n.target for n in ast.walk(st) if isinstance(n, ast.AugAssign)):
+            if isinstance(t, ast.Name):                 # x += e reads x's start value
+                inputs |= self.keys(self.resolve(scope, t, outside=inside))
         later = {n.id for n in _own_nodes(scope.fn.node) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                  and n.lineno > (st.end_lineno or st.lineno)}
         made = [n for n in ast.walk(st) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)]
         own = _names(st.target) if isinstance(st, ast.For) else []
         outputs = [v for v in dict.fromkeys(n.id for n in made) if v in later and v not in own]
         outs = [self.symbol(v, per=scope.per) for v in outputs]
+        self.exit(scope, st, made, outputs, outs)
+        names = self.coming_in(scope, st, inside, skip=set(outputs))
+        key = self._key("_".join(outputs) or "loop", {x.key for x in self.steps})
+        self.record(scope, Step(key, ", ".join(outputs).replace("_", " ") or "loop", sorted(inputs), outs,
+                                [_located(scope.fn, st)], scope.group, scope.per, None, names))
+        return True
+
+    def exit(self, scope: Scope, st: ast.stmt, made: list[ast.Name], outputs: list[str], outs: list[str]) -> None:
+        """The variables a loop or an if (one step) assigns that are read after it: each holds its symbol, and a
+        read after it sees that, not what was assigned before it (exits)."""
         for n in made:
             if n.id in outputs:
                 self.held[n] = [frozenset([outs[outputs.index(n.id)]])]
@@ -1098,19 +1128,22 @@ class Drafter:
                     id(x) for x in _own_nodes(scope.fn.node) if isinstance(x, ast.Name) and x.id == n.id
                     and isinstance(x.ctx, ast.Store) and x.lineno < st.lineno}
                 self.exits[id(n)] = (st.end_lineno or st.lineno, before)
-        names: dict[str, str] = {}                      # what comes in as one symbol: written as it
+
+    def coming_in(self, scope: Scope, st: ast.stmt, inside: set[int], skip: Collection[str] = (),
+                  fields: bool = False) -> dict[str, str]:
+        """names= of a loop or an if (one step): each variable it reads (but skip) that comes into it as one
+        symbol, written as that symbol; with fields, also each settings or record field that is one."""
+        names: dict[str, str] = {}
         for x in ast.walk(st):
-            if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load) and x.id not in outputs:
+            if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load) and x.id not in skip:
                 held = self.resolve(scope, x, outside=inside)
                 keys = self.keys(held)
                 if held and len(keys) == 1 and not any(isinstance(h, (Derived, Settings, Record)) for h in held):
                     names[x.id] = next(iter(keys))
-        anchor = _anchor(scope.fn, st)
-        key = self._key("_".join(outputs) or "loop", {x.key for x in self.steps})
-        self.record(scope, Step(key, ", ".join(outputs).replace("_", " ") or "loop", sorted(inputs), outs,
-                                [f"{scope.fn.ref}#{anchor}" if anchor else scope.fn.ref], scope.group, scope.per,
-                                None, names))
-        return True
+            elif fields and isinstance(x, ast.Attribute) and isinstance(x.value, ast.Name) \
+                    and (k := self.identity(scope, x)):
+                names[ast.unparse(x)] = k
+        return names
 
     def decides(self, scope: Scope, st: ast.If) -> bool:
         """In clean code, an if that decides values: its branches only assign, and each value it assigns that is
@@ -1143,28 +1176,12 @@ class Drafter:
             was = [self.symbols[k].dims for k in self.keys(kept[v])]
             if was and all(d == was[0] for d in was):
                 self.symbols[o].dims = list(was[0])
-        for n in made:
-            if n.id in outputs:
-                self.held[n] = [frozenset([outs[outputs.index(n.id)]])]
-                before = {id(a) for a in ast.walk(scope.fn.node.args) if isinstance(a, ast.arg) and a.arg == n.id} | {
-                    id(x) for x in _own_nodes(scope.fn.node) if isinstance(x, ast.Name) and x.id == n.id
-                    and isinstance(x.ctx, ast.Store) and x.lineno < st.lineno}
-                self.exits[id(n)] = (st.end_lineno or st.lineno, before)    # after it: what it decided
-        names: dict[str, str] = {}
-        for x in ast.walk(st):
-            if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load):
-                held = self.resolve(scope, x, outside=inside)
-                keys = self.keys(held)
-                if held and len(keys) == 1 and not any(isinstance(h, (Derived, Settings, Record)) for h in held):
-                    names[x.id] = next(iter(keys))
-            elif isinstance(x, ast.Attribute) and isinstance(x.value, ast.Name) and (k := self.identity(scope, x)):
-                names[ast.unparse(x)] = k
+        self.exit(scope, st, made, outputs, outs)       # after it: what it decided
+        names = self.coming_in(scope, st, inside, fields=True)
         names |= {v + "=": o for v, o in zip(outputs, outs)}   # how the step writes what it assigns
-        anchor = _anchor(scope.fn, st)
         key = self._key("_".join(outputs), {x.key for x in self.steps})
         self.record(scope, Step(key, ", ".join(outputs).replace("_", " "), sorted(inputs), outs,
-                                [f"{scope.fn.ref}#{anchor}" if anchor else scope.fn.ref], scope.group, scope.per,
-                                None, names))
+                                [_located(scope.fn, st)], scope.group, scope.per, None, names))
         return True
 
     def comprehension(self, scope: Scope, e: ast.ListComp | ast.GeneratorExp, st: ast.stmt) -> None:
@@ -1213,15 +1230,13 @@ class Drafter:
             if self.hints and isinstance(over, ast.Name):
                 ann = _param_annotation(scope.fn, over.id)
                 for n, part in self.parts(scope.fn.module, target, _element(ann)):
-                    axes = self.axes(self.shape(scope.fn.module, part), scope.axes, self.param_axes(scope.fn) - set(
-                        scope.axes) if scope.group else set(), scope.fn.ref)
+                    axes = self.scope_axes(scope, part)
                     o = outs[names.index(n)]
                     self.symbols[o].dims = self.symbols[o].dims or axes
             if inputs:
-                anchor = _anchor(scope.fn, st)
                 key = self._key("_".join(n.id for n in names), {x.key for x in self.steps})
                 self.record(scope, Step(key, ", ".join(n.id for n in names).replace("_", " "), sorted(inputs), outs,
-                                       [f"{scope.fn.ref}#{anchor}" if anchor else scope.fn.ref], scope.group,
+                                       [_located(scope.fn, st)], scope.group,
                                        inner.per, None, {n.id: o for n, o in zip(names, outs)}))
         self.calls(inner, e.elt, st)
         self.per_element[e] = inner.per
@@ -1313,17 +1328,13 @@ class Drafter:
             if len(keys) == 1 and len(item) == 1:       # it returns a step's result as it is: that is described
                 self.described(next(iter(keys)), r.description, r.type_name, f.ref)
         changed = self.changes(f)
-        first = {p: line for p, line in changed.items()}
+        annotated = _param_annotations(f)
 
-        annotated = {a.arg: a.annotation for a in (*f.node.args.posonlyargs, *f.node.args.args,
-                                                   *f.node.args.kwonlyargs)}
-        param_of = {v.id: p for p, v in _given(f, call) if isinstance(v, ast.Name)}
-
-        def made(variable: str) -> Held:                # changed by the code inside the group: a gap
-            line = min(first.values())
+        def made(variable: str, param: str) -> Held:    # changed by the code inside the group: a gap
+            line = changed[param]                       # (the first line that changes the parameter)
             at = next((n for n in _own_nodes(f.node) if isinstance(n, ast.stmt) and n.lineno == line), f.node)
             gap = Plain(f, at, variable, path)  # type: ignore[arg-type]
-            gap.dims = self.axes(self.shape(f.module, annotated.get(param_of.get(variable, ""))), axes,
+            gap.dims = self.axes(self.shape(f.module, annotated.get(param)), axes,
                                  self.param_axes(f), f.ref)
             return gap
         self.changed_by(scope, f, call, st, made)
@@ -1332,27 +1343,26 @@ class Drafter:
     def step(self, scope: Scope, t: Function | ast.ClassDef, call: ast.Call, st: ast.stmt) -> None:
         if isinstance(t, Function):
             ref, name = t.ref, (t.cls + "." if t.cls else "") + t.node.name
-            params = t.params
         else:
-            ref, name, params = f"{self.package.owner(t).name}:{t.name}", t.name, []
-        given = [*((params[k] if k < len(params) else None, a) for k, a in enumerate(call.args)),
-                 *((k.arg, k.value) for k in call.keywords)]
+            ref, name = f"{self.package.owner(t).name}:{t.name}", t.name
         inputs: set[str] = set()
         names: dict[str, str] = {}
         if isinstance(t, Function) and t.cls and isinstance(call.func, ast.Attribute):
             inputs |= self.reads(scope, call.func.value)        # a method: what it is called on
-        for p, a in given:
+        for a in (*call.args, *(k.value for k in call.keywords)):
             inputs |= self.reads(scope, a)
+        for p, a in _given(t, call) if isinstance(t, Function) else ():
             same = self.identity(scope, a)
-            if p and same:                              # the parameter holds that symbol, as it is
+            if same:                                    # the parameter holds that symbol, as it is
                 names[p] = same
         per = scope.per
         if per and per not in self.indices:
             self.indices[per] = f"the loop around {ref}"
         outs = [self.symbol(n, per=per) for n in _assigned(st, call, self.lines)] or \
             ([] if isinstance(st, ast.Expr) and st.value is call else [self.symbol(name, per=per)])
-        anchor = _anchor(scope.fn, st)
-        code = [ref] + ([f"{scope.fn.ref}#{anchor}"] if anchor else [])
+        if len(outs) == 1:                              # what the call returns (not a variable it changes)
+            names["return"] = outs[0]
+        code = [ref] + ([f"{scope.fn.ref}#{anchor}"] if (anchor := _anchor(scope.fn, st)) else [])
         key = self._key(name.replace(".", "_"), {s.key for s in self.steps})
         result: list[list[Held]] = [[frozenset([o])] for o in outs] if len(outs) > 1 else [[frozenset(outs)]]
         bound = self.unify(scope, t, call) if isinstance(t, Function) else {}
@@ -1370,14 +1380,12 @@ class Drafter:
             for o, r in zip(outs, documented):
                 self.described(o, r.description, r.type_name, ref)
         if isinstance(t, Function):                 # the variables it changes in place: outputs of it too
-            annotated = {a.arg: a.annotation for a in (*t.node.args.posonlyargs, *t.node.args.args,
-                                                       *t.node.args.kwonlyargs)}
-            param_of = {v.id: p for p, v in _given(t, call) if isinstance(v, ast.Name)}
+            annotated = _param_annotations(t)
 
-            def made(variable: str) -> Held:
+            def made(variable: str, param: str) -> Held:
                 changed = self.symbol(variable, per=per)
                 outs.append(changed)                   # shaped as the parameter it was given for
-                self.give(changed, self.shape(t.module, annotated.get(param_of.get(variable, ""))), bound, ref,
+                self.give(changed, self.shape(t.module, annotated.get(param)), bound, ref,
                           named_axes)
                 return frozenset([changed])
             self.changed_by(scope, t, call, st, made)
@@ -1399,6 +1407,9 @@ class Scope:
         self.axes: dict[str, str] = {}              # its axis names, bound to the caller's indices
         self.when: list[str] = []                   # the tests of the ifs it is in (else: negated), of symbols
         self.constants: dict[str, object] = {}      # parameters given a literal (or left to a literal default)
+        # the nodes of the branches this call does not take (decided by its literals): another call of the same
+        # function, with other arguments, may take them
+        self.skipped: set[int] = set()
 
 
 def _join(a: list[list[Held]], b: list[list[Held]]) -> list[list[Held]]:
@@ -1498,9 +1509,12 @@ def _shape(type_name: str | None) -> list[str] | None:
 
 
 def _given(f: Function, call: ast.Call) -> list[tuple[str, ast.expr]]:
-    """Each parameter of f a call gives an argument for, with the argument."""
+    """Each parameter of f a call gives an argument for, with the argument. Positional arguments fill the
+    positional parameters only, up to the first one unpacked (f(x, *rest): the parameters after x are not known)."""
     params = f.params
-    return [*zip(params, call.args), *((k.arg, k.value) for k in call.keywords if k.arg and k.arg in params)]
+    positional = params[:len(params) - len(f.node.args.kwonlyargs)]
+    given = list(itertools.takewhile(lambda x: not isinstance(x, ast.Starred), call.args))
+    return [*zip(positional, given), *((k.arg, k.value) for k in call.keywords if k.arg and k.arg in params)]
 
 
 def _root(e: ast.expr) -> ast.expr:
@@ -1508,10 +1522,6 @@ def _root(e: ast.expr) -> ast.expr:
     while isinstance(e, (ast.Subscript, ast.Attribute)):
         e = e.value
     return e
-
-
-def _load(t: ast.Name) -> ast.Name:
-    return t                    # (beniget chains a target name of x += e to its earlier definitions too)
 
 
 def _module_call(m: Module, c: ast.Call, module: str) -> bool:
@@ -1535,18 +1545,6 @@ def _is_static(fn: ast.FunctionDef) -> bool:
     return any(_dotted_name(d) == "staticmethod" for d in fn.decorator_list)
 
 
-def _blocks(m: Module, node: ast.AST) -> set[int]:
-    """The compound statements (if, for, while, try, with) a node is inside, up to its function."""
-    out = set()
-    parents = m.parents()
-    node = parents.get(node)  # type: ignore[assignment]
-    while node is not None and not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
-        if isinstance(node, (ast.If, ast.For, ast.AsyncFor, ast.While, ast.Try, ast.With, ast.AsyncWith)):
-            out.add(id(node))
-        node = parents.get(node)  # type: ignore[assignment]
-    return out
-
-
 def _in_place(fn: ast.FunctionDef) -> list[tuple[int, str]]:
     """The lines of a function's own code that may change a value in place, unseen by its bindings: updates
     (x += e), stores into part of a value (x[i] = e, x.a = e), out= arguments, and calls whose result is unused
@@ -1554,8 +1552,7 @@ def _in_place(fn: ast.FunctionDef) -> list[tuple[int, str]]:
     out = []
     for st in (n for n in _own_nodes(fn) if isinstance(n, ast.stmt)):
         targets = st.targets if isinstance(st, ast.Assign) else [st.target] if isinstance(st, ast.AnnAssign) else []
-        stores = any(isinstance(t, (ast.Subscript, ast.Attribute)) for tt in targets for t in ast.walk(tt)
-                     if not isinstance(t, ast.Name))
+        stores = any(isinstance(t, (ast.Subscript, ast.Attribute)) for tt in targets for t in ast.walk(tt))
         unused = isinstance(st, ast.Expr) and isinstance(st.value, ast.Call) and not _output_only(st.value)
         with_out = any(isinstance(c, ast.Call) and any(k.arg == "out" for k in c.keywords)
                        for e in ast.iter_child_nodes(st) if isinstance(e, ast.expr) for c in ast.walk(e))
@@ -1591,13 +1588,74 @@ def _own_nodes(fn: ast.FunctionDef) -> list[ast.AST]:
     return out
 
 
-def _carried(st: ast.For | ast.While) -> list[str]:
-    """The variables a loop's body assigns (by its own statements) and reads: what may carry from turn to turn."""
-    assigned = [n.id for b in st.body if isinstance(b, (ast.Assign, ast.AnnAssign)) for t in (
-        b.targets if isinstance(b, ast.Assign) else [b.target]) for n in ast.walk(t)
-        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)]
-    read = {n.id for b in st.body for n in ast.walk(b) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
-    return [v for v in dict.fromkeys(assigned) if v in read]
+def _carried(st: ast.For | ast.While, m: Module | None = None) -> list[str]:
+    """The variables a loop carries from turn to turn: those a read in its body (or a while's test) may find as an
+    earlier turn left them. That is, the read can be reached by an assignment in the loop that does not come
+    before it on every path through a turn: one later in the body, in the same statement (x = x + 1, x += e), or
+    in a branch or an inner loop the read is not in. A value assigned and then read in the same turn (y = f(v);
+    g(y)) is not carried; nor are the loop's variables, nor a comprehension's. m: the module the loop is in; without
+    it, the loop is read alone (what it reads from before it is not needed)."""
+    if m is None:
+        alone = ast.FunctionDef("_", ast.arguments([], [], None, [], [], None, []), [st], [], None, None, [])
+        m = Module("", Path(""), [], {}, {}, tree=ast.Module([alone], []))
+    inside = {id(n) for n in ast.walk(st)}
+    parents = m.parents()
+    reads: list[ast.Name] = []
+
+    def visit(n: ast.AST) -> None:
+        for c in ast.iter_child_nodes(n):
+            if isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)):
+                continue
+            if isinstance(c, ast.Name) and (isinstance(c.ctx, ast.Load) or isinstance(parents.get(c), ast.AugAssign)):
+                reads.append(c)
+            visit(c)
+    visit(st)
+    out: list[str] = []
+    for r in reads:
+        for d in m.chains().get(r, []):
+            node = d.node
+            if node is r and isinstance(r.ctx, ast.Load):   # (beniget gives a name it cannot bind as its own def)
+                continue
+            if id(node) not in inside or not isinstance(node, ast.Name) \
+                    or isinstance(_unpacked(m, node), ast.comprehension):
+                continue
+            owner = _owner_stmt(m, node)
+            if owner is None:
+                continue
+            # before the read in this turn: its statement ends before the read, or it is in the header of a
+            # statement (a for's variables, a with's) whose body holds the read
+            ended = (owner.end_lineno or owner.lineno, owner.end_col_offset or 0) <= (r.lineno, r.col_offset)
+            header = _owner_stmt(m, r) is not owner and owner in _ancestors(m, r)
+            if not ((ended or header) and _branches(m, node) <= _branches(m, r)):
+                out.append(r.id)
+                break
+    return list(dict.fromkeys(out))
+
+
+def _ancestors(m: Module, node: ast.AST) -> list[ast.AST]:
+    """The nodes a node is inside, innermost first."""
+    parents = m.parents()
+    out = []
+    while (node := parents.get(node)) is not None:  # type: ignore[assignment]
+        out.append(node)
+    return out
+
+
+def _branches(m: Module, node: ast.AST) -> set[tuple[int, str]]:
+    """The blocks of statements a node is inside: (a compound statement, which of its parts: body, orelse, a
+    handler, finalbody). A statement runs on every path on which another (after it, or later in a loop's turn) runs
+    if its blocks are among the other's."""
+    out = set()
+    child = node
+    for parent in _ancestors(m, node):
+        if isinstance(parent, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Module)):
+            break
+        for name, value in ast.iter_fields(parent):
+            if isinstance(child, (ast.stmt, ast.excepthandler)) and isinstance(value, list) \
+                    and any(v is child for v in value):
+                out.add((id(parent), name))
+        child = parent
+    return out
 
 
 def _relations(f: Function) -> list[dict[str, Any]]:
@@ -1639,11 +1697,13 @@ def _relations(f: Function) -> list[dict[str, Any]]:
 
 
 def _literals(f: Function, call: ast.Call) -> dict[str, object]:
-    """f's parameters a call gives a literal (f(x, 2)), or leaves to a literal default (def f(x, k=None))."""
+    """f's parameters a call gives a literal (f(x, 2)), or leaves to a literal default (def f(x, k=None)). A call
+    that unpacks arguments (f(*xs), f(**kw)) may give any parameter: no default is taken."""
     a = f.node.args
     positional = [*a.posonlyargs, *a.args]
     out: dict[str, object] = {}
-    for p, default in [*zip(positional[len(positional) - len(a.defaults):], a.defaults),
+    unpacks = any(isinstance(x, ast.Starred) for x in call.args) or any(k.arg is None for k in call.keywords)
+    for p, default in [] if unpacks else [*zip(positional[len(positional) - len(a.defaults):], a.defaults),
                        *zip(a.kwonlyargs, a.kw_defaults)]:
         if default is not None:
             with contextlib.suppress(ValueError, TypeError, SyntaxError):
@@ -1710,9 +1770,20 @@ def _field_of(held: list[Held], attr: str) -> list[Held] | None:
     return None
 
 
-def _param_annotation(f: Function, name: str) -> ast.expr | None:
+def _param_annotations(f: Function) -> dict[str, ast.expr | None]:
+    """Each parameter of f (self too) -> its annotation, or None."""
     a = f.node.args
-    return next((x.annotation for x in (*a.posonlyargs, *a.args, *a.kwonlyargs) if x.arg == name), None)
+    return {x.arg: x.annotation for x in (*a.posonlyargs, *a.args, *a.kwonlyargs)}
+
+
+def _param_annotation(f: Function, name: str) -> ast.expr | None:
+    return _param_annotations(f).get(name)
+
+
+def _located(f: Function, st: ast.stmt) -> str:
+    """The code reference of a statement of f: f's, with the anchor of the statement's lines if there is one."""
+    anchor = _anchor(f, st)
+    return f"{f.ref}#{anchor}" if anchor else f.ref
 
 
 def _element(ann: ast.expr | None) -> ast.expr | None:
@@ -1725,6 +1796,11 @@ def _element(ann: ast.expr | None) -> ast.expr | None:
         return sl.elts[0] if len(sl.elts) == 2 and isinstance(sl.elts[1], ast.Constant) \
             and sl.elts[1].value is Ellipsis else None
     return sl
+
+
+MODULES = {"np", "numpy", "math", "scipy", "sp"}     # names of modules: np.asarray(x) is a function, x.copy() a method
+SAME = {"asarray", "array", "asanyarray", "ascontiguousarray", "copy", "astype", "float32", "float64", "float_",
+        "view", "to_numpy", "float", "list", "tuple"}       # conversions that keep the values and their axes
 
 
 def _converted(e: ast.expr) -> ast.expr | None:
@@ -1770,7 +1846,8 @@ def _passes_through(node: ast.ClassDef) -> bool:
 
 
 def _anchor(f: Function, st: ast.stmt) -> str:
-    """An anchor ("#first..last" or "#first") that picks out exactly the statement's lines in f, or ""."""
+    """An anchor ("first..last", to follow the function's reference and a "#") that picks out exactly the
+    statement's lines in f, or "" if there is none."""
     first_line = min([f.node.lineno, *(d.lineno for d in f.node.decorator_list)])
     lines = f.module.lines[first_line - 1:f.node.end_lineno]
     a, b = st.lineno - first_line, (st.end_lineno or st.lineno) - first_line
@@ -1962,8 +2039,8 @@ def _write(d: Drafter, entry: str, depth: int, top: str, hints: bool = False, cl
             args.append(f"relations={step.relations!r}")
         # how the code's names are written as math ("From the code"): as the symbols they hold
         names = {n: k for n, k in step.names.items() if k in var}
-        if len(step.outputs) == 1:                  # what the call returns
-            names["return"] = step.outputs[0]
+        if step.call is None and len(step.outputs) == 1:    # a line, loop or if of other code: what it makes
+            names.setdefault("return", step.outputs[0])     # (a call's step says what it returns itself)
         if names:
             args.append("names={" + ", ".join(f"{n!r}: {var[k]}" for n, k in names.items()) + "}")
         out.append("G.op(" + ",\n     ".join(_wrap(args)) + ")")

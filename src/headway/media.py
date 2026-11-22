@@ -236,10 +236,12 @@ EXCERPT_PX = 2000           # an excerpt's longer side in pixels, when no dpi is
 EXCERPT_DPI = (200, 600)    # the range that dpi is chosen in
 
 
-def excerpt_dpi(path: Path, page: int, box: tuple[float, float, float, float] | None) -> int:
+def excerpt_dpi(path: Path, page: int, box: tuple[float, float, float, float] | None,
+                size: tuple[float, float] | None = None) -> int:
     """The resolution that gives an excerpt about EXCERPT_PX pixels on its longer side, within EXCERPT_DPI: a small
-    panel is rendered finely enough to read when enlarged, a whole page not needlessly large."""
-    w, h, _ = page_size(path, page)
+    panel is rendered finely enough to read when enlarged, a whole page not needlessly large. size: the page's (width,
+    height) in points, if known already."""
+    w, h = size or page_size(path, page)[:2]
     l, t, r, b = box if box is not None else (0, 0, 1, 1)
     inches = max((r - l) * w, (b - t) * h) / 72
     return int(min(max(EXCERPT_PX / inches, EXCERPT_DPI[0]), EXCERPT_DPI[1]))
@@ -252,11 +254,11 @@ def excerpt(path: Path, page: int, box: tuple[float, float, float, float] | None
     if not exe:
         raise RuntimeError("an excerpt of a PDF needs poppler's pdftoppm (apt install poppler-utils, brew install "
                            "poppler)")
+    w, h, _ = page_size(path, page) if box is not None or dpi is None else (0.0, 0.0, 0)
     if dpi is None:
-        dpi = excerpt_dpi(path, page, box)
+        dpi = excerpt_dpi(path, page, box, (w, h))
     crop: list[str] = []
     if box is not None:
-        w, h, _ = page_size(path, page)
         px = [round(f * s * dpi / 72) for f, s in zip(box, (w, h, w, h))]
         crop = ["-x", str(px[0]), "-y", str(px[1]), "-W", str(max(px[2] - px[0], 1)), "-H", str(max(px[3] - px[1], 1))]
     with tempfile.TemporaryDirectory() as tmp:
@@ -288,6 +290,6 @@ def assets(d: dict[str, Any]) -> set[str]:
     for kind in ("ops", "symbols", "groups"):
         for x in d.get(kind, []):
             out.update(m["path"] for m in x.get("media", []) if m.get("path") and not m.get("src"))
-    for lane in d.get("lanes", []):
-        out |= assets(lane)
+    for lane in d.get("lanes", []):                     # {"name", "from", "data"}, as api.lanes makes them
+        out |= assets(lane.get("data", {}))
     return out

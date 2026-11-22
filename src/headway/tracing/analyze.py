@@ -3,18 +3,17 @@
   paths(trace, function)    the distinct paths its calls took (the branches, each line to the line it went to),
                             how many calls took each, and how many times its loops ran (survey §6)
   index_sets(trace)         its arrays' axes grouped into index sets, by their sizes over the calls: two axes are
-                            one set if their sizes agree on every call that has both, and the sets a size alone
-                            cannot separate are said to be ambiguous (survey §7)
+                            one set if their sizes agree on every call that has both (survey §7)
 """
 from __future__ import annotations
 
-import ast
 import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from headway.tracing.record import Call, Trace, Value
+from headway.tracing.tracer import NOT_FOLLOWED
 
 
 # ---- paths ---------------------------------------------------------------------------------------------------
@@ -38,16 +37,15 @@ def paths(trace: Trace, function: str) -> list[Path_]:
             p.loops[b] += n
         if p.example is None:
             p.example = c.id
-    f = next((f for k, f in trace.functions.items() if k == function or k.split(":")[-1] == function
-              or k.endswith(":" + function)), None)
+    f = trace.function(function)
     if f is not None:                                   # calls past the cap on stored calls: counted by path
         for key_text, n in f.more_paths.items():
-            key = frozenset({key_text}) if key_text.startswith("(") else frozenset(b for b in key_text.split("|")
-                                                                                      if b)
+            key = frozenset({key_text}) if key_text == NOT_FOLLOWED else frozenset(b for b in key_text.split("|")
+                                                                                       if b)
             p = out.setdefault(key, Path_(key))
             p.calls += n
-        # their loop counts: shared out over the paths in proportion is not known; added to the paths that
-        # have the branch
+        # their loop counts: how to share them out over the paths is not known; added to the first path that
+        # has the branch
         for b, n in f.more_branches.items():
             having = [p for p in out.values() if b in p.branches]
             if having:
@@ -55,29 +53,38 @@ def paths(trace: Trace, function: str) -> list[Path_]:
     return sorted(out.values(), key=lambda p: -p.calls)
 
 
-def _back(branch: str) -> bool:
-    """A branch to an earlier line: a loop going round again (its count is the loop's iterations), not a choice."""
-    a, _, b = branch.partition(">")
-    return a.isdigit() and b.isdigit() and int(b) < int(a)
-
-
 def describe_paths(trace: Trace, function: str) -> str:
     ps = paths(trace, function)
     if not ps:
         return f"{function}: no calls"
     total = sum(p.calls for p in ps)
-    common = ps[0].branches
+    raised = [p for p in ps if _raised(p)]
+    followed = [p for p in ps if NOT_FOLLOWED not in p.branches and not _raised(p)]
+    common = followed[0] if followed else None
     source = _source(trace, function)
-    lines = [f"{function}: {total} calls, {len(ps)} paths"]
-    for i, p in enumerate(ps):
-        differs = sorted(p.branches ^ common, key=_line_of) if i else []
-        head = "the most common path" if not i else "differs at " + "; ".join(
-            f"{'took' if b in p.branches else 'not'} {_branch_text(b, source)}" for b in differs[:4])
+    lines = [f"{function}: {total} calls, {len(followed)} paths" + (f", {sum(p.calls for p in raised)} raised"
+                                                                     if raised else "")]
+    for p in ps:
+        if p is common:
+            head = "the most common path"
+        elif _raised(p):                                # its key: the exception, not the branches it took
+            head = next(iter(p.branches))
+        elif common is None or NOT_FOLLOWED in p.branches:
+            head = "path not followed (sys.settrace follows the recorded calls only)"
+        else:
+            differs = sorted(p.branches ^ common.branches, key=_line_of)
+            head = "differs at " + "; ".join(
+                f"{'took' if b in p.branches else 'not'} {_branch_text(b, source)}" for b in differs[:4])
         repeated = [(b, n / p.calls) for b, n in p.loops.items() if n > p.calls]   # taken more than once a call
         loops = ", ".join(f"line {_line_of(b)}: {k:.3g} times a call" for b, k in
                           sorted(repeated, key=lambda bk: _line_of(bk[0]))[:3])
         lines.append(f"  {p.calls:6d} ({p.calls / total:.1%})  {head}" + (f"  [loops {loops}]" if loops else ""))
     return "\n".join(lines)
+
+
+def _raised(p: Path_) -> bool:
+    """Whether a path is that of calls an exception left ("raised ValueError")."""
+    return len(p.branches) == 1 and next(iter(p.branches)).startswith("raised ")
 
 
 def _line_of(branch: str) -> int:
@@ -86,8 +93,7 @@ def _line_of(branch: str) -> int:
 
 
 def _source(trace: Trace, function: str) -> dict[int, str]:
-    f = next((f for k, f in trace.functions.items() if k == function or k.endswith(":" + function)
-              or k.split(":")[-1] == function), None)
+    f = trace.function(function)
     if f is None or not Path(f.file).exists():
         return {}
     return dict(enumerate(Path(f.file).read_text().splitlines(), 1))
@@ -121,8 +127,7 @@ class Slot:
 class IndexSet:
     name: str
     slots: list[Slot]
-    sizes: list[int]                    # the distinct sizes it had
-    ambiguous: list[str] = field(default_factory=list)  # other sets it could not be told from (same sizes)
+    sizes: list[int]                    # the distinct sizes it had (one only: not told apart by size)
 
 
 def _shapes(c: Call) -> dict[str, list[int]]:
@@ -228,9 +233,6 @@ def index_sets(trace: Trace, functions: list[str] | None = None) -> list[IndexSe
     for members in groups.values():
         sizes = sorted({n for m in members for _, n in seen[m]})
         sets.append(IndexSet("", [slots[m] for m in members], sizes))
-    # sets that could not be told apart: the same single size everywhere they were seen
-    for s in sets:
-        s.ambiguous = [str(i) for i, o in enumerate(sets) if o is not s and len(s.sizes) == 1 and o.sizes == s.sizes]
     _name(sets)
     return sorted(sets, key=lambda s: (-len(s.slots), s.name))
 
@@ -288,7 +290,7 @@ def renamed(sets: list[IndexSet], names: dict[str, str]) -> list[IndexSet]:
     return sets
 
 
-__all__ = ["paths", "describe_paths", "index_sets", "describe_sets", "signatures", "renamed", "ast"]
+__all__ = ["paths", "describe_paths", "index_sets", "describe_sets", "signatures", "renamed"]
 
 
 # ---- configuration and environment ----------------------------------------------------------------------------

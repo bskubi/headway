@@ -13,14 +13,14 @@ import builtins
 import copy
 import textwrap
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from headway import shapes
 from headway.core import libs
 from headway.core.libs import Call
-from headway.core.terms import (NEW, OPTIMUM, SCALAR, UNKNOWN, Align, Apply, Assume, Axis, Binder, Build, Cases, Const,
+from headway.core.terms import (NEW, OPTIMUM, UNKNOWN, Align, Apply, Assume, Axis, Binder, Build, Cases, Const,
                                 Effect, Extent, Lambda, Optimum,
                                 Expr, Field, For, If, Item, Jump, Let, Mapping, Op, Program, Range, Return,
                                 SetPart, Shape, Sig, SliceKey, Stmt, Text, Tup, Unwritten, Var, While, broadcast,
@@ -39,8 +39,9 @@ ARRAY_TYPES = {"numpy.ndarray": "numpy.ndarray", "numpy.typing.NDArray": "numpy.
 SEQUENCES = {"list", "typing.List", "Sequence", "typing.Sequence", "collections.abc.Sequence", "Iterable",
              "typing.Iterable", "collections.abc.Iterable", "List"}
 BINOPS = {ast.Add: "add", ast.Sub: "sub", ast.Mult: "mul", ast.Div: "div", ast.Pow: "pow", ast.Mod: "mod",
-          ast.FloorDiv: "floordiv", ast.MatMult: "matmul", ast.BitAnd: "and", ast.BitOr: "or",
-          ast.LShift: "lshift", ast.RShift: "rshift"}
+          ast.FloorDiv: "floordiv", ast.MatMult: "matmul", ast.BitAnd: "bitand", ast.BitOr: "bitor",
+          ast.BitXor: "bitxor", ast.LShift: "lshift", ast.RShift: "rshift"}
+LOGICAL = {"bitand": "and", "bitor": "or"}      # & and | of booleans: logical (of integers they are bitwise)
 COMPARES = {ast.Eq: "eq", ast.NotEq: "ne", ast.Lt: "lt", ast.LtE: "le", ast.Gt: "gt", ast.GtE: "ge",
             ast.Is: "is", ast.IsNot: "isnot", ast.In: "in", ast.NotIn: "notin"}
 
@@ -357,19 +358,17 @@ class Lowerer:
         params = []
         for a in args:
             s = self.env.get(a.arg) if a.arg in self.given else None
-            if s is None and self.hints:
-                hinted0 = self.shape_of(a.annotation)
-                if hinted0.type in TABLES and hinted0.sig is None:      # a table's rows: an index set of its own
-                    self.env[a.arg] = Shape(hinted0.type, (self.axis(a.arg),), columns=hinted0.columns)
-                    self.given.add(a.arg)
-                    s = self.env[a.arg]
-            hinted = self.shape_of(a.annotation) if self.hints and a.annotation is not None else UNKNOWN
+            hinted = self.shape_of(a.annotation) if self.hints else UNKNOWN
+            if s is None and hinted.type in TABLES and hinted.sig is None:  # a table's rows: an index set of its own
+                self.env[a.arg] = Shape(hinted.type, (self.axis(a.arg),))
+                self.given.add(a.arg)
+                s = self.env[a.arg]
             if s is not None and s.type == "list" and s.elem is not None and hinted.type != "list":
                 s = s.elem                  # a family's symbol, given to a function of one of its elements
             if s is not None and hinted.type:                   # given: its kind from its annotation
-                s = Shape(hinted.type or s.type, s.sig, hinted.parts, hinted.elem, hinted.dtype or s.dtype)
+                s = Shape(hinted.type, s.sig, hinted.parts, hinted.elem, hinted.dtype or s.dtype)
             if s is None:
-                s = self.shape_of(a.annotation) if self.hints else UNKNOWN
+                s = hinted
             self.env[a.arg] = s
             params.append((a.arg, s.sig, s.type))
         body = fn.body[1:] if _docstring(fn.body) else fn.body
@@ -392,11 +391,13 @@ class Lowerer:
     def stmt(self, st: ast.stmt) -> list[Stmt]:
         line = self.line(st)
         if isinstance(st, ast.Expr):
-            if isinstance(st.value, ast.Constant):
-                return []                                   # a docstring, a bare constant
+            if isinstance(st.value, (ast.Yield, ast.YieldFrom, ast.Await)):
+                raise Unsupported                           # a generator's yield, a coroutine's await
+            if isinstance(st.value, (ast.Constant, ast.Name, ast.Attribute)):
+                return []                                   # a docstring, a bare constant or name: no effect
             if not isinstance(st.value, ast.Call):
-                return []
-            if _output_only(st.value):
+                raise Unsupported                           # [out.append(v) for v in xs], (y := f(x)): not written
+            if _output_only(st.value, self.env):
                 return []                                   # printing, logging: not math
             dest = next((k.value for k in st.value.keywords if k.arg == "out"), None)
             if isinstance(dest, ast.Name):                  # np.clip(x, a, b, out=x): x <- ...
@@ -418,7 +419,7 @@ class Lowerer:
         if isinstance(st, (ast.Pass, ast.Import, ast.ImportFrom, ast.ClassDef, ast.Delete,
                            ast.Raise, ast.Global, ast.Nonlocal)):
             return []
-        if isinstance(st, (ast.Assign, ast.AnnAssign)) and st.value is not None and isinstance(st.value, ast.Call) \
+        if isinstance(st, (ast.Assign, ast.AnnAssign)) and isinstance(st.value, ast.Call) \
                 and isinstance(st.value.func, ast.Name) and st.value.func.id in self.inline \
                 and (lines := self.inlined(st)) is not None:
             return lines
@@ -477,8 +478,18 @@ class Lowerer:
             return [If(test, tuple(body), tuple(orelse), line=line)]
         if isinstance(st, (ast.Continue, ast.Break)):
             return [Jump("continue" if isinstance(st, ast.Continue) else "break", line=line)]
-        if isinstance(st, (ast.With, ast.Try)):
+        if isinstance(st, ast.With):
             return self.block(st.body)
+        if isinstance(st, ast.Try):                     # its handlers are not written: the whole try is not
+            # (nor one whose finally returns or jumps: that would replace what the body returns)
+            if st.handlers or any(isinstance(n, (ast.Return, ast.Break, ast.Continue)) for b in st.finalbody
+                                  for n in ast.walk(b)):
+                raise Unsupported
+            # nor one whose body leaves by a return, break or continue while there is a finally: Python runs the
+            # finally then, the statements written one after the other would not
+            if st.finalbody and any(_exits(b) for b in st.body):
+                raise Unsupported
+            return self.block(st.body) + self.block(st.finalbody)       # (no else without handlers)
         raise Unsupported
 
     def merge(self, a: dict[str, Shape], b: dict[str, Shape]) -> None:
@@ -626,7 +637,9 @@ class Lowerer:
     def inlined(self, st: ast.Assign | ast.AnnAssign) -> list[Stmt] | None:
         """x = f(a, b), f one of the functions to write in place: f's own statements, its parameters replaced by
         what the call gives, its return assigned to x. None if it cannot be (a parameter f reassigns given other
-        than a variable, a return before the end, an argument it does not take)."""
+        than a variable, a return before the end, an argument it does not take, a name f assigns that the code here
+        already has or that an argument reads, or, for a function of the module, a module name f reads that the
+        code here has as a variable: written in place, f's name and the code's would be one)."""
         call = st.value
         assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
         helper = self.inline[call.func.id]
@@ -652,6 +665,21 @@ class Lowerer:
                   and isinstance(n.ctx, ast.Store)}
         if any(p in stored and not isinstance(x, ast.Name) for p, x in given.items()):
             return None
+        target_node = st.targets[0] if isinstance(st, ast.Assign) else st.target
+        target_name = target_node.id if isinstance(target_node, ast.Name) else None
+        # the names f's statements assign, once written here (a parameter's: the variable given for it)
+        assigned = {x.id if isinstance(x := given.get(n), ast.Name) else n for n in stored}
+        read = {n.id for x in given.values() for n in ast.walk(x) if isinstance(n, ast.Name)}
+        if any(n != target_name and n in self.env for n in assigned) or (stored - set(given)) & read:
+            return None
+        # a function of the module reads its free names from the module: written here, a variable of the code of
+        # the same name would be read instead (a function defined in this one reads this one's: the same)
+        if self.local_defs.get(call.func.id) is not helper:
+            params_all = {p.arg for p in (*params, *a.kwonlyargs)} | {x.arg for x in (a.vararg, a.kwarg) if x}
+            free = {n.id for b in helper.body for n in ast.walk(b) if isinstance(n, ast.Name)
+                    and isinstance(n.ctx, ast.Load)} - params_all - stored
+            if free & set(self.env):
+                return None
 
         class Rename(ast.NodeTransformer):
             def visit_Name(self, n: ast.Name) -> ast.AST:
@@ -717,8 +745,14 @@ class Lowerer:
             vals = [self.expr(x) for x in e.values]
             out = vals[0]
             for w in vals[1:]:
-                out = Apply("and" if isinstance(e.op, ast.And) else "or", (out, w), sig=broadcast(out.sig, w.sig),
-                            type="bool", dtype="bool")
+                if _boolean(out) and _boolean(w):
+                    sig, typ, dtype = broadcast(out.sig, w.sig), "bool", "bool"
+                else:                                   # k or default: the value of one of them, not a bool
+                    sig = out.sig if out.sig == w.sig else None
+                    typ = out.type if out.type == w.type else ""
+                    dtype = out.dtype if out.dtype == w.dtype else ""
+                out = Apply("andthen" if isinstance(e.op, ast.And) else "orelse", (out, w), sig=sig, type=typ,
+                            dtype=dtype)
             return out
         if isinstance(e, ast.Compare):
             left = self.expr(e.left)
@@ -729,8 +763,8 @@ class Lowerer:
                                    type=_array_type(left, r) or "bool", dtype="bool"))
                 left = r
             out = parts[0]
-            for p in parts[1:]:                         # a < b < c: a < b and b < c
-                out = Apply("and", (out, p), sig=broadcast(out.sig, p.sig), type=_array_type(out, p) or "bool",
+            for p in parts[1:]:                         # a < b < c: a < b and b < c (Python's and)
+                out = Apply("andthen", (out, p), sig=broadcast(out.sig, p.sig), type=_array_type(out, p) or "bool",
                             dtype="bool")
             return out
         if isinstance(e, ast.IfExp):
@@ -764,7 +798,10 @@ class Lowerer:
             over, where, before = self.generators(e.generators)
             body = self.expr(e.elt)
             self.env = before
-            return Build(body, over, where, type="list", elem=body.shape)
+            family = Build(body, over, where, type="list", elem=body.shape)
+            if isinstance(e, ast.SetComp):              # {f(x) for x in xs}: the set of the family's values
+                return Op("set", (family,), qualname="builtins.set", type="set")
+            return family
         if isinstance(e, ast.DictComp):
             over, where, before = self.generators(e.generators)
             pair = (self.expr(e.key), self.expr(e.value))
@@ -789,8 +826,6 @@ class Lowerer:
             return Op("format", (Text(template, type="str"), *values), qualname="builtins.str.format", known=True,
                       type="str", sig=broadcast(*(v.sig for v in values)) if values and all(
                           v.sig is not None for v in values) else ())
-        if isinstance(e, ast.Starred):
-            raise Unsupported
         raise Unsupported
 
     def generators(self, gens: list[ast.comprehension]) -> tuple[tuple[Binder, ...], Expr | None, dict[str, Shape]]:
@@ -806,7 +841,7 @@ class Lowerer:
             over.append(Binder(var, domain))
             for c in g.ifs:
                 t = self.expr(c)
-                where = t if where is None else Apply("and", (where, t), sig=(), type="bool")
+                where = t if where is None else Apply("andthen", (where, t), sig=(), type="bool")
         return tuple(over), where, before
 
     def name(self, e: ast.Name) -> Expr:
@@ -882,7 +917,10 @@ class Lowerer:
             fn = self.module.functions[node.id]
         else:
             return None
-        params = [a.arg for a in (*fn.args.posonlyargs, *fn.args.args)]
+        a = fn.args
+        if a.kwonlyargs or a.vararg or a.kwarg or a.defaults:
+            return None                                 # parameters a call need not give: not one expression
+        params = [p.arg for p in (*a.posonlyargs, *a.args)]
         if not params:
             return None
         given = dict(self.env)
@@ -955,12 +993,16 @@ class Lowerer:
         name = BINOPS.get(type(op))
         if name is None:
             raise Unsupported
-        if {a.type, b.type} & {"dict", "set"} and name in ("or", "and", "xor", "sub"):
+        if {a.type, b.type} & {"dict", "set"} and name in ("bitor", "bitand", "bitxor", "sub"):
             raise Unsupported                           # a merge, union, intersection or difference: not elementwise
+        if name in ("bitand", "bitor", "bitxor"):
+            # of booleans: and, or (masks combined; both sides evaluated, unlike Python's and, or); else bitwise
+            boolean = _boolean(a) and _boolean(b)
+            kind = _array_type(a, b) or ("bool" if boolean else "int" if "int" in (a.type, b.type) else "")
+            return Apply(LOGICAL.get(name, name) if boolean else name, (a, b), sig=broadcast(a.sig, b.sig), type=kind,
+                         dtype="bool" if boolean else "")
         typ = _array_type(a, b) or ("int" if a.type == b.type == "int" and name not in ("div", "pow") else
                                     "float" if a.sig == () and b.sig == () else "")
-        if name in ("and", "or"):
-            return Apply(name, (a, b), sig=broadcast(a.sig, b.sig), type=typ or "bool", dtype="bool")
         if name == "matmul":
             entry = libs.function(_library_of(a, b) + ".matmul")
             if entry is not None and (out := entry(Call("matmul", [a, b], {}, self))) is not None:
@@ -980,8 +1022,11 @@ class Lowerer:
             args = [self.expr(a) for a in e.args]
             lam = self.function_value(f, [a.shape for a in args])
             if isinstance(lam, Lambda) and len(lam.over) == len(args):
-                from headway.core.fold import substitute
-                return substitute(lam.body, {b.var: a for b, a in zip(lam.over, args) if isinstance(b.var, str)})
+                from headway.core.fold import Captured, substitute
+                try:
+                    return substitute(lam.body, {b.var: a for b, a in zip(lam.over, args) if isinstance(b.var, str)})
+                except Captured:                        # an argument reads a variable the body binds: called as is
+                    pass
         q = self.qualify(f)
         if q in OPTIMIZERS:
             return self.optimum(e, q)
@@ -1134,12 +1179,13 @@ def _docstring(body: list[ast.stmt]) -> bool:
         and isinstance(body[0].value.value, str)
 
 
-def _output_only(call: ast.Call) -> bool:
-    """print(...), logging.info(...), warnings.warn(...): calls that change no value."""
+def _output_only(call: ast.Call, variables: Collection[str] = ()) -> bool:
+    """print(...), logging.info(...), warnings.warn(...): calls that change no value. A variable of the code of one
+    of those names (log = []; log.append(x)) is not one."""
     root = call.func
     while isinstance(root, ast.Attribute):
         root = root.value
-    return isinstance(root, ast.Name) and root.id in OUTPUT_ONLY
+    return isinstance(root, ast.Name) and root.id in OUTPUT_ONLY and root.id not in variables
 
 
 def _holds(test: ast.expr, every: bool = False) -> list[ast.expr]:
@@ -1190,6 +1236,25 @@ def _dotted(e: ast.expr) -> str | None:
     return None
 
 
+def _exits(st: ast.stmt, loop: bool = False) -> bool:
+    """Whether a statement can leave the block it is in: a return, or a break or continue not of a loop inside it
+    (loop: inside one already). Functions defined inside are not looked into."""
+    if isinstance(st, ast.Return):
+        return True
+    if isinstance(st, (ast.Break, ast.Continue)):
+        return not loop
+    if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False
+    inner = loop or isinstance(st, (ast.For, ast.AsyncFor, ast.While))
+    return any(_exits(c, inner if c not in getattr(st, "orelse", []) else loop)
+               for c in ast.iter_child_nodes(st) if isinstance(c, ast.stmt))
+
+
+def _boolean(x: Expr) -> bool:
+    """A value known to be a boolean or an array of booleans (a comparison, a mask)."""
+    return x.type == "bool" or x.dtype == "bool"
+
+
 def _array_type(*xs: Expr) -> str:
     """The array type of an elementwise result: that of its array operands (numpy's, torch's)."""
     for x in xs:
@@ -1212,8 +1277,4 @@ def lower_source(source: str, module: Module | None = None, **kw: object) -> Pro
     return Program(None, [], low.block(tree.body))
 
 
-def same(a: Expr, b: Expr) -> bool:
-    return a == b
-
-
-__all__ = ["Lowerer", "Module", "Unsupported", "lower_source", "NEW", "SCALAR", "replace"]
+__all__ = ["Lowerer", "Module", "Unsupported", "lower_source"]

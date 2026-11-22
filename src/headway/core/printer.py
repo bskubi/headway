@@ -20,7 +20,7 @@ from typing import Any
 from headway.core.terms import (FIT, NEW, Aggregate, Fit, Lambda, Optimum, Align, Apply, Assume, Axis, Binder, Build, Cases, Const, Density,
                                 Dist, Draw, Effect, Expr, Extent, Field, For, Idx, If, Item, Jump, Key, Let, Mapping,
                                 Op, Pos, Range, Restrict, Return, SetPart, Sig, SliceKey, Stmt, Table, Take, Text, Tup,
-                                Unwritten, Var, While, free_vars, known, walk_stmts)
+                                Unwritten, Var, While, free_vars, known, stmt_exprs, walk, walk_stmts)
 
 ATOM, POWER, UNARY, PRODUCT, SUM, COMPARE, NOT, AND, OR = 13, 12, 11, 10, 9, 4, 3, 2, 1
 ASSUMING = r"&\text{provided that } "               # a precondition's line (an assert)
@@ -224,7 +224,7 @@ class Printer:
             n = f"{_dotted(e.base) or ''}.{e.attr}"
             base = self.names[n].tex if n in self.names else ident(e.attr)
             idx = self.index_tex(e.sig)
-            return T(indexed(base, idx) if idx and not scripted(base) or idx else base)
+            return T(indexed(base, idx) if idx else base)
         dotted = _dotted(e)
         if dotted is not None and dotted in self.names:
             return T(self.names[dotted].tex)
@@ -236,6 +236,8 @@ class Printer:
 
     def e_Apply(self, e: Apply) -> T:
         fn, args = e.fn, e.args
+        if fn in ("andthen", "orelse"):                 # Python's and, or: written as and, or
+            fn = "and" if fn == "andthen" else "or"
         if fn in ("add", "sub", "mul", "div", "pow", "mod", "floordiv", "and", "or", "matmul"):
             return self.binary(fn, args[0], args[1])
         if fn in ("lshift", "rshift"):                  # a << k: a times 2^k (>>: divided, rounded down)
@@ -312,8 +314,7 @@ class Printer:
     def _m(self, e: Expr) -> tuple[T, tuple[Axis | None, Axis | None]] | None:
         """(the TeX, (its rows' index set, its columns')): a column vector has no columns, a row vector no rows."""
         if isinstance(e, Align) and e.how in ("expand", "squeeze"):     # w[:, None]: w, to scale rows by
-            inner = self._m(e.base)
-            return inner
+            return self._m(e.base)
         sig = e.sig if e.sig is None else tuple(a for a in e.sig if a != NEW)
         if sig is None or len(sig) > 2 or not known(sig):
             return None
@@ -397,7 +398,7 @@ class Printer:
                 return None
             op = " + " if e.fn == "add" else " - "
             return T(wrap(a[0], SUM) + op + wrap(b[0], SUM + (e.fn == "sub")), SUM), a[1]
-        if len(sig) <= 1 and not any(isinstance(x, (Aggregate, Take, Restrict)) for x in _walk(e)):
+        if len(sig) <= 1 and not any(isinstance(x, (Aggregate, Take, Restrict)) for x in walk(e)):
             # a vector made elementwise (log(y / s + 0.1)): written so, its index left out
             saved, self.bare = self.bare, True
             try:
@@ -549,7 +550,7 @@ class Printer:
             return self.count(e)
         # an index it combines over that is also free where it is used (v = argmax_v A_v): its own copy, v'
         saved = dict(self.relabel)
-        inside = {a for x in _walk(e.body) for a in (x.sig or ())}
+        inside = {a for x in walk(e.body) for a in (x.sig or ())}
         for i in e.over:
             if isinstance(i, Axis) and (i in self.outer or i in self.relabel.values()):
                 k = i.copy + 1                          # a copy neither free outside, nor used inside, nor taken
@@ -718,7 +719,7 @@ class Printer:
             renames = {old: new for old, new in zip(e.base.sig, e.sig) if old != new}
             # an index the result's takes that the expression uses for another: that one moved to a copy no index
             # of it is (else (H_{cc'})^{-1} v_c, its c' named c, would read H_{cc})
-            inside = {a for x in _walk(e.base) for a in (x.sig or ()) if a.known}
+            inside = {a for x in walk(e.base) for a in (x.sig or ()) if a.known}
             for new in set(renames.values()):
                 if new in inside and new not in renames:
                     k = new.copy + 1
@@ -943,7 +944,7 @@ class Printer:
             # as an algorithm is written: "repeat n times:", or "for r = 0, ..., n - 1:" if the turn is read
             count = self.expr(d.hi)
             used = st.var is not None and any(n in st.var for b in walk_stmts(list(st.body))
-                                              for e in _exprs(b) for n in free_vars(e))
+                                              for e in stmt_exprs(b) for n in free_vars(e))
             if not used:
                 head = r"&\textbf{repeat } " + count.tex + r"\textbf{ times:}"
             else:
@@ -1013,16 +1014,6 @@ def _core(sig: Sig) -> tuple[Axis, ...] | None:
     return None if sig is None else tuple(a for a in sig if a != NEW)
 
 
-def _walk(e: Expr) -> list[Expr]:
-    from headway.core.terms import walk
-    return walk(e)
-
-
-def _exprs(st: Stmt) -> list[Expr]:
-    from headway.core.terms import stmt_exprs
-    return stmt_exprs(st)
-
-
 def _part_sig(e: Expr, k: int) -> Sig:
     if e.parts is not None and k < len(e.parts):
         return e.parts[k].sig
@@ -1069,15 +1060,19 @@ def base_tex(v: T) -> str:
     return "{" + out + "}" if out == v.tex and scripted(out) else out
 
 
+_DELIMITER = re.compile(r"\\(left|right)(?![A-Za-z])")
+
+
 def scripted(tex: str) -> bool:
     """Whether tex has a subscript or superscript of its own: outside any {...} and \\left...\\right."""
     depth = 0
     k = 0
     while k < len(tex):
-        if tex.startswith(r"\left", k) or tex.startswith(r"\right", k):
-            depth += 1 if tex.startswith(r"\left", k) else -1
-            k += 5
-        elif tex[k] == "\\":
+        if (m := _DELIMITER.match(tex, k)) is not None:     # \left or \right (not \leftarrow): its delimiter next
+            depth += 1 if m.group(1) == "left" else -1
+            k = m.end()
+            continue
+        if tex[k] == "\\":
             k += 2
             continue
         elif tex[k] == "{":

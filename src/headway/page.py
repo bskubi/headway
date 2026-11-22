@@ -22,8 +22,8 @@ from typing import Any
 
 from headway import codedoc, codetex, draft, typeinfo
 from headway.check import Report
-from headway.resolve import Location, shortpath
-from headway.spec import Decl, Headway, Op
+from headway.resolve import Location, package_root, shortpath
+from headway.spec import Decl, Headway, Op, declared_file
 
 # links that open a file at a line: {file} is the absolute path with forward slashes, starting with "/"
 EDITORS = {
@@ -70,6 +70,7 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
                 "line": d.line, "col": _column(d.file, d.line, d.col), "fields": _fields(d)}
 
     from headway.bench import Suite, suite_data
+    now = datetime.datetime.now()
     groups = g.all_groups()
     coded = code_names(g)
     for path in [*collapse, *hide]:
@@ -81,9 +82,9 @@ def data(g: Headway, report: Report, collapse: Sequence[str] = (), hide: Sequenc
         "spec": spec,
         "editor": editor_ or editor(),
         "desc": g.desc,
-        "built": datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "built": now.strftime("%Y-%m-%d %H:%M"),
         "headway": _version(),                                  # the headway that built it
-        "built_at": datetime.datetime.now().isoformat(),        # to order versions by when they were built
+        "built_at": now.isoformat(),        # to order versions by when they were built
         "source": source(g),
         "indices": [vars(ix) | {"decl": decl("index:" + ix.key)} for ix in g.indices.values()],
         "symbols": [vars(s) | {"kind": s.kind, "code": code(s.code), "value": None if s.value is None else str(s.value),
@@ -138,11 +139,16 @@ def code_names(g: Headway) -> dict[str, str]:
 def _field(ref: str) -> str | None:
     """The name a code reference gives a value: a field ("pkg.mod:Settings.pcs": pcs) or a module constant
     ("pkg.mod:SD_FLOOR"); not a function, a class or an anchor into one."""
-    _, colon, qual = ref.partition(":")
-    if not colon or "#" in qual or "/" in ref.partition(":")[0]:
+    module, colon, qual = ref.partition(":")
+    if not colon or "#" in qual or "/" in module:
         return None
     last = qual.rsplit(".", 1)[-1]
     return last if "." in qual or last.isupper() else None
+
+
+def _first_location(o: Op, report: Report) -> tuple[str, Location | None]:
+    """The step's first code reference that resolved, and where it is ("", None if none did)."""
+    return next(((r, loc) for r in o.code if (loc := report.locations.get(r))), ("", None))
 
 
 def condition_of(g: Headway, o: Op) -> dict[str, Any]:
@@ -159,10 +165,10 @@ def condition_of(g: Headway, o: Op) -> dict[str, Any]:
 
 
 def code_tex(g: Headway, o: Op, report: Report, code_names: bool = False) -> str | None:
-    """The step's first Python code reference, written as math, with its names (bind, then names) written as
-    their symbols or TeX and its other names as short symbols; None if it cannot be. code_names: every name as
-    the code has it instead (still with the indices its symbol has, for the sums)."""
-    loc = next((report.locations.get(r) for r in o.code if report.locations.get(r)), None)
+    """The step's first code reference that resolved, if it is Python, written as math, with its names (bind, then
+    names) written as their symbols or TeX and its other names as short symbols; None if it cannot be. code_names:
+    every name as the code has it instead (still with the indices its symbol has, for the sums)."""
+    _, loc = _first_location(o, report)
     if loc is None or loc.lang != "python":
         return None
     names = _symbol_names(g, o)
@@ -179,7 +185,6 @@ def code_tex(g: Headway, o: Op, report: Report, code_names: bool = False) -> str
         main = codetex.transcribe(loc.source, names, imported=codetex.imports(loc.file), file=loc.file,
                                   short=not code_names,
                                   first_line=loc.start, hints=g.hints, kinds=_kinds(loc.file) if g.hints else None,
-                                  axes=draft.axes_reader(loc.file) if g.hints else None,
                                   indices={k: ix.tex for k, ix in g.indices.items()}, inline=inline,
                                   flush=bool(defined or about or guard), define=defined, where=about)
         if main is None or not guard:
@@ -194,26 +199,20 @@ def relation_views(g: Headway, o: Op, report: Report) -> list[dict[str, Any]]:
     """What a step's code declares it computes (headway.clean), for the viewer: the statement as math (an
     objective's argmax under its constraints, an equation's solution) with the target's definition and description,
     and what a run's checks found (.headway-checks.json beside the code, written by the run that checked them)."""
-    from headway.resolve import RefError, resolve
-    loc = next((report.locations.get(r) for r in o.code if report.locations.get(r)), None)
+    ref, loc = _first_location(o, report)
     names = _symbol_names(g, o)
     out: list[dict[str, Any]] = []
-    evidence = _evidence(loc, o.code[0]) if loc is not None and o.code else []
+    evidence = _evidence(loc, ref) if loc is not None else []
     for r in o.relations:
-        view: dict[str, Any] = {"kind": r.get("kind"), "target": r.get("target"), "tex": None, "definition": None,
-                                "block": None, "about": None}
+        view: dict[str, Any] = {"kind": r.get("kind"), "target": r.get("target"), "tex": None, "block": None,
+                                "about": None}
         over = list(r.get("over", []))
         given: dict[str, codetex.Name] = {k: v for k, v in names.items() if not k.startswith("return")}
-        for k, (v, k2) in enumerate(zip(over, o.outputs)):     # the results it declares, as the step's symbols
+        for k, v in enumerate(over):                    # the results it declares, as the step's symbols
             n = names.get("return." + str(k)) or (names.get("return") if len(over) == 1 else None)
-            if n is None and k2 in g.symbols:
-                n = codetex.Name(g.symbols[k2].tex)
             if n is not None:
                 given[v] = n
-        try:
-            target = resolve(r["target"]) if r.get("target") else None
-        except RefError:
-            target = None
+        target = report.locations.get(r["target"]) if r.get("target") else None      # resolved by the check
         if target is not None and target.lang == "python" and r.get("kind") in ("maximizes", "minimizes", "solves"):
             fn = ast.parse(textwrap.dedent(target.source)).body[0]
             if isinstance(fn, ast.FunctionDef):
@@ -224,9 +223,8 @@ def relation_views(g: Headway, o: Op, report: Report) -> list[dict[str, Any]]:
                 lhs = variables[0] if len(variables) == 1 else r"\left(" + ", ".join(variables) + r"\right)"
                 constraints = []
                 for c in r.get("subject_to", []):
-                    try:
-                        cl = resolve(c)
-                    except RefError:
+                    cl = report.locations.get(c)
+                    if cl is None:
                         continue
                     e = codetex.returned(cl.source, given)
                     constraints.append(f"{e} = 0" if e else codetex._function(c.rpartition(':')[2]) + " = 0")
@@ -236,8 +234,6 @@ def relation_views(g: Headway, o: Op, report: Report) -> list[dict[str, Any]]:
                 else:
                     op = r"\operatorname*{arg\,max}" if r["kind"] == "maximizes" else r"\operatorname*{arg\,min}"
                     view["tex"] = f"{lhs} = {op}_{{{under}}} {call}"
-                view["definition"] = codetex.transcribe(target.source, given, short=True, first_line=target.start,
-                                                        flush=True, file=target.file)
                 # one block, flush left as the algorithm is: the statement, then where its objective is defined
                 view["block"] = codetex.transcribe(target.source, given, short=True, first_line=target.start,
                                                    flush=True, before=[view["tex"], r"\text{where}"], file=target.file)
@@ -259,9 +255,9 @@ def _symbol_names(g: Headway, o: Op) -> dict[str, codetex.Name]:
                                             s.per or None)
         elif "tex" in n:
             names[code_name] = codetex.Name(n["tex"])
-    for k, out in enumerate(o.outputs):                 # its results, in order, for a declaration's over=
-        s = g.symbols.get(out)
-        if s is not None:
+    for k, out in enumerate(o.outputs):                 # its results, in order, for a declaration's over=,
+        s = g.symbols.get(out)                          # unless bind or names says what the k-th result is
+        if s is not None and "return." + str(k) not in names:
             dims = tuple(g.indices[d].tex if d in g.indices else d for d in s.dims)
             names["return." + str(k)] = codetex.Name(codetex._indexed_tex(s.tex, dims) if dims and not
                                                      codetex._scripted(s.tex) else s.tex, dims)
@@ -272,13 +268,13 @@ def math_check(o: Op, report: Report) -> dict[str, Any] | None:
     """Whether the math the viewer shows for a step's code computes what the code computes, as the last checking
     run found (headway trace): the run's calls of the step's function, its math run on each (core/verify.py). For a
     block of a function's lines: the function's, whose math the block's is part of."""
-    loc = next((report.locations.get(r) for r in o.code if report.locations.get(r)), None)
-    if loc is None or loc.lang != "python" or not o.code:
+    ref, loc = _first_location(o, report)
+    if loc is None or loc.lang != "python":
         return None
-    e = next((e for e in _evidence(loc, o.code[0]) if e.get("kind") == "math"), None)
+    e = next((e for e in _evidence(loc, ref) if e.get("kind") == "math"), None)
     if e is None:
         return None
-    return e | {"part": "#" in o.code[0], "function": o.code[0].split("#")[0].rpartition(":")[2]}
+    return e | {"part": "#" in ref, "function": ref.split("#")[0].rpartition(":")[2]}
 
 
 def _evidence(loc: Location, ref: str) -> list[dict[str, Any]]:
@@ -299,7 +295,7 @@ def _same_ref(a: str, b: str) -> bool:
 def code_about(g: Headway, o: Op, report: Report) -> list[dict[str, str]]:
     """What the settings and inputs that decide a step (its condition, or its if's test) are: their symbol, name,
     role and description, shown under its math."""
-    loc = next((report.locations.get(r) for r in o.code if report.locations.get(r)), None)
+    _, loc = _first_location(o, report)
     if loc is None or loc.lang != "python":
         return []
     return [{"tex": tex, "text": text} for tex, text in _deciders(g, o, loc, {})]
@@ -380,18 +376,16 @@ def _types(folder: Path) -> typeinfo.Types:
 def _kinds(file: str) -> Callable[[int, int, str], str | None] | None:
     """What a type checker (mypy) infers each name of a file is, for the code written as math (with hints): from
     its whole package, the topmost folder of __init__.py files holding it."""
-    folder = Path(file).parent
-    if not (folder / "__init__.py").exists():
+    folder = package_root(file)
+    if folder is None:
         return None
-    while (folder.parent / "__init__.py").exists():
-        folder = folder.parent
     types = _types(folder)
     return lambda line, column, name: types.kind(file, line, column, name)
 
 
 def code_doc(o: Op, report: Report) -> str | None:
     """What the step's first code reference says about itself (its docstring or comments, codedoc.py)."""
-    loc = next((report.locations.get(r) for r in o.code if report.locations.get(r)), None)
+    _, loc = _first_location(o, report)
     try:
         return codedoc.describe(loc) if loc else None
     except Exception:                                   # noqa: BLE001 (an odd file: no description from it)
@@ -401,10 +395,9 @@ def code_doc(o: Op, report: Report) -> str | None:
 def source(g: Headway) -> dict[str, Any]:
     """Where the spec was built from: its file and, if it is in a git repository, the commit, branch and whether
     the work tree had changes. Shown in the viewer and in its prompts; headway does not need git."""
-    files = [d.file for d in g.declared.values() if d.function == "<module>"] or [d.file for d in g.declared.values()]
-    if not files:
+    file = declared_file(g)
+    if file is None:
         return {}
-    file = max(set(files), key=files.count)
     out: dict[str, Any] = {"file": file}
 
     def git(*args: str) -> str | None:
@@ -474,10 +467,16 @@ def html(d: dict[str, Any] | None, offline: bool = False, library: dict[str, Any
     template = resources.files("headway").joinpath("viewer.html").read_text()
     if offline:
         template = inline_assets(template)
-    payload = json.dumps(d).replace("</", "<\\/")
-    return (template.replace("/*HEADWAY_DATA*/null", payload, 1)
-            .replace("/*HEADWAY_LIBRARY*/null", json.dumps(library).replace("</", "<\\/"), 1)
-            .replace("<!--TITLE-->", _escape(d["title"] if d else "headway")))
+    template = template.replace("<!--TITLE-->", _escape(d["title"] if d else "headway"), 1)
+    # the library first: the data may hold the library's marker as text (headway's own code, shown in a step)
+    return (template.replace("/*HEADWAY_LIBRARY*/null", _script_json(library), 1)
+            .replace("/*HEADWAY_DATA*/null", _script_json(d), 1))
+
+
+def _script_json(x: Any) -> str:
+    """JSON to write inside a <script>, with every "<" escaped: neither "</script>" nor "<!--" (which, followed by
+    "<script", would make the HTML parser read the rest of the page as script) can appear in it."""
+    return json.dumps(x).replace("<", "\\u003c")
 
 
 def inline_assets(page: str) -> str:

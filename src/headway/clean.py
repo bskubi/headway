@@ -97,8 +97,8 @@ class Result:
 
 
 def check(fn: Callable[..., Any], rel: Relation, args: dict[str, Any], result: Any, seed: int = 0) -> Result:
-    """Whether a call of fn (its arguments by name, and what it returned) bears out a relation it declares. The
-    original reruns from the NumPy random state kept with the arguments, if one was."""
+    """Whether a call of fn (its arguments by name, and what it returned) bears out a relation it declares. For
+    equals and approximates, the reference reruns from the NumPy random state kept with the arguments, if one was."""
     from headway.core.verify import restore_random, without_random
     args, state = without_random(args)
     if rel.kind in ("equals", "approximates"):
@@ -126,16 +126,24 @@ def _compare(rel: Relation, args: dict[str, Any], result: Any) -> Result:
     got = rel.adapt(result) if rel.adapt else result
     worst = 0.0
     ok = True
-    for g, w in zip(_leaves(got), _leaves(want), strict=False):
+    got_leaves, want_leaves = _leaves(got), _leaves(want)
+    if len(got_leaves) != len(want_leaves):
+        return Result(False, float("inf"), f"{len(got_leaves)} values, where the reference gives {len(want_leaves)}")
+    for g, w in zip(got_leaves, want_leaves, strict=True):
         g, w = np.asarray(g), np.asarray(w)
         if g.shape != w.shape:
             return Result(False, float("inf"), f"shapes {g.shape} and {w.shape}")
         if g.dtype.kind in "bUSO" or w.dtype.kind in "bUSO":
             ok &= bool((g == w).all())
             continue
-        diff = float(np.max(np.abs(g.astype(np.float64) - w.astype(np.float64)), initial=0.0))
+        kind = np.result_type(g, w, np.float64)        # complex stays complex: its imaginary part counts too
+        gf, wf = g.astype(kind), w.astype(kind)
+        # NaNs in the same places match; a NaN on one side only, or opposite infinities, is as far off as can be
+        # (max() would pass over a NaN difference)
+        apart = (np.isnan(gf) != np.isnan(wf)) | (np.isinf(gf) & np.isinf(wf) & (gf != wf))
+        diff = float("inf") if apart.any() else float(np.nanmax(np.abs(gf - wf), initial=0.0))
         worst = max(worst, diff)
-        ok &= bool(np.allclose(g, w, rtol=rel.rtol, atol=rel.atol))
+        ok &= bool(np.allclose(g, w, rtol=rel.rtol, atol=rel.atol, equal_nan=True))
     return Result(ok, worst, f"largest difference {worst:.2g} (allowed: {rel.rtol:g} relative, {rel.atol:g} absolute)")
 
 

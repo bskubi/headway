@@ -6,19 +6,20 @@
   references   every code reference resolves (resolve.py): renamed or deleted code fails the check
   verifiers    the spec's @verify functions: the named ops' equations reproduce the code's results
   media        every document is found (else a warning) and every medium can be shown (media.py)
+  suite        for a benchmark Suite: its metrics, datasets, categories and objectives (bench.check_suite)
+  shapes       with hints=True, the bound values against the axes the code's type hints state (a warning)
 """
 from __future__ import annotations
 
 import ast
 import traceback
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 from headway import media
 from headway.files import bases
-from headway.resolve import Location, RefError, resolve
-from headway.spec import Headway
+from headway.resolve import Location, RefError, package_root, resolve
+from headway.spec import Headway, declared_file
 
 
 @dataclass
@@ -138,8 +139,7 @@ def references(g: Headway, report: Report) -> None:
              [(f"symbol {s.key}", s.code) for s in g.symbols.values()] + \
              [(f"dataset {d.key}", d.code) for d in getattr(g, "datasets", {}).values()] + \
              [(f"figure {f.key}", f.code) for f in getattr(g, "figures", {}).values()]       # a Suite's
-    files_ = [d.file for d in g.declared.values() if d.function == "<module>"] or [d.file for d in g.declared.values()]
-    where = bases(max(set(files_), key=files_.count) if files_ else None)      # for references to files by path
+    where = bases(declared_file(g))                       # for references to files by path
     for owner, refs in owners:
         for ref in refs:
             if ref in report.locations:
@@ -201,24 +201,23 @@ def shapes_stated(g: Headway, report: Report) -> None:
             continue
         top = module.split(".")[0]
         if top not in drafters:
-            folder = Path(loc.file).parent
-            while (folder.parent / "__init__.py").exists():
-                folder = folder.parent
-            try:
-                drafters[top] = Drafter(Package(top, [folder.parent]), hints=True, infer=False)
+            folder = package_root(loc.file)
+            try:            # a namespace package (no __init__.py): found by Package on the Python path
+                drafters[top] = Drafter(Package(top, [folder.parent] if folder else []), hints=True, infer=False)
             except DraftError:
                 drafters[top] = None
         d = drafters[top]
         m = d.package.module(module) if d else None
         cls, _, name = qual.rpartition(".")
         owner = m.defs.get(cls) if m and cls else None
+        # a method: only in its class (not a function of the module with the same name, if the class is not there)
         node = next((n for n in owner.body if isinstance(n, ast.FunctionDef) and n.name == name), None) \
-            if isinstance(owner, ast.ClassDef) else m.defs.get(name) if m else None
+            if isinstance(owner, ast.ClassDef) else m.defs.get(name) if m and not cls else None
         if d is None or m is None or not isinstance(node, ast.FunctionDef):
             continue
         annotations = {a.arg: a.annotation for a in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs)}
         returned = d.shape_items(m, node.returns)
-        named = {**{c: k for c, k in o.bind.items()}, **{c: n["symbol"] for c, n in o.names.items() if "symbol" in n}}
+        named = {**o.bind, **{c: n["symbol"] for c, n in o.names.items() if "symbol" in n}}
         seen: dict[str, tuple[str, str]] = {}
         for code_name, key in named.items():
             if key not in g.symbols:

@@ -110,7 +110,8 @@ class Field(Expr):
 
 @dataclass(frozen=True)
 class Apply(Expr):
-    """A primitive (PRIMITIVES), elementwise unless it says otherwise."""
+    """A primitive (fn: a name the evaluator's PRIMITIVES runs and the printer writes: add, log, matmul, ...),
+    elementwise unless it is one of evaluate.WHOLE."""
     fn: str
     args: tuple[Expr, ...]
 
@@ -140,7 +141,8 @@ Index = Union[Axis, Binder, Pos]
 
 @dataclass(frozen=True)
 class Aggregate(Expr):
-    """Combine body over indices, where `where` holds: sum, prod, mean, max, min, ... (AGGREGATES)."""
+    """Combine body over indices, where `where` holds: sum, prod, mean, max, min, ... (the printer's
+    AGGREGATE_TEX)."""
     op: str
     over: tuple[Index, ...]
     body: Expr
@@ -224,7 +226,8 @@ class Cases(Expr):
 @dataclass(frozen=True)
 class Lambda(Expr):
     """One of the code's functions as a value (a lambda, a function defined inside another): its body, in its
-    parameters (each a Binder, its domain the value the function is first given)."""
+    parameters (each a Binder; its domain not used, Const(None), except for a regression's coefficients, whose
+    domain is the design matrix they multiply)."""
     over: tuple[Binder, ...]
     body: Expr
     name: str = ""                  # the def's name, "" for a lambda
@@ -322,7 +325,8 @@ class Text(Expr):
 
 @dataclass(frozen=True)
 class Dist(Expr):
-    """A distribution of a named family (DISTRIBUTIONS), its parameters by name."""
+    """A distribution of a named family (normal, poisson, ...: the printer's DIST_TEX), its parameters by name, as
+    the library the code calls names them."""
     family: str
     params: tuple[tuple[str, Expr], ...]
 
@@ -427,33 +431,6 @@ class Program:
     qualname: str = ""
 
 
-# ---- the primitives: their names, how many arguments ------------------------------------------------------------
-
-PRIMITIVES = {
-    # arithmetic
-    "add": 2, "sub": 2, "mul": 2, "div": 2, "pow": 2, "neg": 1, "mod": 2, "floordiv": 2,
-    # elementwise functions
-    "log": 1, "exp": 1, "sqrt": 1, "abs": 1, "log1p": 1, "expm1": 1, "log2": 1, "log10": 1, "sigmoid": 1,
-    "logit": 1, "tanh": 1, "sinh": 1, "cosh": 1, "sin": 1, "cos": 1, "tan": 1, "arcsin": 1, "arccos": 1,
-    "arctan": 1, "floor": 1, "ceil": 1, "round": 1, "sign": 1, "erf": 1, "gammaln": 1, "digamma": 1,
-    "gamma": 1, "max2": 2, "min2": 2, "isnan": 1, "isfinite": 1, "isinf": 1, "trigamma": 1, "relu": 1, "softplus": 1, "square": 1,
-    # comparisons and logic
-    "eq": 2, "ne": 2, "lt": 2, "le": 2, "gt": 2, "ge": 2, "and": 2, "or": 2, "not": 1, "in": 2, "notin": 2,
-    "is": 2, "isnot": 2,
-    # linear algebra on matrices (the last two axes); matmul only where the indices are not known
-    "matmul": 2, "inv": 1, "det": 1, "trace": 1, "solve": 2, "norm": 1, "transpose": 1,
-    # conversions that change a value's kind, not what it is
-    "float": 1, "int": 1, "len": 1, "size": 1,
-}
-
-AGGREGATES = {"sum", "prod", "mean", "max", "min", "any", "all", "var", "sd", "median", "logsumexp",
-              "argmax", "argmin", "count"}
-
-DISTRIBUTIONS = {"normal", "binomial", "bernoulli", "poisson", "gamma", "beta", "dirichlet", "categorical",
-                 "multinomial", "uniform", "exponential", "negative_binomial", "multivariate_normal", "lognormal",
-                 "student_t", "laplace", "cauchy", "geometric", "betabinomial", "integers", "choice", "permutation"}
-
-
 def shaped(e: Expr, s: Shape) -> Expr:
     """e, as being of shape s."""
     return replace(e, sig=s.sig, type=s.type, parts=s.parts, elem=s.elem, dtype=s.dtype, columns=s.columns)
@@ -556,13 +533,34 @@ def _flat(v: Any) -> list[str]:
     return [v] if isinstance(v, str) else [n for x in v for n in _flat(x)]
 
 
+def inside(e: Expr) -> list[Expr]:
+    """The subexpressions of e under its binders (a sum's or a family's body and condition): all its children but
+    the binders' domains."""
+    out: list[Expr] = []
+
+    def take(x: Expr) -> Expr:
+        out.append(x)
+        return x
+    for name in e.__dataclass_fields__:
+        if name not in ("sig", "type", "parts", "elem", "dtype", "over"):
+            _map(getattr(e, name), take)
+    return out
+
+
 def free_vars(e: Expr) -> list[str]:
-    """The variables an expression reads (each time it reads them), not those it binds itself."""
+    """The variables an expression reads (each time it reads them), not those it binds itself. A binder's domain
+    is outside it ([x for x in x] reads x), and inside the binders before it (for i in a for j in f(i))."""
     if isinstance(e, Var):
         return [e.name]
-    inner = bound(e)
+    binders = [i for i in getattr(e, "over", ()) if isinstance(i, Binder)]
+    if not binders:
+        return [n for c in children(e) for n in free_vars(c)]
     out: list[str] = []
-    for c in children(e):
+    inner: set[str] = set()
+    for b in binders:
+        out += [n for n in free_vars(b.domain) if n not in inner]
+        inner |= set(_flat(b.var))
+    for c in inside(e):
         out += [n for n in free_vars(c) if n not in inner]
     return out
 
@@ -570,15 +568,13 @@ def free_vars(e: Expr) -> list[str]:
 def stmt_exprs(st: Stmt) -> list[Expr]:
     if isinstance(st, Let):
         return [st.value]
-    if isinstance(st, (SetPart,)):
+    if isinstance(st, SetPart):
         return [st.target, st.value]
-    if isinstance(st, (Effect,)):
+    if isinstance(st, Effect):
         return [st.value]
     if isinstance(st, For):
         return [st.domain]
-    if isinstance(st, (While, If)):
-        return [st.test]
-    if isinstance(st, Assume):
+    if isinstance(st, (While, If, Assume)):
         return [st.test]
     if isinstance(st, Return):
         return [st.value] if st.value is not None else []
@@ -586,9 +582,7 @@ def stmt_exprs(st: Stmt) -> list[Expr]:
 
 
 def stmt_body(st: Stmt) -> list[Stmt]:
-    if isinstance(st, (For, While)):
-        return [*st.body, *st.orelse]
-    if isinstance(st, If):
+    if isinstance(st, (For, While, If)):
         return [*st.body, *st.orelse]
     return []
 

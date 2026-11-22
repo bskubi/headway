@@ -7,7 +7,8 @@ language's tracer can write and headway's checks read (survey/tracing-design.md 
 A call records its function, its arguments and result (each a Value: an array's dtype and shape and its key in
 arrays.npz; a number, string or None itself; another object's type and its plain attributes), the call it was made
 from, and its path: the branches it took (each as a line and the line it went to) with how many times. Calls past a
-function's limit keep only their path and sizes, so that every call is counted and the ones recorded are a sample.
+function's limit keep only their path and sizes, so that every call is counted and the ones recorded are a sample;
+calls past its cap on stored calls are only counted, by their path (Function.more_paths).
 """
 from __future__ import annotations
 
@@ -23,19 +24,24 @@ FORMAT = "headway-trace/1"
 
 @dataclass
 class Value:
-    kind: str                           # "array", "scalar", "str", "none", "seq", "map", "object", "table"
+    kind: str                           # "array", "scalar", "str", "none", "seq", "map", "slice", "record",
+    #                                     "table", "object"
     type: str = ""                      # the value's type (module.qualname)
     dtype: str = ""
     shape: list[int] | None = None
     key: str | None = None              # an array's key in arrays.npz (None: not kept, only described)
-    value: Any = None                   # a scalar's, a string's value; an object's plain attributes
-    items: list[Value] | None = None    # a tuple's or list's items (short ones)
-    names: dict[str, Value] | None = None   # a dict's items, a table's columns
+    value: Any = None                   # a scalar's, a string's value; an object's plain attributes; a table's
+    #                                     number of columns
+    items: list[Value] | None = None    # a tuple's or list's items (the first MAX_ITEMS; shape: how many in all)
+    names: dict[str, Value] | None = None   # a dict's items, a table's columns (the first MAX_ITEMS)
 
     @staticmethod
     def of(d: dict[str, Any]) -> Value:
-        items = [Value.of(i) for i in d["items"]] if d.get("items") is not None else None
-        names = {k: Value.of(v) for k, v in d["names"].items()} if d.get("names") is not None else None
+        # (the manifest leaves out empty fields: an empty list's items, an empty dict's names)
+        items = [Value.of(i) for i in d["items"]] if d.get("items") is not None else [] if d["kind"] == "seq" \
+            else None
+        names = {k: Value.of(v) for k, v in d["names"].items()} if d.get("names") is not None else {} \
+            if d["kind"] == "map" else None
         return Value(d["kind"], d.get("type", ""), d.get("dtype", ""), d.get("shape"), d.get("key"),
                      d.get("value"), items, names)
 
@@ -69,8 +75,8 @@ class Function:
     file: str
     line: int
     calls: int = 0                      # every call, recorded or not
-    # calls past the cap on stored calls: only counted, by their path ("line>line|line>line": calls) and by
-    # the loops' total iterations (branch: times taken)
+    # calls past the cap on stored calls: only counted, by their path ("line>line|line>line": calls; "raised
+    # ValueError" for those an exception left) and by the loops' total iterations (branch: times taken)
     more_paths: dict[str, int] = field(default_factory=dict)
     more_branches: dict[str, int] = field(default_factory=dict)
 
@@ -143,8 +149,16 @@ class Trace:
         return None
 
     def calls_of(self, function: str) -> list[Call]:
-        return [c for c in self.calls if c.function == function or c.function.endswith(":" + function)
-                or c.function.split(":")[-1] == function]
+        return [c for c in self.calls if named(c.function, function)]
+
+    def function(self, function: str) -> Function | None:
+        """A traced function, by its full name (module:qualname) or its qualname."""
+        return next((f for k, f in self.functions.items() if named(k, function)), None)
+
+
+def named(full: str, function: str) -> bool:
+    """Whether a function's full name (module:qualname) is the one given, in full or by its qualname."""
+    return full == function or full.split(":")[-1] == function
 
 
 def _record(type_: str, fields: dict[str, Any]) -> Any:

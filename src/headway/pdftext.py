@@ -120,13 +120,16 @@ def find(path: Path, anchor: str, page: int | None = None) -> tuple[int, Word, W
 
 def _after(path: Path, page: int, anchor: str, first: Word) -> Word:
     """The last word of the anchor's first occurrence at or after `first` in reading order."""
+    key = norm(anchor)
+    if not key:
+        raise FindError(f"{anchor!r} has no letters or digits to find")
     words = pages(path)[page - 1][2]
     text, owner = _stream(words)
     begin = next(n for n, c in enumerate(owner) if words[c] == first)
-    at = text.find(norm(anchor), begin)
+    at = text.find(key, begin)
     if at < 0:
         raise FindError(f"{anchor!r} is not on page {page} after the first anchor")
-    return words[owner[at + len(norm(anchor)) - 1]]
+    return words[owner[at + len(key) - 1]]
 
 
 def between(path: Path, start: str, end: str, page: int | None = None, pad: float = 1.5) -> tuple[int, Box]:

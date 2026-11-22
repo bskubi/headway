@@ -8,7 +8,9 @@ sys.monitoring (Python 3.12), so that code not traced costs one event per functi
 Which functions: those whose module is one of the packages named (or whose file is under a directory named).
 Each function's first `first` calls are recorded in full, then every `every`-th up to `limit`; every call, recorded
 or not, keeps its path (the branches it took, with how many times) and its arrays' shapes, so that paths are counted
-over all of them (survey/tracing-design.md §3, §6).
+over all of them (survey/tracing-design.md §3, §6). Past `stored` calls of a function, a call is only counted, by
+its path. Under sys.settrace (Python < 3.12) the paths of calls not recorded are not followed. Generators and
+coroutines are not traced: a call of one runs in parts, between which other code runs.
 
 Work sent to other processes is not seen by this tracer: joblib's default backend runs in other processes, so while
 tracing joblib runs sequentially (the run's record says so).
@@ -17,9 +19,10 @@ from __future__ import annotations
 
 import contextlib
 import dis
+import inspect
 import sys
 import time
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import CodeType
@@ -37,6 +40,7 @@ except ImportError:                                     # run standalone in anot
 M: Any = getattr(sys, "monitoring", None)            # Python 3.12+; earlier ones use sys.settrace
 MAX_ELEMENTS = 20_000_000                # arrays larger than this are described, not kept
 MAX_ITEMS = 32                          # a tuple's or list's items recorded one by one, up to this many
+NOT_FOLLOWED = "(not followed)"         # the path of a call whose branches were not seen (sys.settrace)
 
 
 @dataclass
@@ -68,6 +72,8 @@ class Tracer:
         self.info: dict[str, Function] = {}
         self.lines: dict[CodeType, dict[int, int]] = {}
         self.trace: Trace | None = None
+        self._legacy = False                # sys.settrace, not sys.monitoring
+        self._started = 0.0
         self._before: dict[str, Any] = {}
         self._exit: contextlib.ExitStack | None = None
 
@@ -86,8 +92,9 @@ class Tracer:
         test_code = any(x in ("tests", "test", "conftest") or x.startswith("test_") for x in parts)
         if not test_code and (any(module == p or module.startswith(p + ".") for p in self.packages)
                 or any(file.startswith(d) for d in self.directories)) and not code.co_name.startswith("<") \
-                and not file.startswith("<") and code.co_flags & 0x01:  # a function (not a class body, nor
-            # code a library generated, as a dataclass's __init__)
+                and not file.startswith("<") and code.co_flags & 0x01 and not _suspends(code):
+            # a function (not a class body, nor code a library generated, as a dataclass's __init__, nor a
+            # generator or a coroutine)
             qualname = getattr(code, "co_qualname", code.co_name)     # Python < 3.11: its name only
             qual = f"{module}:{qualname}"
             if not self.functions or qualname in self.functions or qual in self.functions:
@@ -151,7 +158,7 @@ class Tracer:
     def _unwind(self, code: CodeType, offset: int, exc: BaseException) -> Any:
         if code not in self.targets:
             return None
-        f = self._pop(code)
+        f = self._pop(code, type(exc).__name__)
         if f is not None:
             f.call.raised = type(exc).__name__
         return None
@@ -163,7 +170,8 @@ class Tracer:
                 break
         return None
 
-    def _pop(self, code: CodeType) -> _Frame | None:
+    def _pop(self, code: CodeType, raised: str | None = None) -> _Frame | None:
+        """The innermost frame of code, taken off the stack as its call ends (raised: the exception leaving it)."""
         for i in range(len(self.stack) - 1, -1, -1):
             if self.stack[i].code is code:
                 f = self.stack.pop(i)
@@ -172,7 +180,9 @@ class Tracer:
                     lines = self.lines.get(code)
                     keys = {(f"{lines.get(a, 0)}>{lines.get(b, 0)}" if lines is not None else f"{a}>{b}"): n
                             for (a, b), n in f.branches.items()}
-                    path = "|".join(sorted(keys)) if not getattr(self, "_legacy", False) else "(not followed)"
+                    # its path, as a stored call's is keyed (analyze.paths): by the exception, if one left it
+                    path = f"raised {raised}" if raised else "|".join(sorted(keys)) if not self._legacy \
+                        else NOT_FOLLOWED
                     info.more_paths[path] = info.more_paths.get(path, 0) + 1
                     for k, n in keys.items():
                         info.more_branches[k] = info.more_branches.get(k, 0) + n
@@ -193,7 +203,7 @@ class Tracer:
         t = f"{type(x).__module__}.{type(x).__qualname__}"
         if x is None:
             return Value("none")
-        if isinstance(x, (bool, int, float, complex, np.generic)) and not isinstance(x, np.ndarray):
+        if isinstance(x, (bool, int, float, complex, np.generic)):
             v = x.item() if isinstance(x, np.generic) else x
             return Value("scalar", t, value=v if not isinstance(v, complex) else str(v))
         if isinstance(x, str):
@@ -223,8 +233,8 @@ class Tracer:
         if fields is not None and depth < 3:            # a record (a dataclass, a small plain object)
             return Value("record", t, names={k: self._value(v, f"{key}.{k}", keep, depth + 1)
                                              for k, v in fields.items()})
-        if table is not None:
-            return Value("table", t, shape=[table[0]],
+        if table is not None:                           # (value: how many columns in all)
+            return Value("table", t, shape=[table[0]], value=len(table[1]),
                          names={str(c): self._value(col, f"{key}.{c}", keep, depth + 1)
                                 for c, col in list(table[1].items())[:MAX_ITEMS]})
         return Value("object", t, value=_attributes(x) if depth < 1 else None)
@@ -266,26 +276,33 @@ class Tracer:
         if name is None:
             return None
         self._begin(code, name, frame)
-        last = [frame.f_lineno]
-        if not self.stack[-1].call.kept:                # its path not followed (line events are costly here):
+        last: list[int | None] = [None]                 # the line run last (None: none yet, the def's line)
+        raised: list[str] = ["an exception"]            # the last exception seen here
+        followed = self.stack[-1].call.kept
+        if not followed:                                # its path not followed (line events are costly here):
             frame.f_trace_lines = False                 # on older Pythons, paths are the recorded calls' only
 
         def local(fr: Any, ev: str, a: Any) -> Any:
             if ev == "line":
                 prev, last[0] = last[0], fr.f_lineno
-                if fr.f_lineno != prev + 1 and self.stack and self.stack[-1].code is code:
+                if prev is not None and fr.f_lineno != prev + 1 and self.stack and self.stack[-1].code is code:
                     self.stack[-1].branches[(prev, fr.f_lineno)] += 1
-            elif ev == "return":
-                f = self._pop(code)
-                if f is not None:
-                    f.call.result = self._value(a, f"c{f.call.id}.return", f.call.kept)
             elif ev == "exception":
-                pass
+                raised[0] = a[0].__name__
+            elif ev == "return":
+                leaving = raised[0] if a is None and not _returned(fr) else None    # an exception leaves it
+                f = self._pop(code, leaving)
+                if f is not None and leaving is not None:
+                    f.call.raised = leaving
+                elif f is not None:
+                    f.call.result = self._value(a, f"c{f.call.id}.return", f.call.kept)
+                if f is not None and not followed:
+                    f.call.branches = {NOT_FOLLOWED: 1}
             return local
         return local
 
     def __exit__(self, *exc: Any) -> None:
-        if getattr(self, "_legacy", False):
+        if self._legacy:
             sys.settrace(None)
         else:
             assert self.tool is not None
@@ -302,8 +319,7 @@ class Tracer:
             f.calls = self.counts[name]
         environment = {**self._before, "modules": env.modules(), "changed": env.changes(self._before, after)}
         run = {"started": self._started, "seconds": time.time() - self._started, "packages": self.packages,
-               "tracer": "sys.settrace (paths of recorded calls only)" if getattr(self, "_legacy", False)
-               else "sys.monitoring",
+               "tracer": "sys.settrace (paths of recorded calls only)" if self._legacy else "sys.monitoring",
                "sequential": self.sequential, "first": self.first, "every": self.every, "limit": self.limit,
                "argv": sys.argv}
         self.trace = Trace(environment, run, self.info, self.calls)
@@ -311,6 +327,18 @@ class Tracer:
     def write(self, directory: str | Path) -> Path:
         assert self.trace is not None
         return self.trace.write(directory, self.arrays)
+
+
+def _returned(frame: Any) -> bool:
+    """Whether a frame ends by returning (its last instruction a return), not by an exception passing out of it:
+    sys.settrace's return event gives None for both. (headway.core.verify.returned; this module runs without
+    headway too.)"""
+    return dis.opname[frame.f_code.co_code[frame.f_lasti]] in ("RETURN_VALUE", "RETURN_CONST")
+
+
+def _suspends(code: CodeType) -> bool:
+    """Whether code is a generator's or a coroutine's, whose calls stop at each yield or await and go on later."""
+    return bool(code.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR))
 
 
 def _as_array(x: Any) -> np.ndarray | None:
@@ -415,4 +443,4 @@ def tracing(packages: list[str], directory: str | Path, **kwargs: Any) -> Iterat
     t.write(directory)
 
 
-__all__ = ["Tracer", "tracing", "defaultdict"]
+__all__ = ["Tracer", "tracing"]

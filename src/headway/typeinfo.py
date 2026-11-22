@@ -3,7 +3,7 @@ types for every expression, from the code's annotations and the libraries' stubs
 attributes and loops). Used only when type hints are taken as assumptions (headway init --hints, Headway(...,
 hints=True)): Python does not check them when the code runs.
 
-Kinds: "array" (numpy.ndarray), "scalar" (a Python or numpy number), "list", "dict", "set", "slice", or
+Kinds: "array" (numpy.ndarray), "scalar" (a Python or numpy number), "list", "dict", "set", "slice", "tuple", or
 "class:pkg.mod.Name" for a class of the code's own. Keyed by (file, line, column, name), as Python's ast gives them.
 The kinds of a package's files are cached (~/.cache/headway/types), and found again while no file of it changes.
 """
@@ -17,6 +17,8 @@ import os
 from pathlib import Path
 
 Key = tuple[str, int, int, str]                     # (file, line, column, name)
+# the version of how mypy's types become kinds (_kind): raise it when _kind changes, so that cached kinds are made again
+KINDS_VERSION = 1
 
 
 class Types:
@@ -31,8 +33,8 @@ class Types:
     def of_package(cls, folder: Path) -> Types:
         """The kinds of the names in a package's files (its folder holds __init__.py); empty if mypy fails."""
         files = sorted(f for f in folder.rglob("*.py") if "__pycache__" not in f.parts)
-        stamp = hashlib.sha256(json.dumps([_version()] + [(str(f), f.stat().st_mtime_ns, f.stat().st_size)
-                                                          for f in files]).encode()).hexdigest()[:20]
+        stamps = [(str(f), f.stat().st_mtime_ns, f.stat().st_size) for f in files]
+        stamp = hashlib.sha256(json.dumps([_version(), KINDS_VERSION, *stamps]).encode()).hexdigest()[:20]
         cache = _cache_dir() / f"{stamp}.json"
         try:
             rows = json.loads(cache.read_text())

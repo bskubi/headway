@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 import headway
+from headway import api, bench, media, serve
 from headway.resolve import RefError, resolve
 
 import toy
@@ -428,6 +429,65 @@ def test_suite_checks() -> None:
     assert any("undeclared metric 'nope'" in e for e in errors) and any("m has no range" in e for e in errors)
     with pytest.raises(AssertionError):
         B.metric("x", "x", "x", better="best")
+
+
+def category_suite() -> "headway.Suite":
+    """Three metrics in two categories (bio: m1, m2; tech: m3), every way of combining them as an objective."""
+    B = headway.Suite("cats")
+    s = B.symbol("s", "s", "score", role="input")
+    B.dataset("a", "A")
+    for k in ("m1", "m2", "m3"):
+        B.metric(k, k, k, equation=f"{k} = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram",
+                 category="tech" if k == "m3" else "bio")
+    B.category("bio", "biological", "What the cells are.", metrics=["m1", "m2"])
+    B.objective("metrics", "over metrics", metrics=["m1", "m2", "m3"], how="rank")
+    for how in ("mean", "rank", "median", "worst", "wins", "kemeny", "pareto"):
+        B.objective("c-" + how, how, categories=["bio", "tech"], how=how)
+    B.objective("m-wins", "wins over metrics", metrics=["m1", "m2", "m3"], how="wins")
+    B.objective("m-kemeny", "kemeny over metrics", metrics=["m1", "m2", "m3"], how="kemeny")
+    B.objective("bio", "biological", categories=["bio"], how="rank")
+    return B
+
+
+def test_categories_and_hows() -> None:
+    """Categories of metrics, each one voter; ways of combining the voters' rankings (bench.HOWS)."""
+    from headway import bench, page
+    B = category_suite()
+    assert headway.check(B).ok, headway.check(B).text()
+    assert B.categories["tech"].name == "tech" and list(B.categories["bio"].metrics) == ["m1", "m2"]
+    suite = page.data(B, headway.check(B))
+    cats = {c["key"]: c for c in suite["suite"]["categories"]}
+    assert cats["bio"]["name"] == "biological" and cats["tech"]["metrics"] == {"m3": 1.0}
+    built = {o["key"]: o for o in suite["suite"]["objectives"]}
+    assert built["c-rank"]["weights"] == {"m1": 1.0, "m2": 1.0, "m3": 1.0}         # what it uses, for display
+    vals = {"A": (0.9, 0.9, 0.1), "B": (0.8, 0.8, 0.9), "C": (0.1, 0.2, 0.5)}
+    entries = [{"values": {"a": {f"m{i + 1}": [x] for i, x in enumerate(v)}}} for v in vals.values()]
+    got = {k: bench.scores(entries, o, suite) for k, o in built.items()}
+    assert got["metrics"] == pytest.approx([5 / 3, 5 / 3, 8 / 3])                # Borda over the three metrics
+    assert got["c-rank"] == pytest.approx([2, 1.5, 2.5])                         # each category one voter
+    assert got["c-mean"] == pytest.approx([0.5, 0.85, 0.325])
+    assert got["c-median"] == pytest.approx([2, 1.5, 2.5]) and got["c-worst"] == [3, 2, 3]
+    assert got["c-wins"] == [1, 1.5, 0.5] and got["m-wins"] == [2, 1, 0]
+    assert got["m-kemeny"] == [1, 2, 3] and got["c-pareto"] == [1, 1, 2]
+    assert got["bio"] == [1, 2, 3]
+    assert [bench.lower_better(o["how"]) for o in (built["c-wins"], built["c-pareto"])] == [False, True]
+    # an incomplete method gets no score, and is left out of the others' ranks
+    entries[2]["values"]["a"].pop("m3")
+    assert bench.scores(entries, built["c-rank"], suite) == [1.5, 1.5, None]
+    # what the check finds
+    bad = headway.Suite("bad")
+    s = bad.symbol("s", "s", "score", role="input")
+    bad.dataset("a", "A")
+    bad.metric("m", "m", "metric", equation="m = s", inputs=[s], better="higher", code="toy:gram", category="x")
+    bad.category("y", "y", metrics=["nope"], datasets=["zz"])
+    bad.objective("o1", "o1", categories=["x", "q"], how="mean")
+    bad.objective("o2", "o2", metrics=["m"], categories=["x"], how="best")
+    bad.objective("o3", "o3")
+    errors = headway.check(bad).errors
+    for e in ("category y: undeclared metric 'nope'", "category y: undeclared dataset 'zz'",
+              "objective o1: undeclared category 'q'", "objective o1: metric m has no range",
+              "objective o2: how='best'", "objective o2: metrics or categories, not both", "objective o3: no metrics"):
+        assert any(e in x for x in errors), (e, errors)
 
 
 def test_results(tmp_path, monkeypatch, capsys) -> None:
@@ -1070,18 +1130,16 @@ def test_codetex(tmp_path, monkeypatch, capsys) -> None:
     assert transcribe(method, kinds=kinds, first_line=11) == r"f\left(c, b\right) = c \odot b"   # without hints
     # jaxtyping's named axes, with hints: indices (an axis's first letter no other index or one-letter name has, or
     # the spec's index for it), so sums are over indices and products are index notation
-    def axes(ann: ast.expr) -> list[str] | None:
-        return ann.slice.elts[1].value.split() if isinstance(ann, ast.Subscript) else None    # type: ignore
     src = ('def f(n: Float[np.ndarray, "bins groups"], q: Float[np.ndarray, "bins groups"], '
            'b: Float[np.ndarray, "bins"]):\n    return (n * q).sum(0) + b.sum()')
-    assert transcribe(src, hints=True, axes=axes) == \
+    assert transcribe(src, hints=True) == \
         r"f\left(n_{ig}, q_{ig}, b_{i}\right) = \sum_{i} n_{ig}\,q_{ig} + \sum_{i} b_{i}"
-    assert transcribe(src, hints=True, axes=axes, indices={"bins": "j"}) == \
+    assert transcribe(src, hints=True, indices={"bins": "j"}) == \
         r"f\left(n_{jg}, q_{jg}, b_{j}\right) = \sum_{j} n_{jg}\,q_{jg} + \sum_{j} b_{j}"
-    assert transcribe(src, axes=axes) == r"f\left(n, q, b\right) = \sum_{\text{axis } 0} n \odot q + \sum b"
+    assert transcribe(src) == r"f\left(n, q, b\right) = \sum_{\text{axis } 0} n \odot q + \sum b"
     # a mask with the axis's index restricts it: x where learns_c
     src = 'def f(x: Float[np.ndarray, "cells genes"], learns: Bool[np.ndarray, "cells"]):\n    return x[learns].mean(0)'
-    assert transcribe(src, hints=True, axes=axes) == \
+    assert transcribe(src, hints=True) == \
         r"f\left(x_{cg}, \mathit{learns}_{c}\right) = \operatorname{mean}_{c} \left.x_{cg}\right|_{\mathit{learns}_{c}}"
     # an assert is a condition the code holds under, under the equation: x.all() as the indexed inequality it
     # states, a condition of several parts (and, & in an all()) one part per line
@@ -1094,7 +1152,7 @@ def test_codetex(tmp_path, monkeypatch, capsys) -> None:
     # times:" (or "for r = 0, ..., n - 1:" if it reads its turn), a variable assigned again written x ← ...
     src = ('def f(n: Float[np.ndarray, "bins groups"], b: Float[np.ndarray, "bins"]):\n'
            '    d = np.zeros(n.shape[1])\n    for _ in range(3):\n        d = d + (n * b[:, None]).sum(0)\n    return d')
-    assert transcribe(src, hints=True, axes=axes) == (
+    assert transcribe(src, hints=True) == (
         r"\begin{array}{l}\displaystyle d_{g} = 0 \\ \displaystyle \textbf{repeat } 3\textbf{ times:} \\ \displaystyle "
         r"\quad d_{g} \leftarrow d_{g} + \sum_{i} n_{ig}\,b_{i} \\ \displaystyle f\left(n_{ig}, b_{i}\right) = d_{g}"
         r"\end{array}")
@@ -1297,3 +1355,79 @@ def test_codedoc(tmp_path, monkeypatch) -> None:
     G.op("a", "a", desc="TODO", inputs=[x], outputs=[G.symbol("y", "y", "y", role="output")], code="docmod:a")
     d = headway.page.data(G, headway.check(G))
     assert d["ops"][0]["code_doc"] == "Centre the columns."
+
+
+# ---------- scores, categories and figures of a suite ----------
+def test_categories_need_datasets_and_figures_need_images() -> None:
+    B = headway.Suite("s")
+    s = B.symbol("s", "s", "score", role="input")
+    B.dataset("d1", "D1")
+    B.dataset("d2", "D2")
+    B.metric("m", "m", "m", equation="m = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram")
+    B.category("c", "c", metrics=["m"], datasets=["d2"])
+    B.objective("o", "o", categories=["c"], how="rank", datasets=["d1"])
+    assert any("category c counts none of its datasets" in e for e in headway.check(B).errors)
+    w: list[str] = []
+    bench._figures({"d1": {"f": "figs/x.png"}}, {"d1": {}}, {"f"}, {}, __import__("pathlib").Path("."), w)
+    assert len(w) == 1 and "needs an image or a url" in w[0]
+    assert json.dumps(w)
+
+
+def test_scores_with_no_dataset_counted() -> None:
+    suite = {"suite": {"metrics": [{"key": "m", "better": "higher", "range": [0, 1]}],
+                       "datasets": [{"key": "h", "heldout": True}], "categories": []}}
+    e = {"values": {"h": {"m": [0.5]}}}
+    for how in bench.HOWS:
+        assert bench.scores([e, e], {"weights": {"m": 1}, "how": how, "datasets": None}, suite) == [None, None]
+    B = headway.Suite("all held out")
+    s = B.symbol("s", "s", "score", role="input")
+    B.dataset("h", "H", heldout=True)
+    B.metric("m", "m", "metric", equation="m = s", inputs=[s], better="higher", range=(0, 1), code="toy:gram")
+    B.objective("o", "o", metrics=["m"])
+    assert any("counts no dataset" in e for e in headway.check(B).errors)
+    B.objective("o", "o", metrics=["m"], datasets=["h"])
+    assert not any("counts no dataset" in e for e in headway.check(B).errors)
+
+
+def test_scores_empty_or_unknown_category() -> None:
+    """A category that counts none of the objective's datasets, or one not declared (check errors), is no voter:
+    no ZeroDivisionError or KeyError."""
+    suite = {"suite": {
+        "datasets": [{"key": "a", "heldout": False}, {"key": "h", "heldout": True}],
+        "metrics": [{"key": "acc", "better": "higher", "range": [0, 1]}, {"key": "err", "better": "lower",
+                                                                         "range": [0, 1]}],
+        "categories": [{"key": "c1", "metrics": {"acc": 1.0}, "datasets": ["h"]},
+                       {"key": "c2", "metrics": {"err": 1.0}, "datasets": None}]}}
+    entries = [{"values": {"a": {"acc": [v], "err": [1 - v]}, "h": {"acc": [v], "err": [1 - v]}}} for v in (0.3, 0.6)]
+    for how in ("rank", "mean", "wins"):
+        out = bench.scores(entries, {"how": how, "datasets": None, "categories": {"c1": 1, "c2": 1, "nope": 1},
+                                     "weights": {}}, suite)
+        assert all(x is not None for x in out)
+    assert bench.scores(entries, {"how": "rank", "datasets": None, "categories": {"c1": 1}, "weights": {}},
+                        suite) == [None, None]
+
+
+# ---------- lanes, media and file references ----------
+def test_small_ones(tmp_path) -> None:
+    lane = {"name": "v1", "from": "x", "data": {"documents": [{"path": "/tmp/a.pdf"}]}}
+    assert media.assets({"lanes": [lane]}) == {"/tmp/a.pdf"}
+    d = tmp_path / "lr=0.1"
+    d.mkdir()
+    headway.build(spec(), None, json=d / "v.json", name="v")
+    assert api.lanes([f"v2={d / 'v.json'}"])[0]["name"] == "v2"            # a path with "=" in it
+    G = spec()
+    G.constant("n", "n", "n", value=1.0, code="toy:SCALE")
+    assert not api._key_conflicts(G, {"n": 1}) and api._key_conflicts(G, {"n": 2})
+    from headway.files import resolve
+    from headway.resolve import RefError
+    (tmp_path / "x.R").write_text("a <- 1\nb <- 2\n")
+    for bad in ("-5", "1-2-3"):
+        with pytest.raises(RefError):
+            resolve(f"x.R:{bad}", tmp_path / "x.R", tmp_path)
+
+
+# ---------- the server's own files ----------
+def test_own_files_include_subpackages() -> None:
+    names = {(f.parent.name, f.name) for f in serve._own_files()}
+    assert ("core", "fold.py") in names and ("tracing", "tracer.py") in names and ("headway", "viewer.html") in names
+    assert not any("__pycache__" in f.parts for f in serve._own_files())

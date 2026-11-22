@@ -2,14 +2,15 @@
 
 A spec describes a method as a bipartite graph. Symbols are the values (scalars, vectors, matrices, settings, data);
 operations turn input symbols into output symbols. Operations point into the code with references
-("package.module:qualname", optionally "#from text..to text" for lines inside a function), which the checks
-resolve. Groups ("round 1/model") nest operations so the viewer can collapse them.
+("package.module:qualname", optionally "#text" or "#from text..to text" for lines inside a function; resolve.py),
+which the checks resolve. Groups ("round 1/model") nest operations so the viewer can collapse them.
 """
 from __future__ import annotations
 
 import itertools
 import os
 import sys
+from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, TypeAlias
@@ -303,6 +304,13 @@ class Headway:
         return {p: self.groups.get(p) or Group(p, p.rsplit("/", 1)[-1])
                 for p in sorted(paths, key=lambda p: (p.count("/"), list(self.groups).index(p)
                                                       if p in self.groups else len(self.groups), p))}
+
+
+def declared_file(g: Headway) -> str | None:
+    """The file a spec was declared in: the one most of its module-level declarations are in (else most of all of
+    them; on a tie, the first declared), None if it declares nothing."""
+    files = [d.file for d in g.declared.values() if d.function == "<module>"] or [d.file for d in g.declared.values()]
+    return Counter(files).most_common(1)[0][0] if files else None
 
 
 def _caller() -> Decl:

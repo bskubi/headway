@@ -238,11 +238,6 @@ class Server:
         self.rebuild()
         threading.Thread(target=self.watch, daemon=True).start()
 
-    def run(self, port: int = 8765, open_browser: bool = False) -> None:
-        self.start()
-        run(self.handler(), port, open_browser, f"serving {self.spec} at {{url}} (watching {len(self.watched())} "
-            "files; ctrl-c to stop)", self.close)
-
     def close(self) -> None:
         self.stopping = True
         with self.changed:
@@ -294,8 +289,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         size = os.path.getsize(path)
         start, end = 0, size - 1
-        ranged = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
-        if ranged and (ranged.group(1) or ranged.group(2)):
+        m = re.match(r"bytes=(\d*)-(\d*)$", self.headers.get("Range") or "")
+        ranged = m if m and (m.group(1) or m.group(2)) else None           # "bytes=-" asks for nothing: the whole file
+        if ranged:
             if ranged.group(1):
                 start, end = int(ranged.group(1)), min(int(ranged.group(2) or end), end)
             else:
@@ -378,10 +374,10 @@ def boot_events(h: Handler) -> None:
 
 
 def _own_files() -> dict[Path, tuple[int, int]]:
-    """headway's own source (its modules and the viewer), with their modification stamps."""
+    """headway's own source (its modules, its subpackages' and the viewer), with their modification stamps."""
     out = {}
-    for f in Path(__file__).parent.iterdir():
-        if f.suffix in (".py", ".html"):
+    for f in Path(__file__).parent.rglob("*"):
+        if f.suffix in (".py", ".html") and "__pycache__" not in f.parts:
             try:
                 st = f.stat()
                 out[f] = (st.st_mtime_ns, st.st_size)

@@ -15,14 +15,13 @@ seen to work where the original did.
 """
 from __future__ import annotations
 
-import copy
 import datetime
 import importlib
 import inspect
 import json
 import sys
 from collections import Counter, defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import ModuleType
@@ -30,9 +29,10 @@ from typing import Any
 
 from headway.clean import Relation, Result, check as check_relation, relations, resolve
 from headway.core.evaluate import safe_copy
-from headway.core.verify import compare, random_state, restore_random, traced, verify, without_random
+from headway.core.verify import compare, random_state, restore_random, returned, traced, verify, without_random
 
 MATH_RTOL = 1e-6                                     # the math shown, against the code: up to rounding
+RAISED = object()                                    # what a recorded call gave when it raised
 
 
 @dataclass
@@ -53,7 +53,7 @@ class Findings:
         lambda: defaultdict(list)))
     counts: dict[str, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
     notes: list[str] = field(default_factory=list)
-    unchecked: list[str] = field(default_factory=list)      # what no call of the run tested
+    unchecked: list[str] = field(default_factory=list)      # what the run did not check, and why
 
 
 def clean_functions(module: ModuleType) -> list[Clean]:
@@ -82,24 +82,41 @@ def _settings(assignments: list[str]) -> None:
         setattr(m, name, type(getattr(m, name))(value))
 
 
-def check(module_name: str, pytest_args: list[str], settings: list[str] = (), limit: int = 50,  # type: ignore
+def check(module_name: str, pytest_args: list[str], settings: Sequence[str] = (), limit: int = 50,
           log: Callable[[str], None] = print) -> Findings:
-    """Run the tests, recording the calls of every original a clean function stands for; then check each."""
+    """Run the tests, recording the calls of every original a clean function stands for, and the tests' own calls
+    of the clean module's functions; then check each."""
     module = importlib.import_module(module_name)
     _settings(list(settings))
     cleans = clean_functions(module)
     stands = [c for c in cleans if c.original]
     originals = {}
+    not_checked: list[str] = []
+    unresolved: set[str] = set()                         # what stands for an original that cannot be watched
     for c in stands:
         try:
-            originals[inspect.unwrap(resolve(c.original)).__code__] = c  # type: ignore[arg-type]
+            original = resolve(c.original)  # type: ignore[arg-type]
         except (ImportError, AttributeError) as e:
-            log(f"{c.name}: what it stands for, {c.original}, is not found ({e})")
+            not_checked.append(f"{c.name}: what it stands for, {c.original}, is not found ({e}): not checked")
+            unresolved.add(c.name)
+            continue
+        code = _code(original)
+        if code is None:
+            not_checked.append(f"{c.name}: what it stands for, {c.original}, is not a Python function (its calls "
+                               "cannot be watched): not checked")
+            unresolved.add(c.name)
+            continue
+        if _suspends(code):
+            not_checked.append(f"{c.name}: what it stands for, {c.original}, is a generator or a coroutine (a "
+                               "call of it ends at its first yield or await): not checked")
+            unresolved.add(c.name)
+            continue
+        originals[code] = c
     calls: list[tuple[Clean, dict[str, Any], Any]] = []
     started: dict[int, dict[str, Any]] = {}
     per: Counter[str] = Counter()
     # the clean module's own functions, called by the run itself (clean code with no original: written clean)
-    own = {inspect.unwrap(c.fn).__code__: c for c in cleans}
+    own = {code: c for c in cleans if not _suspends(code := inspect.unwrap(c.fn).__code__)}
     own_calls: list[tuple[Clean, dict[str, Any], Any]] = []
 
     def hook(frame: Any, event: str, arg: Any) -> None:
@@ -117,7 +134,8 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
             started[id(frame)] = {k: safe_copy(v) for k, v in frame.f_locals.items() if k in names} | random_state()
         elif event == "return" and id(frame) in started:
             per[key] += 1
-            (calls if c else own_calls).append((which, started.pop(id(frame)), safe_copy(arg)))
+            result = RAISED if arg is None and not returned(frame) else safe_copy(arg)
+            (calls if c else own_calls).append((which, started.pop(id(frame)), result))
 
     import pytest
     sys.setprofile(hook)
@@ -126,24 +144,24 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
     finally:
         sys.setprofile(None)
     log(f"tests: exit {int(code)}; {len(calls)} calls of originals, {len(own_calls)} of the clean code recorded")
-    f = Findings()
+    f = Findings(unchecked=not_checked)
     helpers = [fn for fn in vars(module).values() if inspect.isfunction(fn) and fn.__module__ == module.__name__]
     math_calls: dict[str, list[tuple[dict[str, Any], Any]]] = defaultdict(list)
     for c, kept, result in own_calls:                   # the clean code's own calls: its declarations, its math
+        if result is RAISED:
+            continue
         name = f"{c.fn.__module__}.{c.fn.__qualname__}"
         math_calls[name].append((kept, result))         # verify() restores the random state kept
         args, _ = without_random(kept)
         for rel in relations(c.fn):
-            if rel is c.rel or result is None:
+            if rel is c.rel or result is None:          # (None: nothing a declaration could be checked on)
                 continue
             _objective_call(rel, args, result, math_calls)
-            target = rel.target if isinstance(rel.target, str) else \
-                f"{rel.target.__module__}:{rel.target.__qualname__}"
-            f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, kept, result))
+            f.evidence[c.name][(rel.kind, _target(rel))].append(check_relation(c.fn, rel, kept, result))
     for c, kept, want in calls:
         counts = f.counts[c.name]
         args, state = without_random(kept)
-        if want is None:
+        if want is RAISED:
             counts["raised"] += 1
             continue
         try:                                            # the clean version, its helpers' calls recorded too
@@ -153,20 +171,21 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
         except AssertionError:
             counts["outside its conditions"] += 1
             continue
+        except Exception as e:                          # noqa: BLE001 (the clean version failed on this call)
+            counts[f"the clean version raised {type(e).__name__}"] += 1
+            continue
         for name, recorded in inner.items():
             if len(math_calls[name]) < limit:
                 math_calls[name] += recorded[:limit - len(math_calls[name])]
-        for k, rel in enumerate(relations(c.fn)):
+        for rel in relations(c.fn):
             if rel is c.rel:
                 adapted = rel.adapt(got) if rel.adapt else got
                 ok, diff, detail = compare(adapted, want, rel.rtol, rel.atol)
-                f.evidence[c.name][(rel.kind, str(rel.target))].append(Result(ok, diff, (detail or (
+                f.evidence[c.name][(rel.kind, _target(rel))].append(Result(ok, diff, (detail or (
                     f"largest difference {diff:.2g}")) + f" (allowed: {rel.atol:g} + {rel.rtol:g} × the value)"))
                 counts["agreed" if ok else "DISAGREED"] += 1
             else:
-                target = rel.target if isinstance(rel.target, str) else \
-                    f"{rel.target.__module__}:{rel.target.__qualname__}"
-                f.evidence[c.name][(rel.kind, target)].append(check_relation(c.fn, rel, kept, got))
+                f.evidence[c.name][(rel.kind, _target(rel))].append(check_relation(c.fn, rel, kept, got))
                 _objective_call(rel, args, got, math_calls)
     # the math shown, against the clean code, on the calls the run made
     for name, recorded in math_calls.items():
@@ -189,13 +208,30 @@ def check(module_name: str, pytest_args: list[str], settings: list[str] = (), li
         if ("math", "") not in rels and not c.fn.__name__.startswith("_"):
             f.unchecked.append(f"{key}: no call ran it, so its math is not checked")
         for r in relations(c.fn):
-            target = r.target if isinstance(r.target, str) else f"{r.target.__module__}:{r.target.__qualname__}"
-            if (r.kind, target if r is not c.rel else str(r.target)) not in rels:
+            target = _target(r)
+            if (r.kind, target) not in rels and not (r is c.rel and c.name in unresolved):    # (said already)
                 f.unchecked.append(f"{key}: its {r.kind} {target.split(':')[-1]} is not checked (no call)")
     write(module, f, "pytest " + " ".join(pytest_args), log)
     for u in f.unchecked:
         log(f"  not checked: {u}")
     return f
+
+
+def _code(fn: Any) -> Any:
+    """The code object of a Python function (through its decorators), or None (a class, a builtin, a partial)."""
+    return getattr(inspect.unwrap(fn), "__code__", None)
+
+
+def _suspends(code: Any) -> bool:
+    """Whether code is a generator's or a coroutine's: the profiler's return event comes at each yield or await,
+    not once at the end of the call."""
+    return bool(code.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE | inspect.CO_ASYNC_GENERATOR))
+
+
+def _target(rel: Relation) -> str:
+    """What a declaration is of, as the findings name it: a string target as it is written (a dotted name,
+    "pkg.mod.func"), a function as module:qualname."""
+    return rel.target if isinstance(rel.target, str) else f"{rel.target.__module__}:{rel.target.__qualname__}"
 
 
 def _objective_call(rel: Relation, args: dict[str, Any], result: Any,
@@ -206,7 +242,7 @@ def _objective_call(rel: Relation, args: dict[str, Any], result: Any,
     items = result if len(rel.over) > 1 else (result,)
     values |= dict(zip(rel.over, items))
     for target in (rel.target, *rel.subject_to):
-        if not callable(target) or isinstance(target, str):
+        if not callable(target):
             continue
         try:
             names = list(inspect.signature(target).parameters)
@@ -222,8 +258,11 @@ def _math_tolerance(fn: Callable[..., Any], result: Any = None) -> tuple[float, 
     is in it; the math is run in double where the code may not be), or within the tolerance the function declares
     for itself against its original (an eigendecomposition's sensitivity is the same in both)."""
     rtol = atol = MATH_RTOL
-    if "float32" in str(getattr(result, "dtype", "")) or "float16" in str(getattr(result, "dtype", "")):
-        rtol = atol = 1e-5 if "32" in str(result.dtype) else 1e-2
+    dtype = str(getattr(result, "dtype", ""))
+    if "float32" in dtype:
+        rtol = atol = 1e-5
+    elif "float16" in dtype:
+        rtol = atol = 1e-2
     for r in relations(fn):
         if r.kind in ("equals", "approximates"):
             rtol, atol = max(rtol, r.rtol), max(atol, r.atol)
@@ -261,14 +300,14 @@ def write(module: ModuleType, f: Findings, run: str, log: Callable[[str], None] 
             what = "the math shown" if e["kind"] == "math" else f"{e['kind']} {str(e['target']).split(':')[-1]}"
             log(f"  {name.split(':')[1]:22} {what:45} {e['passed']}/{e['calls']}  {e['detail']}")
     for name, counts in sorted(f.counts.items()):
-        others = {k: v for k, v in counts.items() if k not in ("agreed",)}
+        others = {k: v for k, v in counts.items() if k != "agreed"}
         if others:
             log(f"  {name.split(':')[1]:22} {dict(others)}")
     log(f"wrote {path}")
     return path
 
 
-def swap(module_name: str, pytest_args: list[str], settings: list[str] = (),  # type: ignore[assignment]
+def swap(module_name: str, pytest_args: list[str], settings: Sequence[str] = (),
          log: Callable[[str], None] = print) -> int:
     """The clean versions in place of the originals (every module's name bound to one), the tests run, the calls of
     each counted: a swap that did not take is seen. A clean version whose conditions (its asserts) a call does not
@@ -280,8 +319,16 @@ def swap(module_name: str, pytest_args: list[str], settings: list[str] = (),  # 
     for c in clean_functions(module):
         if not c.original:
             continue
-        original = resolve(c.original)
-        watched[inspect.unwrap(original).__code__] = f"{c.fn.__name__} (original)"
+        try:
+            original = resolve(c.original)
+        except (ImportError, AttributeError) as e:
+            log(f"{c.name}: what it stands for, {c.original}, is not found ({e}): not swapped")
+            continue
+        code = _code(original)
+        if code is None:
+            log(f"{c.name}: what it stands for, {c.original}, is not a Python function: not swapped")
+            continue
+        watched[code] = f"{c.fn.__name__} (original)"
         watched[c.fn.__code__] = f"{c.fn.__name__} (clean)"
         adapt = c.rel.adapt if c.rel else None
 

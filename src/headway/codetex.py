@@ -17,22 +17,17 @@ from collections import Counter
 from collections.abc import Callable
 from pathlib import Path
 
-from headway.core.fold import fold_body, reused
+from headway.core.fold import changed, fold_body, reused
 from headway.core.lower import OUTPUT_ONLY, Lowerer, Module, Unsupported, _output_only
-from headway.core.printer import (ASSUMING, ATOM, INDEX_LETTERS, Name, Printer, T, function_tex, ident, indexed,
-                                  neighbours, notation, scripted, text)
-from headway.core.terms import (NEW, Axis, Const, Expr, Let, Op, Program, Shape, Stmt, Var, stmt_exprs, walk,
-                                walk_stmts)
-
-MODULES = {"np", "numpy", "math", "scipy", "sp"}
-SAME = {"asarray", "array", "asanyarray", "ascontiguousarray", "copy", "astype", "float32", "float64", "float_",
-        "view", "to_numpy", "float", "list", "tuple"}       # conversions that keep the values and their axes
-Dims = tuple[str | None, ...] | None
+from headway.core.printer import (ASSUMING, ATOM, Name, Printer, function_tex, ident, indexed, neighbours, notation,
+                                  scripted, text)
+from headway.core.terms import (NEW, Axis, Expr, Let, Op, Program, Return, Shape, Stmt, Var, stmt_body, stmt_exprs,
+                                walk, walk_stmts)
 
 # the names other modules use
 _ident, _function, _scripted, _text, _notation = ident, function_tex, scripted, text, notation
-__all__ = ["Name", "transcribe", "returned", "condition", "imports", "ASSUMING", "INDEX_LETTERS", "MODULES", "SAME",
-           "OUTPUT_ONLY", "_output_only", "neighbours", "Unsupported"]
+__all__ = ["Name", "transcribe", "returned", "condition", "imports", "ASSUMING", "OUTPUT_ONLY", "_output_only",
+           "neighbours", "Unsupported"]
 
 
 def _indexed_tex(base: str, dims: tuple[str | None, ...]) -> str:
@@ -73,8 +68,9 @@ def _in_context(file: str, first: int, last: int, module: Module, names: dict[st
                 kinds: Callable[[int, int, str], str | None] | None,
                 helpers: dict[str, ast.FunctionDef]) -> tuple[Program, Lowerer, set[str]] | None:
     """A block of lines of a function, read as part of the function (so that its values have the shapes the
-    function's annotations and its earlier lines give them): the block's statements, and the lowerer that read
-    them. None if the lines are not a function's statements."""
+    function's annotations and its earlier lines give them): the block's statements, the lowerer that read them,
+    and the variables that have values before the block (the function's parameters and its earlier assignments).
+    None if the lines are not a function's statements."""
     try:
         tree = ast.parse(Path(file).read_text())
     except (OSError, SyntaxError, UnicodeDecodeError):
@@ -94,7 +90,6 @@ def _in_context(file: str, first: int, last: int, module: Module, names: dict[st
         if chosen:
             return chosen
         for st in body:                                 # the block inside a loop or a branch: look there
-            from headway.core.terms import stmt_body
             inner = pick(stmt_body(st))
             if inner:
                 return inner
@@ -107,11 +102,10 @@ def _in_context(file: str, first: int, last: int, module: Module, names: dict[st
     return Program(None, [], chosen), low, before
 
 
-def _aliases(body: list[Stmt], given: set[str], params: set[str]) -> dict[str, str]:
+def _aliases(body: list[Stmt], given: set[str]) -> dict[str, str]:
     """x = y (or a conversion of y that keeps its values), x assigned only there: x another name for y, written as
     y, with no line of its own; never when either is changed (two names for one value would hide it)."""
     stores = Counter(n for st in walk_stmts(body) if isinstance(st, Let) for n in st.targets)
-    from headway.core.fold import changed
     ch = changed(body)
     out = {}
     for st in body:
@@ -126,7 +120,6 @@ def transcribe(source: str, names: dict[str, Name] | None = None, max_lines: int
                imported: set[str] | frozenset[str] = frozenset(), short: bool = False,
                first_line: int = 1, hints: bool = False,
                kinds: Callable[[int, int, str], str | None] | None = None,
-               axes: Callable[[ast.expr], list[str] | None] | None = None,
                indices: dict[str, str] | None = None, inline: dict[str, str] | None = None,
                flush: bool = False, define: list[tuple[str, int]] | None = None,
                where: list[str] | None = None, before: list[str] | None = None, file: str | None = None) -> str | None:
@@ -139,8 +132,7 @@ def transcribe(source: str, names: dict[str, Name] | None = None, max_lines: int
     name: its index's TeX}. inline: {function name: its source}, written where it is called. flush: every line flush
     left. define: [(source, first line)] of functions the code calls, defined under it ("where ..."), each written
     with what its first call gives for its parameters. where: lines (TeX) that say what the code's symbols are.
-    before: lines (TeX) to put first, in the same block. file: the code's file (for its imports). (axes: unused,
-    the core reads jaxtyping's annotations itself.)"""
+    before: lines (TeX) to put first, in the same block. file: the code's file (for its imports)."""
     try:
         tree = ast.parse(textwrap.dedent(source))
     except SyntaxError:
@@ -179,7 +171,6 @@ def transcribe(source: str, names: dict[str, Name] | None = None, max_lines: int
         p.defined |= {a for a, _, _ in prog.params}
         # the variable a function returns, assigned in it: written as the symbol of what it returns
         last = prog.body[-1] if prog.body else None
-        from headway.core.terms import Return
         if isinstance(last, Return) and isinstance(last.value, Var) and "return" in names \
                 and last.value.name not in names and last.value.name not in p.defined \
                 and any(isinstance(st, Let) and last.value.name in st.targets for st in walk_stmts(prog.body)):
@@ -191,7 +182,7 @@ def transcribe(source: str, names: dict[str, Name] | None = None, max_lines: int
     # than once (not the short symbols: the switch between them and code names changes no line)
     keep = given | low.declared | reused(prog.body)
     body = fold_body(prog.body, keep) or prog.body
-    p.aliases = _aliases(body, given, {a for a, _, _ in prog.params})
+    p.aliases = _aliases(body, given)
     lines = p.block(body, prog if fn is not None else None, 0)
     if not lines:
         return None
@@ -283,7 +274,6 @@ def returned(source: str, names: dict[str, Name] | None = None, short: bool = Fa
     low = Lowerer(Module.of(tree), _given(names), hints=False)
     prog = low.program(fn)
     body = fold_body(prog.body, set(names))
-    from headway.core.terms import Return
     if not body or len(body) != 1 or not isinstance(body[0], Return) or body[0].value is None:
         return None
     return Printer(names, short=short).expr(body[0].value).tex
@@ -327,6 +317,3 @@ def imports(file: str) -> set[str]:
         if isinstance(st, (ast.Import, ast.ImportFrom)):
             out.update((a.asname or a.name).split(".")[0] for a in st.names)
     return out
-
-
-_unused = (Const, T)

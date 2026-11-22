@@ -7,7 +7,7 @@ versions at once (a lineage), so a rename two versions back still matches. What 
 the built objects, never from a TeX parse:
 
   renamed     a different key (matched by `was`)
-  structure   inputs or outputs (as lineages), group, `per`; a symbol's dimensions or role
+  structure   inputs or outputs (as lineages), group, `per`, condition; a symbol's dimensions, `per` or role
   equation    a step's TeX, or a symbol's, compared as text with the whitespace collapsed
   code        the references, or the source text they resolve to
   value       a setting's or a constant's value
@@ -121,9 +121,9 @@ def _code(obj: dict[str, Any]) -> list[tuple[str, str]]:
 
 def compare(headways: Sequence[dict[str, Any]], a: int, b: int,
             lin: dict[Item, str] | None = None) -> list[Change]:
-    """What changed from version a to version b, in b's order (removals last)."""
+    """What changed from version a to version b: steps, then symbols, then groups, each in b's order with its
+    removals last."""
     lin = lin if lin is not None else lineages(headways)
-    A, B = headways[a], headways[b]
 
     def by_lineage(v: int, kind: str) -> dict[str, list[dict[str, Any]]]:
         out: dict[str, list[dict[str, Any]]] = {}

@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from headway.resolve import Location, RefError, _anchored
+from headway.resolve import Location, RefError, _anchored, package_root
 
 FILENAMES = {"Snakefile": "snakemake"}
 EXTENSIONS = {".smk": "snakemake", ".nf": "nextflow"}            # nextflow: no tree-sitter grammar; anchors, lines
@@ -56,10 +56,8 @@ def bases(spec_file: str | None) -> list[Path]:
                 out.append(Path(run.stdout.strip()))
         except (OSError, subprocess.SubprocessError):
             pass
-        top = folder
-        while (top / "__init__.py").exists():
-            top = top.parent
-        out += [top, folder]
+        package = package_root(spec_file)               # the spec's top-level package; its parent is a base
+        out += [package.parent if package else folder, folder]
     return list(dict.fromkeys(p.resolve() for p in out))
 
 
@@ -180,9 +178,9 @@ def resolve(ref: str, file: Path, base: Path) -> Location:
     lines = text.splitlines(keepends=True)
     parsed = _parsed(str(file), file.stat().st_mtime, lang)
     start, end = 1, len(lines)
-    if name and name.replace("-", "").isdigit():
-        lo, _, hi = name.partition("-")
-        start, end = int(lo), int(hi or lo)
+    numbered = re.fullmatch(r"(\d+)(?:-(\d+))?", name or "")
+    if numbered:
+        start, end = int(numbered[1]), int(numbered[2] or numbered[1])
         if not 1 <= start <= end <= len(lines):
             raise RefError(f"{ref}: lines {name}, but {path} has {len(lines)}")
     elif name:

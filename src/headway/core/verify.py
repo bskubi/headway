@@ -11,7 +11,7 @@ code does not do; agreement, on real inputs, is the evidence that the math shown
 from __future__ import annotations
 
 import ast
-import copy
+import dis
 import inspect
 import sys
 import textwrap
@@ -22,7 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from headway.core.evaluate import Evaluator, Mismatch, Uncheckable, safe_copy
+from headway.core.evaluate import Evaluator, safe_copy
 from headway.core.lower import Lowerer, Module
 from headway.core.terms import Program, Shape
 
@@ -98,24 +98,25 @@ def restore_random(state: Any) -> None:
         np.random.set_state(state)
 
 
+_COMPUTE: Any = object()                # verify()'s result when not given: computed by calling the function
+
+
 def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str, Any] | None = None,
-           result: Any = None, rtol: float = 1e-9, atol: float = 1e-12, forms: tuple[str, ...] = ("lowered", "folded"),
+           result: Any = _COMPUTE, rtol: float = 1e-9, atol: float = 1e-12, forms: tuple[str, ...] = ("lowered", "folded"),
            names: dict[str, Any] | None = None, scaled: bool = False,
            given: dict[str, Shape] | None = None, constants: bool = True) -> Report:
     """Run a function's Program (each form) on a call's arguments and compare with the function's own result
-    (computed here, on a copy, if not given)."""
+    (computed here, on a copy, if not given; a result given as None is the function's None)."""
     from headway.core.fold import fold
     owner = getattr(fn, "__self__", None)                # a bound method: its object is its self
     target = inspect.unwrap(fn.__func__ if inspect.ismethod(fn) else fn)
     kwargs, state = without_random(kwargs or {})
-    bound = inspect.signature(target).bind(*((owner,) if owner is not None else ()), *args, **(kwargs or {}))
+    bound = inspect.signature(target).bind(*((owner,) if owner is not None else ()), *args, **kwargs)
     bound.apply_defaults()
-    call = dict(bound.arguments)
-    if result is None:
+    call = dict(bound.arguments)                        # a bound method's object under its first parameter
+    if result is _COMPUTE:
         restore_random(state)
         result = target(*(safe_copy(a) for a in bound.args), **{k: safe_copy(v) for k, v in bound.kwargs.items()})
-        if owner is not None:
-            call["self"] = owner
     prog, _ = program_of(target, given=given, constants=constants)
     scope = dict(target.__globals__) | dict(names or {})
     owner_path = target.__qualname__.split(".")[:-1]   # a method: its class, for super()
@@ -132,10 +133,7 @@ def verify(fn: Callable[..., Any], args: tuple[Any, ...] = (), kwargs: dict[str,
         restore_random(state)                           # each form draws what the call drew
         try:
             got = ev.run(p, call)
-        except (Uncheckable, Mismatch) as e:
-            report.checks.append(Check(form, False, float("inf"), f"{type(e).__name__}: {e}"))
-            continue
-        except Exception as e:                              # a term that fails where the code does not
+        except Exception as e:      # noqa: BLE001 (Uncheckable, Mismatch, or a term that fails where the code does not)
             report.checks.append(Check(form, False, float("inf"), f"{type(e).__name__}: {e}"))
             continue
         ok, diff, detail = compare(got, result, rtol, atol, scaled)
@@ -235,14 +233,24 @@ def _numeric_list(x: Any) -> bool:
     return isinstance(x, list) and bool(x) and all(isinstance(v, (int, float, np.number)) for v in x)
 
 
+def returned(frame: Any) -> bool:
+    """Whether a frame ends by returning (its last instruction a return), not by an exception passing out of it: a
+    profiler's or a tracer's return event gives None for both."""
+    return dis.opname[frame.f_code.co_code[frame.f_lasti]] in ("RETURN_VALUE", "RETURN_CONST")
+
+
 @contextmanager
 def traced(*functions: Callable[..., Any], limit: int = 3) -> Iterator[dict[str, list[tuple[dict[str, Any], Any]]]]:
     """Record calls of functions while code runs (their arguments copied as each starts, and what it returns), up to
     `limit` calls each: for verify(), on the inputs a real run gives. Nothing in the code is changed: a profiler
-    watches the calls."""
+    watches the calls. A call that raises is not recorded, nor are a generator's or a coroutine's calls (the
+    profiler sees each of their yields as a return)."""
     codes = {inspect.unwrap(f).__code__: f"{inspect.unwrap(f).__module__}.{inspect.unwrap(f).__qualname__}"
              for f in functions}
     calls: dict[str, list[tuple[dict[str, Any], Any]]] = {name: [] for name in codes.values()}
+    for code in [c for c in codes if c.co_flags & (inspect.CO_GENERATOR | inspect.CO_COROUTINE
+                                                   | inspect.CO_ASYNC_GENERATOR)]:
+        del codes[code]
     started: dict[int, dict[str, Any]] = {}
 
     def profile(frame: Any, event: str, arg: Any) -> None:
@@ -256,7 +264,9 @@ def traced(*functions: Callable[..., Any], limit: int = 3) -> Iterator[dict[str,
             started[id(frame)] = {k: safe_copy(frame.f_locals[k]) for k in names if k in frame.f_locals} | \
                 random_state()
         elif event == "return" and id(frame) in started:
-            calls[name].append((started.pop(id(frame)), safe_copy(arg)))
+            args = started.pop(id(frame))
+            if arg is not None or returned(frame):      # (not an exception passing out of it)
+                calls[name].append((args, safe_copy(arg)))
 
     old = sys.getprofile()
     sys.setprofile(profile)

@@ -14,6 +14,7 @@ from __future__ import annotations
 import copy
 import importlib
 import math
+import operator
 from collections.abc import Callable
 from typing import Any
 
@@ -50,7 +51,10 @@ def _ln(x: Any) -> Any:
 
 PRIMITIVES: dict[str, Callable[..., Any]] = {
     "add": np.add, "sub": np.subtract, "mul": np.multiply, "div": np.true_divide, "pow": np.power,
-    "neg": np.negative, "mod": np.mod, "floordiv": np.floor_divide, "lshift": np.left_shift, "rshift": np.right_shift, "log": _ln, "exp": np.exp, "sqrt": np.sqrt,
+    "neg": np.negative, "mod": np.mod, "floordiv": np.floor_divide,
+    # Python's operators: numpy's for arrays, and Python's unbounded integers kept (np.left_shift(1, 70) is 0)
+    "lshift": operator.lshift, "rshift": operator.rshift, "bitand": operator.and_, "bitor": operator.or_,
+    "bitxor": operator.xor, "log": _ln, "exp": np.exp, "sqrt": np.sqrt,
     "abs": np.abs, "log1p": np.log1p, "expm1": np.expm1, "log2": np.log2, "log10": np.log10,
     "sigmoid": lambda x: 1 / (1 + np.exp(-np.asarray(x, np.float64))),
     "logit": lambda p: _ln(np.asarray(p, np.float64) / (1 - np.asarray(p, np.float64))),
@@ -63,8 +67,13 @@ PRIMITIVES: dict[str, Callable[..., Any]] = {
     "eq": lambda a, b: a == b if _scalars(a, b) else np.equal(a, b),
     "ne": lambda a, b: a != b if _scalars(a, b) else np.not_equal(a, b),
     "lt": np.less, "le": np.less_equal, "gt": np.greater, "ge": np.greater_equal,
+    # and, or: elementwise, both sides evaluated (& and | of booleans, numpy's logical_and); andthen, orelse:
+    # Python's and, or (Evaluator.apply: the second side evaluated only if the first does not decide, and the
+    # result one of the two); these entries are for arrays, elementwise
     "and": lambda a, b: (a and b) if _scalars(a, b) else np.logical_and(a, b),
     "or": lambda a, b: (a or b) if _scalars(a, b) else np.logical_or(a, b),
+    "andthen": lambda a, b: (a and b) if _scalars(a, b) else np.logical_and(a, b),
+    "orelse": lambda a, b: (a or b) if _scalars(a, b) else np.logical_or(a, b),
     "not": lambda a: (not a) if _scalars(a) else np.logical_not(a),
     "in": lambda a, b: a in b, "notin": lambda a, b: a not in b,
     "is": lambda a, b: a is b, "isnot": lambda a, b: a is not b,
@@ -114,7 +123,7 @@ class Evaluator:
 
     def run(self, prog: Program | list[Stmt], args: dict[str, Any], sigs: dict[str, Sig] | None = None) -> Any:
         """Run a program on its arguments (by name; a copy is taken), its parameters' signatures checked against
-        their values. The returned value, or the environment when the program returns nothing."""
+        their values. The returned value (None when the program returns nothing)."""
         body = prog.body if isinstance(prog, Program) else prog
         self.env = {k: safe_copy(v) for k, v in args.items()}
         params = dict(sigs or {})
@@ -352,7 +361,8 @@ class Evaluator:
         if isinstance(e, Idx):
             return np.arange(self.extent(e.axis))
         if isinstance(e, Extent):
-            of = np.shape(self.ev(e.of)) if not isinstance(self.ev(e.of), (list, tuple)) else (len(self.ev(e.of)),)
+            value = self.ev(e.of)
+            of = (len(value),) if isinstance(value, (list, tuple)) else np.shape(value)
             if isinstance(e.axis, Pos):
                 return of[e.axis.k]
             if e.of.sig is not None and e.axis in [a.base() for a in e.of.sig]:
@@ -382,21 +392,17 @@ class Evaluator:
             return tuple(self.key(x) for x in k.items)
         return self.ev(k)
 
-    def aligned(self, x: Expr) -> Any:
-        return self.ev(x)
-
     def apply(self, e: Apply) -> Any:
         f = PRIMITIVES.get(e.fn)
         if f is None:
             raise Uncheckable(e.fn)
-        if e.fn in ("and", "or") and len(e.args) == 2:   # Python's: the second not evaluated if the first decides
+        if e.fn in ("andthen", "orelse") and len(e.args) == 2:     # the second not evaluated if the first decides
             first = self.ev(e.args[0])
             if np.ndim(first) == 0 and not _is_torch(first):
-                if (e.fn == "and" and not first) or (e.fn == "or" and first):
-                    return first
-                vals = [first, self.ev(e.args[1])]
-            else:
-                vals = [first, self.ev(e.args[1])]
+                # Python's: the first if it decides, else the second (k or 10.0 is 10.0 when k is 0, not True)
+                decides = not first if e.fn == "andthen" else bool(first)
+                return first if decides else self.ev(e.args[1])
+            vals = [first, self.ev(e.args[1])]
         else:
             vals = [self.ev(a) for a in e.args]
         if e.fn not in WHOLE and _named(e.sig) and all(_named(a.sig) for a in e.args):
@@ -849,12 +855,14 @@ def _torch_primitives() -> dict[str, Callable[..., Any]]:
         "expm1": torch.expm1, "sigmoid": torch.sigmoid, "logit": torch.logit, "tanh": torch.tanh,
         "relu": torch.relu, "softplus": F.softplus, "max2": torch.maximum, "min2": torch.minimum,
         "eq": torch.eq, "ne": torch.ne, "lt": torch.lt, "le": torch.le, "gt": torch.gt, "ge": torch.ge,
-        "and": torch.logical_and, "or": torch.logical_or, "not": torch.logical_not, "floor": torch.floor,
+        "and": torch.logical_and, "or": torch.logical_or, "andthen": torch.logical_and, "orelse": torch.logical_or,
+        "not": torch.logical_not, "floor": torch.floor,
         "ceil": torch.ceil, "sign": torch.sign, "square": torch.square, "sin": torch.sin, "cos": torch.cos,
         "matmul": torch.matmul, "inv": torch.linalg.inv, "solve": torch.linalg.solve, "det": torch.linalg.det,
         "trace": torch.trace, "norm": torch.linalg.norm, "gammaln": torch.lgamma, "digamma": torch.digamma,
         "isnan": torch.isnan, "isfinite": torch.isfinite, "round": torch.round, "mod": torch.remainder,
         "floordiv": torch.floor_divide, "log2": torch.log2, "log10": torch.log10, "erf": torch.erf,
+        "bitand": torch.bitwise_and, "bitor": torch.bitwise_or, "bitxor": torch.bitwise_xor,
     }
 
 

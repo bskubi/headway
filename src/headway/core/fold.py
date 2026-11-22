@@ -14,14 +14,21 @@ writes it line by line, as an algorithm. Folding changes no value: the folded Pr
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
+from typing import Any
 
-from headway.core.terms import (Aggregate, Apply, Assume, Binder, Build, Cases, Const, Draw, Effect, Expr, For, If,
-                                Item, Jump, Let, Op, Program, Range, Return, SetPart, Stmt, Tup, Unwritten, Var, While,
-                                bound, free_vars, map_children, stmt_body, stmt_exprs, walk, walk_stmts)
+from headway.core.terms import (Aggregate, Apply, Assume, Binder, Build, Cases, Const, Draw, Effect, Expr, Extent, For,
+                                If, Item, Let, Op, Program, Range, Return, SetPart, Stmt, Tup, Var, While, bound,
+                                broadcast, free_vars, inside, map_children, stmt_exprs, walk, walk_stmts)
 
 
 class _NotOne(Exception):
     """The code cannot be one equation."""
+
+
+class Captured(_NotOne):
+    """A substitution would put a value inside a sum or a family that binds a variable the value reads (y = 2 i;
+    [y + i for i in ...]: the i of y is not the family's)."""
 
 
 def fold(prog: Program, keep: set[str] | None = None) -> Program:
@@ -46,21 +53,34 @@ def fold_body(body: list[Stmt], keep: set[str]) -> list[Stmt] | None:
 
 def substitute(e: Expr, env: dict[str, Expr]) -> Expr:
     """e with each variable it reads replaced by the expression env gives it (a sum's or a family's own variables
-    are not the outer ones)."""
+    are not the outer ones). Captured if a value put inside a sum or a family reads a variable it binds."""
     if not env:
         return e
     if isinstance(e, Var):
         return env.get(e.name, e)
     inner = bound(e)
-    sub_env = {k: v for k, v in env.items() if k not in inner} if inner else env
-    if isinstance(e, (Aggregate, Build)) and inner:
-        # the domains are outside the binders, the body inside
-        over = tuple(Binder(i.var, substitute(i.domain, env)) if isinstance(i, Binder) else i for i in e.over)
-        body = substitute(e.body, sub_env)
-        where = substitute(e.where, sub_env) if e.where is not None else None
-        from dataclasses import replace
-        return replace(e, over=over, body=body, where=where)
-    return map_children(e, lambda c: substitute(c, sub_env))
+    if not inner:
+        return map_children(e, lambda c: substitute(c, env))
+    sub_env = {k: v for k, v in env.items() if k not in inner}
+    read = {n for c in inside(e) for n in free_vars(c)}       # what the body and the condition read
+    if any(inner & set(free_vars(v)) for k, v in sub_env.items() if k in read):
+        raise Captured
+    # each domain is outside its binder (and inside those before it), the rest (a sum's or a family's body and
+    # condition, a dict comprehension's pairs) inside them all
+    over: list[Any] = []
+    before: set[str] = set()
+    binding: Any = e                                    # an expression with binders: it has an over
+    for i in binding.over:
+        if isinstance(i, Binder):
+            outer = {k: v for k, v in env.items() if k not in before}
+            if any(before & set(free_vars(outer[k])) for k in free_vars(i.domain) if k in outer):
+                raise Captured                          # y = i + 1; [j for i in a for j in range(y)]
+            over.append(Binder(i.var, substitute(i.domain, outer)))
+            before |= set(_flat_names(i.var))
+        else:
+            over.append(i)
+    rest: Any = map_children(replace(binding, over=()), lambda c: substitute(c, sub_env))
+    return replace(rest, over=tuple(over))  # type: ignore[no-any-return]
 
 
 def reused(body: list[Stmt]) -> set[str]:
@@ -87,7 +107,7 @@ def changed(body: list[Stmt]) -> set[str]:
             out.update(st.targets)
         elif isinstance(st, SetPart):
             base = st.target
-            while isinstance(base, Item) or hasattr(base, "base") and not isinstance(base, Var):
+            while hasattr(base, "base") and not isinstance(base, Var):
                 base = base.base  # type: ignore[attr-defined]
             if isinstance(base, Var):
                 out.add(base.name)
@@ -104,10 +124,12 @@ class _Flow:
         self.final: dict[str, Expr] = {}
         self.kept: set[str] = set()                     # assigned together (a, b = f(x)): kept as a line
 
-    def block(self, stmts: list[Stmt] | tuple[Stmt, ...], env: dict[str, Expr],
-              named: bool = True) -> tuple[Expr | None, str | None]:
+    def block(self, stmts: list[Stmt] | tuple[Stmt, ...], env: dict[str, Expr], named: bool = True,
+              after: list[Stmt] | None = None) -> tuple[Expr | None, str | None]:
         """Run the statements over env (variable -> its expression): (what they return, if they always do; the
-        variable assigned last). named: lines of kept variables may be written (not inside a branch or loop)."""
+        variable assigned last). named: lines of kept variables may be written (not inside a branch or loop).
+        after: the statements that run after these (those after the if they are a branch of)."""
+        after = after or []
         last: str | None = None
         stmts = list(stmts)
         for k, st in enumerate(stmts):
@@ -122,7 +144,7 @@ class _Flow:
                 self.final = env
                 return substitute(st.value, env), last
             if isinstance(st, If):
-                ret, ch = self.branch(st, stmts[k + 1:], env, named)
+                ret, ch = self.branch(st, stmts[k + 1:], env, named, after)
                 if ret is not None:
                     return ret, last
                 last = ch or last
@@ -130,7 +152,7 @@ class _Flow:
             if isinstance(st, For):
                 if st.orelse:
                     raise _NotOne
-                last = self.loop(st, env) or last
+                last = self.loop(st, env, [*stmts[k + 1:], *after]) or last
                 continue
             if not isinstance(st, Let):
                 raise _NotOne                           # a change in place, a call for its effect, a while
@@ -171,23 +193,25 @@ class _Flow:
 
     def unshared(self, v: str, env: dict[str, Expr]) -> None:
         """Before an in-place change of v: no other variable may hold what v holds (y = x; x += 1: y would change
-        too, which substitution cannot show)."""
+        too, which substitution cannot show). Another variable holds it if its expression reads v, or is v's own
+        expression (view = buf, buf's [] written into view)."""
+        mine = env.get(v)
         held = [e for k, e in env.items() if k != v] + [getattr(line, "value", None) for line in self.lines]
-        if any(v in free_vars(e) for e in held if e is not None):
+        if any(e is mine or v in free_vars(e) for e in held if e is not None):
             raise _NotOne
 
-    def branch(self, st: If, rest: list[Stmt], env: dict[str, Expr],
-               named: bool) -> tuple[Expr | None, str | None]:
+    def branch(self, st: If, rest: list[Stmt], env: dict[str, Expr], named: bool,
+               after: list[Stmt]) -> tuple[Expr | None, str | None]:
         """An if/else: cases. Both branches returning, or one returning and the code after the if: the returned
         value. Neither returning: each variable a branch changes becomes cases."""
         test = substitute(st.test, env)
         yes, no = dict(env), dict(env)
-        r1, _ = self.block(st.body, yes, named=False)
-        r2, _ = self.block(st.orelse, no, named=False)
+        r1, _ = self.block(st.body, yes, False, [*rest, *after])
+        r2, _ = self.block(st.orelse, no, False, [*rest, *after])
         if r1 is not None and r2 is not None:
             return _cases(test, r1, r2), None
         if r1 is not None or r2 is not None:            # if c: return a, then the rest
-            r3, _ = self.block(rest, no if r1 is not None else yes, named)
+            r3, _ = self.block(rest, no if r1 is not None else yes, named, after)
             if r3 is None:
                 raise _NotOne
             return (_cases(test, r1, r3) if r1 is not None else _cases(test, r3, r2)), None  # type: ignore[arg-type]
@@ -200,15 +224,23 @@ class _Flow:
             last = v
         return None, last
 
-    def loop(self, st: For, env: dict[str, Expr]) -> str | None:
-        """A loop that adds up or fills in, element by element: sums, products and indexed families."""
+    def loop(self, st: For, env: dict[str, Expr], after: list[Stmt]) -> str | None:
+        """A loop that adds up or fills in, element by element: sums, products and indexed families. after: the
+        statements that run after it, which may not read its variables of one turn or its loop variable before
+        assigning them (their values after the last turn are not the sum's)."""
         over = substitute(st.domain, env)
         # what the loop assigns is not what it held before (b = b - f(q), q = expit(b): b is the loop's own)
         assigned = {n for b in walk_stmts(list(st.body)) if isinstance(b, Let) for n in b.targets}
+        assigned |= changed(list(st.body)) | {          # and what it fills in (out[k] = e, out.append(e))
+            b.value.args[0].name for b in walk_stmts(list(st.body)) if isinstance(b, Effect)
+            and isinstance(b.value, Op) and b.value.name == "append" and b.value.args
+            and isinstance(b.value.args[0], Var)}
         local = {k: v for k, v in env.items() if k not in assigned}
         var = st.var
         for n in var or ():
             local.pop(n, None)
+        if any(set(var or ()) & set(free_vars(v)) for v in local.values()):
+            raise _NotOne                               # a value from before the loop reads a name the loop rebinds
         if isinstance(over, Op) and over.qualname == "builtins.enumerate" and var is not None and len(var) == 2 \
                 and len(over.args) == 1:
             # for i, x in enumerate(xs): over i, with x the i-th of xs
@@ -231,10 +263,7 @@ class _Flow:
                     and isinstance(b.value.args[0], Var) and b.value.args[0].name == b.targets[0] \
                     and b.targets[0] not in {*sums, *families, *turn}:
                 acc = b.targets[0]
-                term = substitute(b.value.args[1], {k: v for k, v in local.items() if k != acc})
-                if acc in free_vars(term):              # acc += f(acc), or of a value made from acc: not a sum
-                    raise _NotOne
-                sums[acc] = (b.value.fn, term)
+                sums[acc] = (b.value.fn, substitute(b.value.args[1], {k: v for k, v in local.items() if k != acc}))
                 continue
             if isinstance(b, SetPart) and isinstance(b.target, Item) and isinstance(b.target.base, Var) \
                     and isinstance(b.target.key, Var) and b.target.key.name == index:          # out[i] = e
@@ -251,10 +280,17 @@ class _Flow:
                 turn.add(b.targets[0])
                 continue
             raise _NotOne
+        # a term or an element may not read what the loop changes (acc += f(acc); out[k] = s after s += x[k];
+        # out[k] = out[k - 1]; a variable of the turn read before it is assigned): those are values of the turn so
+        # far, or of the turn before, not of a sum or a family over the loop's variable
+        if any(assigned & set(free_vars(e)) for e in [*(e for _, e in sums.values()), *families.values()]):
+            raise _NotOne
         ch = [*sums, *families]
         if not ch or any(v in self.keep for v in ch):
             raise _NotOne
-        for v in sums:
+        if _reads_first(after, turn | set(st.var or ())):
+            raise _NotOne
+        for v in [*sums, *families]:                    # (view = out; out[k] = e: view would change too)
             self.unshared(v, env)
         for v in families:                              # filled whole: an empty list, or an array made for it
             if not _filled_whole(env.get(v), v in appended, over):
@@ -262,9 +298,10 @@ class _Flow:
         binder = Binder(index, over)
         for v, (op, e) in sums.items():
             whole: Expr = Aggregate("prod" if op == "mul" else "sum", (binder,), e, sig=e.sig, type=e.type)
-            start = env.get(v)
+            # what it starts from: its expression, or the variable itself (a parameter, a kept variable)
+            start = env.get(v, Var(v, sig=whole.sig, type=whole.type))
             empty = 1 if op == "mul" else 0
-            if start is None or isinstance(start, Const) and start.value == empty and not start.sig:
+            if isinstance(start, Const) and start.value == empty and not start.sig:
                 env[v] = Apply("neg", (whole,), sig=whole.sig, type=whole.type) if op == "sub" else whole
             else:
                 env[v] = Apply(op, (start, whole), sig=whole.sig, type=whole.type)
@@ -273,8 +310,32 @@ class _Flow:
         return ch[-1]
 
 
+def _flat_names(v: Any) -> list[str]:
+    return [v] if isinstance(v, str) else [n for x in v for n in _flat_names(x)]
+
+
+def _reads_first(stmts: list[Stmt] | tuple[Stmt, ...], names: set[str]) -> bool:
+    """Whether the statements may read one of names before assigning it. A later loop over one of them reads it,
+    inside its body, only after rebinding it; after that loop it still counts (an empty loop leaves the old
+    value)."""
+    names = set(names)
+    for st in stmts:
+        if not names:
+            return False
+        if any(names & set(free_vars(e)) for e in stmt_exprs(st)):
+            return True
+        if isinstance(st, For):
+            if _reads_first(st.body, names - set(_flat_names(st.var or ()))) or _reads_first(st.orelse, names):
+                return True
+        elif isinstance(st, (If, While)):
+            if _reads_first(st.body, names) or _reads_first(st.orelse, names):
+                return True
+        elif isinstance(st, Let) and not st.inplace:
+            names -= set(st.targets)
+    return False
+
+
 def _cases(test: Expr, a: Expr, b: Expr) -> Cases:
-    from headway.core.terms import broadcast
     return Cases(((test, a),), b, sig=broadcast(a.sig, b.sig, test.sig) if a.sig is not None and b.sig is not None
                  else None, type=a.type if a.type == b.type else "")
 
@@ -289,9 +350,8 @@ def _filled_whole(start: Expr | None, appended: bool, over: Expr) -> bool:
     if isinstance(start, Op) and start.name in ("zeros", "empty", "ones", "full") and start.args:
         return start.args[0] == over.hi
     if isinstance(start, Const) and start.sig is not None and len(start.sig) == 1:
-        from headway.core.terms import Extent
         return isinstance(over.hi, Extent) and over.hi.axis == start.sig[0]
     return False
 
 
-__all__ = ["fold", "substitute", "reused", "changed", "stmt_body", "Jump", "Unwritten", "While"]
+__all__ = ["fold", "substitute", "reused", "changed", "Captured"]
