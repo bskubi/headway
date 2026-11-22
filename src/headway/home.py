@@ -11,9 +11,15 @@ current viewer, so an old page gets the viewer's newer features.
     /?open=F&open=G...          built headways, the first in the page and the others in lanes beside it
     /live/PATH/...              the spec in the .py file PATH (absolute, or under the launch directory), served
                                 live (started on the first visit); ?open=F adds built headways in lanes
+    /atlas/PATH/                the atlas in folder PATH (atlas.py), read again on every visit; ?view=V opens a view
+    /atlas/PATH/atlas-version?name=N   one of its versions in full (the explorer opens it in a lane)
+    /atlas/PATH/asset?name=N&path=P    a document or medium version N shows (media.assets: only those)
     /api/list?dir=D             what is in folder D, and its subfolders
     /api/file?path=F            a built headway, as it is on disk (to open beside the page)
+    /api/asset?file=F&path=P    a document or medium the built headway F shows (media.assets: only those)
     /api/recent                 what was opened recently
+    /api/events                 which server this is (a page that finds another, headway restarted, reloads)
+    /view?file=F&compare=G      the old form of /?open=F&open=G (redirected)
 
 Only requests to 127.0.0.1 or localhost are answered, so another web page cannot use the server to read files.
 """
@@ -77,6 +83,11 @@ class Home:
             if depth >= MAX_DEPTH:
                 short, dirs[:] = short or bool(dirs), []
             entries += len(names) + len(dirs)
+            # an atlas: the folder is one item, its files are its own (an atlas.json of another kind is no atlas)
+            if "atlas.json" in names and (self.what(Path(d) / "atlas.json") or {}).get("kind") == "atlas":
+                out.append(Path(d) / "atlas.json")
+                dirs[:] = []
+                continue
             out += [Path(d) / n for n in sorted(names) if n.endswith((*BUILT, ".py"))]
             if len(out) > MAX_FILES or entries > MAX_ENTRIES:
                 return out[:MAX_FILES], True
@@ -132,6 +143,8 @@ class Home:
                 "name": module, "built_at": _mtime(f)}
 
     def _built(self, f: Path) -> dict[str, Any] | None:
+        if f.name == "atlas.json":
+            return self._atlas(f)
         # most .json and .html files are not headways: tell from their bytes before parsing (the slow part)
         try:
             with f.open("rb") as fh:
@@ -148,6 +161,54 @@ class Home:
                 "git": (d.get("source") or {}).get("git"), "keys": d.get("keys") or {},
                 "results": [r["id"] for r in d.get("results", [])], "lanes": len(d.get("lanes", [])),
                 "suite": "suite" in d, "errors": len(d.get("check", {}).get("errors", []))}
+
+    def _atlas(self, f: Path) -> dict[str, Any] | None:
+        try:
+            m = json.loads(f.read_text())
+        except (OSError, ValueError, UnicodeDecodeError):
+            return None
+        if not isinstance(m, dict) or "atlas" not in m or not isinstance(m.get("versions"), dict):
+            return None
+        made = [v.get("built_at", "") for v in m["versions"].values() if isinstance(v, dict)]
+        return {"kind": "atlas", "abs": str(f.parent), "page": False, "title": m.get("name", f.parent.name),
+                "name": m.get("name", f.parent.name), "built": "", "built_at": max(made, default=""), "git": None,
+                "keys": {}, "results": list(m.get("suites", {})), "versions": len(m["versions"]), "lanes": 0,
+                "suite": False, "errors": 0}
+
+    def _url(self, prefix: str, p: Path) -> str:
+        """The URL of a file or folder served under prefix: its path under the launch directory, or its absolute
+        path."""
+        rel = p.relative_to(self.root).as_posix() if p.is_relative_to(self.root) else str(p)
+        return prefix + urllib.parse.quote(rel) + "/"
+
+    def atlas_url(self, folder: Path) -> str:
+        return self._url("/atlas/", folder)
+
+    def serve_atlas(self, h: Handler, rest: str, q: dict[str, list[str]], query: str = "") -> None:
+        from headway.atlas import Atlas, AtlasError, is_atlas
+        sub = next((x for x in ("atlas-version", "asset") if rest.endswith("/" + x)), "")
+        if sub:
+            rest = rest[:-len(sub) - 1]
+        elif not rest.endswith("/"):                        # a relative URL in the page needs the slash
+            h.redirect("/atlas/" + urllib.parse.quote(rest) + "/" + ("?" + query if query else ""))
+            return
+        folder = self.path(rest.rstrip("/") or ".")
+        if folder is None or not is_atlas(folder):
+            raise FileNotFoundError(f"not an atlas: {rest}")
+        try:
+            at = Atlas.open(folder)
+            if sub == "atlas-version":
+                h.send(json.dumps(at.entry(q.get("name", [""])[0])), "application/json")
+                return
+            if sub == "asset":
+                h.send_asset(q.get("path", [""])[0], media.assets(at.version(q.get("name", [""])[0])))
+                return
+            view = q.get("view", [None])[0]
+            d = at.page_data(view, full=False)
+        except AtlasError as e:
+            raise FileNotFoundError(str(e)) from None
+        self.remember([folder / "atlas.json"])
+        h.send(page.html(d, library=self.library()), "text/html")
 
     def listing(self, folder: str) -> dict[str, Any]:
         """What the library shows of a folder: its specs and built headways (with their paths from the folder),
@@ -220,19 +281,14 @@ class Home:
             elif path == "/api/recent":
                 h.send(json.dumps({"recent": self.recent()}), "application/json")
             elif path == "/api/file":
-                f = self.path(q.get("path", [""])[0])
-                info = f and f.suffix in BUILT and self.what(f)
-                if not f or not info or info["kind"] != "built":
-                    raise FileNotFoundError(f"not a built headway: {q.get('path', [''])[0]}")
+                f = self.built_file(q.get("path", [""])[0])
                 self.remember([f])
                 h.send(f.read_bytes(), "application/json" if f.suffix == ".json" else "text/html")
             elif path == "/api/asset":                              # a file a built page shows (media.py)
-                f = self.path(q.get("file", [""])[0])
-                info = f and f.suffix in BUILT and self.what(f)
-                if not f or not info or info["kind"] != "built":
-                    raise FileNotFoundError(f"not a built headway: {q.get('file', [''])[0]}")
-                d, _, _ = api.read(f)
+                d, _, _ = api.read(self.built_file(q.get("file", [""])[0]))
                 h.send_asset(q.get("path", [""])[0], media.assets(d))
+            elif path.startswith("/atlas/"):
+                self.serve_atlas(h, path[len("/atlas/"):], q, url.query)
             elif path.startswith("/live/"):
                 self.serve_live(h, path[len("/live/"):], q.get("open", []), url.query)
             elif path == "/api/events":                             # which server this is: a page that finds
@@ -244,6 +300,13 @@ class Home:
         except (OSError, ValueError) as e:
             h.send(str(e), "text/plain", 400)
 
+    def built_file(self, p: str) -> Path:
+        """A built headway named in a request, or FileNotFoundError."""
+        f = self.path(p)
+        if f is None or f.suffix not in BUILT or (self.what(f) or {}).get("kind") != "built":
+            raise FileNotFoundError(f"not a built headway: {p}")
+        return f
+
     def library(self) -> dict[str, Any]:
         """What the viewer is told about the library it is served from."""
         return {"root": str(self.root)}
@@ -253,12 +316,7 @@ class Home:
         if not opened:
             h.send(page.html(None, library=self.library()), "text/html")
             return
-        files = [self.path(f) for f in opened]
-        bad = [o for o, f in zip(opened, files)
-               if not f or f.suffix not in BUILT or (self.what(f) or {}).get("kind") != "built"]
-        if bad:
-            raise FileNotFoundError(f"not a built headway: {', '.join(bad)}")
-        good = [f for f in files if f]
+        good = [self.built_file(f) for f in opened]
         d, _, _ = api.read(good[0])
         lanes = d.get("lanes", []) + api.lanes(str(f) for f in good[1:])
         self.remember(good)
@@ -306,8 +364,7 @@ class Home:
 
     def live_url(self, f: Path) -> str:
         """The URL of a spec served live: its path under the launch directory, or its absolute path."""
-        p = f.relative_to(self.root).as_posix() if f.is_relative_to(self.root) else str(f)
-        return "/live/" + urllib.parse.quote(p) + "/"
+        return self._url("/live/", f)
 
     def handler(self) -> type[Handler]:
         home = self
@@ -324,12 +381,18 @@ class Home:
 
     def run(self, port: int = 8765, open_browser: bool = False, spec: str | None = None,
             compare: list[dict[str, Any]] | None = None) -> None:
-        """Serve the library; with a spec (a module name), start it live and open on it."""
+        """Serve the library; with a spec (a module name), start it live and open on it; with an atlas folder,
+        open on it."""
+        from headway.atlas import is_atlas
         start, message = "", f"the headway library at {{url}}, starting in {self.root} (ctrl-c to stop)"
-        if spec:
+        if spec and is_atlas(spec):
+            start = self.atlas_url(Path(spec).resolve())[1:]
+            message = f"serving the atlas {spec} at {{url}}{start} (the library at {{url}}; ctrl-c to stop)"
+        elif spec:
             f = spec_file(spec, self.root)
             if f is None or self.server(f, module=spec, compare=compare) is None:
-                raise SystemExit(f"serve: no spec module {spec} found from {self.root}")
+                raise SystemExit(f"serve: {spec} is neither an atlas folder (one holding atlas.json) nor a spec module "
+                                 f"found from {self.root}")
             start = self.live_url(f)[1:]
             message = f"serving {spec} at {{url}}{start} (the library at {{url}}; ctrl-c to stop)"
         run(self.handler(), port, open_browser, message, self.close, start)

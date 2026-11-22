@@ -164,7 +164,8 @@ def test_shapes():
 "pkg.mod:func#text"                 from the line holding `text` to the line before the next comment line at the
                                     same or a smaller indentation, or to the end of the enclosing block if there
                                     is none (so "#step 2" takes the block under "# step 2: ...")
-"pkg.mod:func#from text..to text"   from the line holding `from text` to the next line holding `to text`, inclusive
+"pkg.mod:func#from text..to text"   from the line holding `from text` to the first line, from that one on, holding
+                                    `to text`, inclusive
 "pkg.mod:CONSTANT#text..text"       the same, within a module-level statement (one entry of a dict)
 ```
 
@@ -695,7 +696,7 @@ The draft passes `headway check` with no errors. What it leaves to you (or a cod
 - **Notation.** Every symbol's TeX is a short symbol chosen from its name, and every step's equation is empty:
   choose the notation you want (the paper's, the field's) and write the equations.
 - **Text.** Every description is "TODO".
-- **Dimensions.** `dims=` are not drafted.
+- **Dimensions.** `dims=` are drafted only with `--hints` (or `--clean`), and only where the code states a shape (jaxtyping annotations, shapes in docstrings); the rest are yours.
 - **Pruning.** Steps that are bookkeeping rather than the method should go, and repeated calls (the same
   function called twice, numbered `_2`) may be one step `per=` something.
 - **The wiring the code does not state.** Each gap (an input "made by the code") and each note marks a place
@@ -776,13 +777,18 @@ outputs the method's results, `code` pointing to the method's entry function, wi
 the method being benchmarked. The graph then reads data → method → metrics, and no data symbol is left unused.
 
 - **`B.metric(key, tex, name, desc="", *, equation="", inputs=(), better, range=None, unit="", source="",
-  interval="", code=(), where=None, group="metrics", was=())`** declares the output symbol `key` and the step `key` that
+  interval="", code=(), where=None, group="metrics", was=(), category=())`** declares the output symbol `key` and the step `key` that
   computes it, so a metric has a notation, an equation, code and a check like any step. `better` is `"higher"` or
   `"lower"`; `range` is its possible extent (needed by `how="mean"` objectives). For a metric with no natural
   bound (a mean squared error), either use a bounded version of it (R², or the error relative to a baseline's) or
   leave out `range` and combine it only in `how="rank"` objectives; a guessed range warns when values fall outside.
   `interval` says what the intervals in its results are, e.g. `"95%, bootstrap over embryos (200 draws) within one
   seed"`; results may give intervals for a metric only if it is set (see Intervals and differences).
+  `category` puts it in one or more categories (made if not declared, named by their key).
+- **`B.category(key, name, desc="", *, metrics=(), datasets=None)`** a category of metrics: biological,
+  technical, scalability, or any grouping. A metric can be in several; `metrics` is a list or `{metric: weight}`
+  (its weight within the category); `datasets` limits which datasets count for it (scalability only on the large
+  dataset, say). Used by objectives with `categories=`.
 - **`B.dataset(key, name, desc="", *, source="", heldout=False, values=None, facts=None, code=())`**. If the suite
   makes its data (a simulation, a preprocessing), declare those steps in the suite like any other (with their
   settings, equations and checks) and give each dataset its `values` of those settings: the steps are written
@@ -798,8 +804,12 @@ the method being benchmarked. The graph then reads data → method → metrics, 
   per version and dataset; clicking it compares the versions' images side by side. A figure is never shaded,
   sorted, ranked or part of an objective. `desc` says what to look for; `code` points to the function that draws
   it.
-- **`B.objective(key, name, desc="", *, metrics, how="mean", datasets=None, tex="")`** combines metrics into one
-  number, kept apart from the metrics. `metrics` is `{metric: weight}` or a list (weight 1). `how="mean"`: each
+- **`B.objective(key, name, desc="", *, metrics=(), categories=None, how="mean", datasets=None, tex="")`**
+  combines metrics into one number, kept apart from the metrics. `metrics` is `{metric: weight}` or a list
+  (weight 1): each metric on each dataset is one *voter*, ranking the versions. Or `categories` (`{category:
+  weight}` or a list): each category is one voter, ranking the versions by its metrics' mean rank over its
+  datasets, so a category of many metrics counts no more than a category of one; an objective over one category
+  is that category's mean rank. `how` says how the voters are combined (below). `how="mean"`: each
   metric's mean scaled to 0..1 by its range, turned so 1 is best, weighted and averaged over the datasets
   (absolute). `how="rank"`: the weighted mean rank among the versions shown, 1 best (relative). `datasets`:
   default every dataset not held out. A version missing any value an objective needs gets no score ("incomplete").
@@ -809,8 +819,45 @@ the method being benchmarked. The graph then reads data → method → metrics, 
   the sum, over the metrics and the datasets shown, of a transform of each version's mean typed per metric (`-x`,
   `2*x`, `x/0.002`, `log(x)`, with `sd`, `n`, `lo`, `hi` and a few functions), kept in the browser, not the suite.
 
-Suite errors: an empty range, an objective naming an undeclared metric or dataset, a `how="mean"` objective over a
-metric without a range, a weight that is not positive, a dataset value for anything but a declared setting, a
+**Combining metrics without comparing their values.** Every `how` but `"mean"` uses only each voter's order of the
+versions, never how far apart its values are, so no metric's units are compared with another's. Arrow's theorem
+says no such rule can have all of: every order possible (complete and transitive), unanimity (if every voter
+prefers A to B, so does the result), independence of irrelevant alternatives (the order of A and B depends only on
+how the voters order A and B, not on which other versions are shown), and no dictator (no single voter decides).
+Each rule gives up something; choose the one whose price you accept:
+
+| how | the score | 1 or more is best | gives up |
+|---|---|---|---|
+| `rank` | the weighted mean rank (Borda) | fewer | independence: a version shown or hidden can reorder two others; a narrow loss on one metric costs as many places as there are versions in between |
+| `median` | the weighted median rank | fewer | independence; ignores how badly a version does on its worst metrics, so one outlier does not move it |
+| `worst` | the worst rank on any voter | fewer | independence; egalitarian: a version is as good as its weakest metric |
+| `wins` | Copeland: how many others it beats on more voters (by weight) than it loses to (a tie: a half) | more | independence; a version that beats every other head to head (a Condorcet winner) always comes first |
+| `kemeny` | its place in the Kemeny ranking: the order disagreeing least with the voters' orders (summed pairwise disagreements) | fewer | independence (mildly: it keeps the order of the versions it ranks together); the one rule that is consistent, neutral and Condorcet-consistent at once. Exact up to 12 versions, a local search beyond |
+| `pareto` | its Pareto layer: 1 if no other version is at least as good on every voter and better on one, 2 if only layer 1 ones are, ... | fewer | completeness: versions in one layer are not ordered against each other. Domination itself depends on the two versions only, so A dominating B never changes with what else is shown |
+| `mean` | the weighted mean of range-scaled metrics | more | nothing of the above, but it compares values across metrics through their ranges, which is a choice of its own |
+
+A lexicographic order (metric 1 decides, metric 2 breaks its ties, ...) has every property but no dictator: it is
+the dictatorship. Declare several objectives to see where they agree; a version first under all of them is a safe
+pick, and where they disagree is worth a look. For instance, one objective per category and one over all of them:
+
+```python
+B.category("bio", "biological", metrics=["ari", "nmi", "silhouette"])
+B.category("tech", "technical", metrics=["batch_asw", "graph_conn"])
+B.category("scale", "scalability", metrics=["runtime", "memory"], datasets=["atlas_1m"])
+for c in ("bio", "tech", "scale"):
+    B.objective(c, B.categories[c].name, categories=[c], how="rank")
+B.objective("overall", "overall (mean rank of categories)", categories=["bio", "tech", "scale"], how="rank")
+B.objective("front", "Pareto layer", categories=["bio", "tech", "scale"], how="pareto")
+B.objective("consensus", "Kemeny", categories=["bio", "tech", "scale"], how="kemeny")
+```
+
+In the viewer, an objective over categories shows each category's mean rank in its panel. Every objective but
+`mean` is relative to the versions compared: the ones shown in the Results view, every version with results in
+an atlas.
+
+Suite errors: an empty range, an objective naming an undeclared metric, category or dataset (or both metrics and
+categories, or neither), a `how` not in the table above, a `how="mean"` objective over a metric without a range, a
+category naming an undeclared metric or dataset, a weight that is not positive, a dataset value for anything but a declared setting, a
 figure with the same key as a metric.
 
 ### Results
@@ -930,18 +977,88 @@ replicate (see Intervals and differences). Click a column for the
 metric's definition and every version's replicates, or for the figure's images side by side (click one to enlarge
 it); click a dataset for what it is; click a version for what changed in it, its keys and its figures.
 
+## Atlases: many versions at once
+
+A page with lanes shows a few versions in an order. An **atlas** keeps every version of a method (dozens, a
+ladder of experiments, a sweep, competing methods), their results, and how they relate, in one folder, and its
+page explores them all: a graph of the versions, a matrix of pairs, search, and from any path or set back to the
+lanes. A version file describes one model; anything about more than one version (paired differences, why one
+was made from another, a set of alternatives, a factorial) lives in the atlas, as a relation among them.
+
+```
+headway build pkg.graphspec --atlas atlas/ --name v5 --from v4 --why "weight genes by 1/spread" \
+    --prediction "better on the noisy module" --results results/v5.json --key weighted=true
+headway relate atlas/ update "v4->v5" --outcome "better on the noisy module only"
+headway relate atlas/ alternatives --base v4 v5 v5b v5c --label "how genes are weighted"
+headway page atlas/ -o atlas.html                 # or: headway serve atlas/
+```
+
+From Python: `headway.build(..., atlas="atlas/", name="v5", parents=["v4"], why=..., prediction=...)`. The atlas
+is made if need be (named after the method). `--from` records the parent in the version and makes a **step**
+relation from it; its differences from other versions (`differences` in its results) go onto the relation
+between the two, a step if there is one, else a **pair**. Building a name again replaces that version (a
+rebuild); its results, relations and recorded parents stay (unless `--from` names others), and results computed on a build whose model differed (its code,
+structure or values, not its wording) are marked "earlier build" where they are shown. `--keep-old NAME` keeps the
+earlier build as its own version with a step to the new one; `--drop-results` removes its results.
+
+**Relations** (`headway relate ATLAS KIND VERSION ...`): `step` (from, to), `pair` (compared, no derivation
+claimed), `alternatives` (`--base` and the alternatives to it), `factorial` (`--factors K1,K2`: the versions'
+keys give each cell's levels), `group` (any named set). Each takes `--label`, `--why`, `--prediction`,
+`--outcome`, `--tag`; `relate ATLAS update ID ...` changes one. A relation's results that only the benchmark can
+compute (an interaction with its own interval) are declared in the suite with `B.contrast(key, tex, name,
+desc, over="factorial", metrics=[...], interval=...)` and attached with `headway attach ATLAS --relation ID
+RESULTS.json --suite SUITE`, as `{"contrasts": {key: {dataset: {metric: [values]}}}}`; what can be worked out
+from the versions' own values (a spread, best minus base) the viewer shows without any declaration.
+
+**The page.** **Atlas** (beside Graph and Results) shows the versions as a graph laid out by derivation (or left to
+right by an objective), coloured by an objective, a key, when they were built, or distance from a focus version;
+zoom in for cards with the results and then a row of each version's steps, marked where they differ from the one
+it was made from (or from the focus: select a version and press F). An edge reads `+1 Δ2 −0` (steps added,
+changed, removed) and the change in the objective, coloured when every paired difference it uses agrees. The query
+highlights as you type and filters on Enter: `key:K=V`, `near:NAME~2`, `path:A..B`, `changed:STEP`,
+`contains:STEP`, `relation:ID`, `kind:alternatives`, `tag:T`, `score>0.8`, `earlier:`, or words (names, keys,
+why/prediction/outcome); `-term` excludes. Versions of one structure (a sweep: the same steps and code, different
+settings) fold into one node with a grid. **Matrix** compares every pair; **Sets** lists the relations and their
+members. Shift-click versions (or press S) to put them on the **shelf**; **Open as stack** opens them in lanes,
+each compared with the one before, as `--compare` does. A page carries every version in full up to 40 (`--full`
+for all); beyond that, those of its view, and `headway serve ATLAS` opens the others on demand.
+
+**Views** are kept in the atlas: `headway atlas view ATLAS NAME v1 v2 v3` (a stack: a path), or `--graph TERMS` (a
+query); `--suite` chooses the suites to compare on (an atlas holds every suite its versions were run on;
+results are compared within one).
+
+**The files**, plain JSON to read or edit (by hand, or by an agent; `headway atlas validate` checks the format):
+`atlas.json` (the versions, suites, views), `versions/NAME.json`, `suites/`, `results/NAME/SUITE.json`,
+`relations.jsonl` (one relation per line), `relresults/ID/SUITE.json`, `media/` (images, by content hash). headway
+reports and does not decide: `headway atlas check` lists results on earlier builds and provenance that differs
+between a version and its steps. Reorganizing is deterministic: `atlas rename`, `atlas remove`, `atlas extract
+SRC DST TERMS` (a new atlas with some versions and what they need), `atlas merge A B OUT [--prefix P]` (one name
+and model is one version), `atlas import ATLAS FILES` (built versions and pages, their differences moved onto
+relations). `headway diff ATLAS A B ...` and `headway results ATLAS [TERMS]` read from an atlas. The design and
+the format in full: docs/atlas.md in headway's repository.
+
 ## Command line
 
 ```
 headway check SPEC [--no-verify]                  exit 1 if the spec and the code disagree
 headway build SPEC [-o headway.html] [--json FILE] [--name NAME] [--results FILE ...] [--compare [NAME=]FILE ...]
               [--key NAME=VALUE ...] [--collapse GROUP ...] [--hide GROUP ...] [--no-verify] [--offline] [--editor EDITOR]
-headway serve [SPEC] [--port 8765] [--open] [--compare ...] [--collapse ...] [--hide ...] [--editor EDITOR]
-                                                  the library (recent headways; specs and built headways in any
-                                                  folder), opened on SPEC served live if given
+headway serve [SPEC|ATLAS] [--port 8765] [--open] [--compare ...] [--collapse ...] [--hide ...] [--editor EDITOR]
+                                                  the library (recent headways; specs, built headways and atlases
+                                                  in any folder), opened on SPEC served live, or ATLAS, if given
 headway diff VERSION VERSION ... [--wording]      a VERSION is a built file, or a spec module (built as it is now)
 headway attach VERSION RESULTS.json [-o OUT]
 headway results VERSION VERSION ... [--heldout]
+headway build SPEC --atlas DIR --name NAME [--from VERSION ...] [--why TEXT] [--prediction TEXT] [--keep-old NAME]
+              [--drop-results] [--results FILE ...] [--key NAME=VALUE ...]
+                                                  add the version to an atlas (see Atlases)
+headway attach ATLAS NAME RESULTS.json            or ATLAS --relation ID RESULTS.json --suite SUITE
+headway relate ATLAS step|pair|alternatives|factorial|group VERSION ... [--base V] [--factors K,K] [--id ID]
+               [--label] [--why] [--prediction] [--outcome] [--tag T ...]
+headway relate ATLAS update ID [--outcome ...]    change a relation
+headway page ATLAS [-o atlas.html] [--view V] [--full] [--offline]
+headway atlas init|import|scan|check|validate|list|rename|remove|extract|merge|view ...
+headway diff ATLAS A B ...; headway results ATLAS [TERMS]
 headway init pkg.mod:func [-o SPEC.py] [--depth 2] [--hints] [--clean]
                                                   a first draft of a spec, read from the code (see above)
 headway redraft SPEC [--force]                    a spec drafted by init, drafted again from the code
@@ -1019,7 +1136,10 @@ headway.Headway, headway.Suite                    # declaring
 headway.check(G) -> Report                        # .ok, .errors, .warnings, .text()
 headway.trace(G)                                  # context manager; .assert_ok()
 headway.build(spec, out="headway.html", *, json=None, name=None, results=(), compare=(), collapse=(), hide=(),
-              keys=None, verify=True, offline=False, editor=None, strict=False, log=None) -> dict
+              keys=None, verify=True, offline=False, editor=None, strict=False, log=None, atlas=None, parents=(),
+              why="", prediction="", keep_old=None, drop_results=False) -> dict
+headway.atlas_page(atlas, out, *, view=None, full=None, offline=False, log=None) -> dict
+headway.atlas.Atlas.open(DIR)                     # the atlas in Python: add_version, attach, relate, select, ...
 headway.attach(path, results, out=None, log=None) -> dict
 headway.read_results(results, log=None) -> dict   # a results dict or file -> the entry stored in a headway
 headway.load("pkg.mod[:attr]") -> Headway

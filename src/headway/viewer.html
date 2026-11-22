@@ -71,7 +71,6 @@ header .desc.clip, header .desc.full { cursor: pointer; }
 #gbar .zoom button:first-child { border-radius: 6px 0 0 6px; }
 #gbar .zoom button:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
 .mbtns { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
-.mbtns [hidden] { display: none; }
 button, .seg label, details.menu > summary {
   font: inherit; font-size: 12.5px; color: var(--fg); background: var(--panel); border: 1px solid var(--border);
   border-radius: 6px; padding: 4px 9px; cursor: pointer; user-select: none;
@@ -80,7 +79,7 @@ button:hover, details.menu > summary:hover { border-color: var(--accent); }
 .seg { display: inline-flex; }
 .seg label { border-radius: 0; margin-left: -1px; }
 .seg label:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
-.seg label:last-child { border-radius: 0 6px 6px 0; }
+.seg label:last-child, .seg label:has(+ label[hidden]:last-child) { border-radius: 0 6px 6px 0; }      /* the last shown */
 .seg input { display: none; }
 label.seg { font-size: 12.5px; border: 1px solid var(--border); border-radius: 6px; padding: 4px 9px; cursor: pointer; background: var(--panel); user-select: none; }
 label.seg:hover { border-color: var(--accent); }
@@ -102,10 +101,10 @@ details.menu label { display: block; padding: 2px 0; white-space: nowrap; font-s
 #graph { flex: 1; position: relative; overflow: hidden; background-image: radial-gradient(var(--grid) 1px, transparent 1px); background-size: 18px 18px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
 #graph.panning { cursor: grabbing; }
 #graph svg { width: 100%; height: 100%; display: block; }
-#note { position: absolute; left: 12px; bottom: 30px; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; background: var(--panel);
+/* a passing message, at the bottom left of the window in every view */
+#note { position: fixed; left: 12px; bottom: 30px; z-index: 60; padding: 4px 10px; border-radius: 6px; font-size: 12.5px; background: var(--panel);
   border: 1px solid var(--accent); pointer-events: none; opacity: 0; transition: opacity .4s; }
 #note.on { opacity: 1; transition: none; }
-#note { z-index: 4; }
 .node.new .n { animation: flash 1.6s ease-out 2; }
 @keyframes flash { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 30% { box-shadow: 0 0 0 5px var(--accent); } }
 #hint { position: absolute; left: 12px; right: 12px; bottom: 8px; color: var(--muted); font-size: 12px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -150,9 +149,8 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 .n.role-setting { border-color: var(--setting); background: var(--setting-bg); border-style: dashed; }
 .n.role-constant { border-color: var(--constant); background: var(--constant-bg); border-style: dotted; border-width: 2px; }
 .n.op { background: var(--op-bg); border-color: var(--edge); border-radius: 4px; font-weight: 560; }
-.n.op .ok { color: var(--ok); font-weight: 700; margin-left: 5px; }
 .n.op .bad { color: var(--bad); font-weight: 700; margin-left: 5px; }
-.n.op .per, .n.cg .per { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
+.n.op .per { color: var(--muted); font-weight: 400; font-size: 11px; margin-left: 6px; }
 .n.op.conditional { border-style: dashed; }
 .edge.control path { stroke-dasharray: 2 3; }
 .n.op .cond { color: var(--muted); font-weight: 400; font-size: 11px; font-style: italic; margin-left: 6px; }
@@ -212,21 +210,11 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 #detail .ask details pre { white-space: pre-wrap; font-size: 11.5px; max-height: 22em; overflow: auto; background: var(--bg);
   border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; color: var(--fg); }
 #detail .crumb { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
-#detail .when { font-size: 13px; margin: -2px 0 10px; padding: 6px 10px; border-left: 3px dashed var(--muted); background: var(--bg); border-radius: 0 6px 6px 0; }
-#detail .when .k { color: var(--muted); }
-#detail .when .about { font-size: 12px; margin-top: 4px; }
-#detail .eq.spec .def { margin-top: 6px; }
 #detail .eq.spec .about { font-size: 12.5px; margin: 4px 0 2px; }
 #detail .status { font-size: 12.5px; margin: 6px 0 2px; }
 .origin { color: var(--muted); font-size: 12px; }
 #detail .status.failed { color: var(--bad); }
 #detail .status.unchecked { color: var(--muted); }
-#detail ul.evidence { list-style: none; padding: 0; margin: 4px 0 10px; font-size: 13px; }
-#detail ul.evidence li { margin: 4px 0; }
-#detail ul.evidence li.held { color: var(--fg); }
-#detail ul.evidence li.failed { color: var(--bad); }
-#detail ul.evidence li.unchecked { color: var(--muted); }
-#detail ul.evidence .d { color: var(--muted); font-size: 11.5px; }
 #detail .fromcode .eq .about { font-size: 12.5px; margin: 2px 0 6px; padding-left: 10px; border-left: 2px solid var(--border); }
 #detail .eq .katex-display { font-size: 0.92em; }
 #detail .eq { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 6px 12px; overflow-x: auto; margin: 10px 0; }
@@ -267,7 +255,7 @@ body.nodetail #detail, body.nolegend #legend { display: none; }
 .eqrow { border-top: 1px solid var(--border); padding: 6px 8px; display: grid; grid-template-columns: 11em minmax(0, 1fr) 1.2em; gap: 12px; align-items: baseline; }
 #legend .act { width: 1%; text-align: right; } #legend .act .pen { margin-left: 0; }
 .eqrow .lbl { font-weight: 560; }
-.eqrow .lbl .ok { color: var(--ok); } .eqrow .lbl .bad { color: var(--bad); }
+.eqrow .lbl .bad { color: var(--bad); }
 .eqrow .math { overflow-x: auto; overflow-y: hidden; }
 .eqrow .math .katex-display { margin: 0.2em 0; text-align: left; }
 .eqrow .math .katex-display > .katex { text-align: left; }
@@ -438,8 +426,7 @@ body.libfull .libfoot { position: sticky; bottom: 0; background: var(--panel); b
 #lanes { flex: none; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; padding: 6px 20px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
 #lanes:empty { display: none; }
 #lanes .lanectl { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
-#lanes .lbl, #lanes .cmpnote { color: var(--muted); }
-#lanes .cmpnote { margin-left: 4px; }
+#lanes .lbl { color: var(--muted); }
 .lanechip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--border); border-radius: 6px; padding: 2px 4px 2px 6px; background: var(--panel); cursor: pointer; user-select: none; }
 .lanechip:hover { border-color: var(--accent); }
 .lanechip.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
@@ -482,15 +469,96 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
 #detail details.fromcode { margin: 6px 0 10px; }
 #detail details.fromcode .katex-display > .katex, #detail .eq.spec .katex-display > .katex { text-align: left; }      /* read from the left */
 .codedoc { color: var(--muted); font-style: italic; }
-.codedoc .from { font-style: normal; font-size: 11px; margin-left: 8px; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
 #detail details.fromcode > summary { cursor: pointer; color: var(--muted); font-size: 12px; }
 .cname { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
 #detail details.fromcode .namesw { font-size: 11px; padding: 0 6px; margin-left: 8px; line-height: 1.5; }
-#detail details.fromcode .note { color: var(--muted); font-size: 11.5px; margin: 0; }
 #detail .eqlbl { font-size: 11.5px; color: var(--muted); margin: 8px 0 -6px; }
 .code .del { background: color-mix(in srgb, var(--bad) 16%, transparent); display: inline-block; width: 100%; }
 .code .ins { background: color-mix(in srgb, var(--ok) 16%, transparent); display: inline-block; width: 100%; }
 .code .fold { color: var(--muted); }
+
+/* the atlas explorer (atlas-main) */
+body.atlasview #lanes, body.atlasview #checks, body.atlasview #work { display: none !important; }
+#atlas { flex: 1; min-height: 0; display: grid; grid-template-columns: 230px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "left main right" "shelf shelf shelf"; }
+#atlas aside { overflow: auto; min-width: 0; background: var(--panel); }
+#axleft { grid-area: left; border-right: 1px solid var(--border); padding: 12px 12px 24px 16px; font-size: 12.5px; }
+#axins { grid-area: right; border-left: 1px solid var(--border); padding: 12px 16px 24px; font-size: 13px; }
+#axins p { margin: 0 0 8px; }
+#axins em { font-style: normal; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; margin-right: 4px; }
+#axmain { grid-area: main; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.axsec { margin-bottom: 16px; }
+.axsec h3, #atlas .eyebrow, .axlbl { font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px; }
+.axsec select, .axbar select { font: inherit; font-size: 12px; color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 3px 4px; }
+.axsec select { width: 100%; margin-bottom: 4px; }
+.axview { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 4px 6px; border-radius: 4px; }
+.axview:hover { background: var(--accent-soft); }
+.axview.on { background: var(--accent-soft); color: var(--accent); }
+.axview small { display: block; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.axfacet { margin-bottom: 8px; } .axfacet b { display: block; font-weight: 500; color: var(--muted); font-size: 11.5px; margin-bottom: 3px; }
+.axchips { display: flex; flex-wrap: wrap; gap: 4px; }
+.axchip { font-size: 11px; border-radius: 10px; padding: 1px 7px; }
+.axchip.on { border-color: var(--accent); color: var(--accent); }
+.axchip i { font-style: normal; color: var(--muted); margin-left: 3px; }
+.axtoggle { display: flex; gap: 6px; align-items: center; font-size: 12px; padding: 1px 0; }
+.axbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 7px 12px; border-bottom: 1px solid var(--border); }
+.axbar .ctl { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+.axbar select { width: auto; max-width: 260px; }
+.axq { flex: 1 1 300px; display: flex; gap: 6px; align-items: center; border: 1px solid var(--border); border-radius: 6px; padding: 0 8px; background: var(--panel); min-width: 0; }
+.axq:focus-within { border-color: var(--accent); }
+#axq { flex: 1; min-width: 0; border: 0; outline: none; background: none; color: var(--fg); padding: 5px 0; font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+#axqstate { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.axseg { display: inline-flex; } .axseg button { border-radius: 0; } .axseg button + button { margin-left: -1px; }
+.axseg button:first-child { border-radius: 6px 0 0 6px; } .axseg button:last-child { border-radius: 0 6px 6px 0; }
+.axseg button.on { background: var(--accent-soft); border-color: var(--accent); }
+#axcanvas { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg); }
+#axsvg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; user-select: none; }
+#axsvg.panning { cursor: grabbing; } #axsvg text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+#axsvg .axhit { cursor: pointer; }
+#axzoom { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; }
+#axzoom button { min-width: 28px; padding: 3px 6px; }
+#axlegend { position: absolute; left: 10px; bottom: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 11px; display: flex; flex-direction: column; gap: 4px; max-width: 300px; }
+#axlegend .bar { height: 8px; border-radius: 2px; } #axlegend .ends { display: flex; justify-content: space-between; color: var(--muted); }
+#axlegend .cats { display: flex; flex-wrap: wrap; gap: 3px 9px; }
+#axlegend .cats span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 4px; }
+#axhint { position: absolute; right: 10px; bottom: 10px; font-size: 10.5px; color: var(--muted); }
+#axpane { position: absolute; inset: 0; overflow: auto; padding: 14px 16px; font-size: 12.5px; }
+.axscroll { overflow: auto; }
+#axstatus { display: flex; gap: 14px; flex-wrap: wrap; padding: 4px 12px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); }
+#axshelf { grid-area: shelf; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 16px; border-top: 1px solid var(--border); background: var(--panel); }
+#axshelfitems { display: flex; flex: 1; gap: 4px; flex-wrap: wrap; align-items: center; min-width: 0; font-size: 12.5px; }
+.axschip { display: inline-flex; align-items: center; border: 1px solid var(--border); border-radius: 4px; padding: 0 2px 0 4px; }
+.axschip button { border: 0; background: none; padding: 1px 4px; }
+#atlas .mu { color: var(--muted); }
+.axtitle { font-size: 17px; font-weight: 650; margin: 2px 0 6px; overflow-wrap: anywhere; }
+.axkv { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; }
+.axbig { display: flex; align-items: baseline; gap: 8px; margin: 4px 0 8px; } .axbig b { font-size: 22px; } .axbig span { color: var(--muted); font-size: 12px; }
+.axbox { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
+.axbox h4 { margin: 0 0 6px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.axbtns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+table.axres { border-collapse: collapse; width: 100%; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+table.axres th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 4px; }
+table.axres td { border-top: 1px solid var(--border); padding: 3px 4px; vertical-align: top; }
+ul.axdiff { list-style: none; margin: 6px 0; padding: 0; font-size: 12px; } ul.axdiff li { padding: 1px 0; }
+ul.axdiff .m { display: inline-block; width: 16px; font-weight: 700; }
+.m.added { color: var(--ok); } .m.changed { color: var(--setting); } .m.removed { color: var(--bad); } .m.split, .m.merged { color: var(--output); }
+.axrank { display: grid; grid-template-columns: minmax(0, auto) 1fr auto; gap: 3px 8px; align-items: center; font-size: 12px; }
+.axrank .bar { height: 8px; background: var(--grid); border-radius: 2px; position: relative; } .axrank .bar span { position: absolute; inset: 0 auto 0 0; border-radius: 2px; }
+.axgrid { display: grid; gap: 4px; font-size: 11.5px; } .axgrid .ax { color: var(--muted); align-self: center; }
+.axgrid .cell { border: 1px solid var(--border); border-radius: 4px; padding: 5px 6px; cursor: pointer; }
+.axgrid .cell:hover { border-color: var(--accent); }
+table.axmx { border-collapse: collapse; font-size: 10.5px; } table.axmx th { font-weight: 500; color: var(--muted); padding: 0 4px; white-space: nowrap; text-align: right; }
+table.axmx th.col { height: 80px; vertical-align: bottom; text-align: left; } table.axmx th.col div { transform: rotate(-55deg); transform-origin: left bottom; width: 14px; translate: 8px 0; }
+table.axmx td { width: 20px; height: 20px; padding: 0; border: 1px solid var(--bg); cursor: pointer; } table.axmx td.self { background: var(--grid); cursor: default; }
+table.axmx tr.hl th { color: var(--accent); }
+.axmxbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+table.axsets td { border: 0; border-top: 1px solid var(--border); height: 26px; width: auto; cursor: default; }
+table.axsets td.dotc { text-align: center; width: 20px; } table.axsets .d { display: inline-block; width: 11px; height: 11px; border-radius: 50%; cursor: pointer; }
+table.axsets td.rl { padding-right: 10px; white-space: nowrap; cursor: pointer; } table.axsets td.rl:hover { color: var(--accent); }
+#axmodal { position: fixed; inset: 0; z-index: 50; background: rgba(0, 0, 0, .45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#axmodal .box { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; width: min(680px, 100%); max-height: 90%; overflow: auto; }
+#axmodal pre { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 900px) { #atlas { grid-template-columns: minmax(0, 1fr); grid-template-rows: 60vh auto auto auto; grid-template-areas: "main" "right" "left" "shelf"; overflow: auto; } }
 </style>
 </head>
 <body>
@@ -503,6 +571,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
     <span class="seg" id="viewseg" title="the methods' computation graph, or their benchmark results">
       <label><input type="radio" name="view" value="graph" checked><span>Graph</span></label>
       <label><input type="radio" name="view" value="results"><span>Results</span></label>
+      <label id="atlasradio" hidden title="every version of the atlas: find them, then open some as a stack"><input type="radio" name="view" value="atlas"><span>Atlas</span></label>
     </span>
     <button id="addlane" title="open other headways: beside this one, each in a lane of its own, or instead of it">Open…</button>
     <button id="theme" class="themebtn"></button>
@@ -514,6 +583,41 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
   <div id="libbody"></div>
   <div class="libfoot" id="libfoot" hidden><span id="libsel"></span><button class="linkish" id="libnone">clear</button><span style="flex:1"></span><button id="libaddall"></button><button id="libopenall" class="primary"></button></div>
 </div></div>
+<div id="atlas" hidden>
+  <aside id="axleft">
+    <div class="axsec"><h3>Views</h3><div id="axviews"></div></div>
+    <div class="axsec"><h3>Compared on</h3><select id="axsuite" aria-label="suite"></select><select id="axobj" aria-label="objective"></select></div>
+    <div class="axsec"><h3>Keys</h3><div id="axkeys"></div></div>
+    <div class="axsec"><h3>Relations</h3><div id="axkinds" class="axchips"></div></div>
+    <div class="axsec"><h3>Tags</h3><div id="axtags" class="axchips"></div></div>
+    <div class="axsec"><h3>Draw</h3><div id="axdraw"></div></div>
+  </aside>
+  <main id="axmain">
+    <div class="axbar">
+      <div class="axq"><input id="axq" type="text" spellcheck="false" autocomplete="off" aria-label="query" placeholder="key:K=V  near:NAME~2  path:A..B  changed:STEP  score>0.8  words…"><span id="axqstate"></span></div>
+      <span class="axseg" id="axmodes"><button data-mode="graph">Graph</button><button data-mode="matrix">Matrix</button><button data-mode="sets">Sets</button></span>
+      <button id="axask" title="what you are looking at, as a prompt for your agent">Ask AI</button>
+    </div>
+    <div class="axbar" id="axgctl">
+      <label class="ctl">Arrange <select id="axarrange"><option value="tree">by derivation</option><option value="score">by the objective (left to right)</option></select></label>
+      <label class="ctl">Arrows <select id="axarrows"><option value="prov">made from</option><option value="obj">toward better (supported only)</option><option value="none">none</option></select></label>
+      <label class="ctl">Colour <select id="axcolor"></select></label>
+      <label class="ctl">Detail <select id="axdetail"><option value="auto">by zoom</option><option value="dots">dots</option><option value="cards">cards</option><option value="thumbs">cards and steps</option></select></label>
+    </div>
+    <div id="axcanvas"><svg id="axsvg" aria-label="the atlas's versions"></svg>
+      <div id="axzoom"><button id="axzout" title="zoom out">−</button><button id="axzin" title="zoom in">+</button><button id="axfit">Fit</button></div>
+      <div id="axlegend"></div>
+      <div id="axhint">click: inspect · shift-click or S: shelf · F: focus · ←→↑↓: walk · Enter or double-click: open</div>
+      <div id="axpane" hidden></div>
+    </div>
+    <div id="axstatus"></div>
+  </main>
+  <aside id="axins"></aside>
+  <footer id="axshelf"><span class="axlbl">Shelf</span><div id="axshelfitems"></div>
+    <button id="axfill" title="the shortest path through the relations from the first to the last">Fill the path between the ends</button>
+    <button id="axcmp">Compare the first two</button><button id="axstack" class="primary" title="the shelf's versions in lanes: the viewer, each compared with the one before">Open as stack</button><button id="axclear">Clear</button></footer>
+  <div id="axmodal" hidden></div>
+</div>
 <div id="lanes"></div>
 <div id="checks"></div>
 <div id="work">
@@ -534,8 +638,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
       <span class="grp"><input id="find" type="search" placeholder="Find…  ( / )" autocomplete="off" spellcheck="false" title="the steps, values and groups whose name or key holds this (with Text, or whose description does). Exact matches are outlined solid, partial ones dashed. Enter or ↓: the next match; Shift+Enter or ↑: the previous one; Esc: clear"><label class="seg" title="only the steps, values and groups whose name or key is exactly what you typed (or whose description has it as whole words, with Text)"><input type="checkbox" id="findexact"><span>Exact</span></label><label class="seg" title="also search the descriptions and the captions of figures and media: a step, value or group whose description holds what you typed (outlined dashed)"><input type="checkbox" id="findtext"><span>Text</span></label><span id="findcount" hidden></span><span class="seg" id="findnav" hidden><button id="findprev" title="the previous match (Shift+Enter, ↑)">‹</button><button id="findnext" title="the next match (Enter, ↓)">›</button><button id="findall" title="all the matches in view">⤢</button></span></span>
     </div><svg id="svg"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker><marker id="arrowhl" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker><marker id="arrowaim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs><g id="vp"></g></svg>
     <div id="results" hidden></div>
-    <div id="note"></div>
-    <div id="hint">click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom · arrows: walk the graph · c: collapse/expand · g: the group and back · Tab: its legend entries</div>
+    <div id="hint"></div>
   </div>
   <div class="split v" id="vsplit" title="drag to resize the side panel; double-click to collapse it"><button id="vtog"></button></div>
   <aside id="detail"><p class="empty">Select an operation, a value or a group to see its equation, its code and where it fits.</p></aside>
@@ -547,6 +650,7 @@ table.heat th.row button.eye { margin-right: 4px; vertical-align: -2px; }
 </section>
 </div>
 <div id="measure"></div>
+<div id="note"></div>
 
 <script>
 let D = /*HEADWAY_DATA*/null;
@@ -563,7 +667,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<"
 const lib = {showEmpty: false, full: false, dir: null, list: null, recent: [], allRecent: false, sort: "built_at", desc: true, error: ""};
 const libPath = (abs) => LIB && abs.startsWith(LIB.root + "/") ? abs.slice(LIB.root.length + 1) : abs;
 const libDate = (iso) => String(iso ?? "").replace("T", " ").slice(0, 16);
-const libType = (x) => x.kind === "spec" ? "spec · served live" : (x.suite ? "benchmark suite" : "headway") + (x.page ? " · page" : " · JSON");
+const libType = (x) => x.kind === "atlas" ? `atlas · ${x.versions} version${x.versions === 1 ? "" : "s"}` : x.kind === "spec" ? "spec · served live" : (x.suite ? "benchmark suite" : "headway") + (x.page ? " · page" : " · JSON");
 /* ---------- the theme: Auto (as the system is), Light or Dark; kept in this browser ---------- */
 const THEMES = {auto: ["◐", "Auto: as the system is"], light: ["☀", "Light"], dark: ["☾", "Dark"]};
 function theme() { try { const t = localStorage.getItem("headway.theme"); return t in THEMES ? t : "auto"; } catch { return "auto"; } }
@@ -678,12 +782,14 @@ function libTable(items, {sortable, when, folders = ""}) {
     : `<th>${label}</th>`).join("")}<th></th></tr>`;
   const body = rows.map((x) => {
     const isOpen = x.kind === "built" && libIsOpen(x);
-    const acts = x.kind === "spec"
+    const acts = x.kind === "atlas"
+      ? `<button data-atlas="${esc(x.abs)}" title="explore the atlas: every version, its results and relations">Explore</button>`
+      : x.kind === "spec"
       ? `<button data-live="${esc(x.abs)}" title="serve this spec live: rebuilt as it and its code change">Serve live</button>`
       : isOpen ? `<span class="mu">open</span>`
       : `<button data-open="${esc(x.abs)}" title="open it instead of what is open">Open</button>` +
         (open.length ? `<button data-add="${esc(x.abs)}" title="open it in a lane of its own, beside what is open">Add beside</button>` : "");
-    return `<tr class="${isOpen ? "isopen" : ""}${title && x.title === title ? " mine" : ""}">` +
+    return `<tr class="${isOpen ? "isopen" : ""}">` +
       `<td>${x.kind === "built" && !isOpen ? `<input type="checkbox" data-pick="${esc(x.abs)}" data-at="${esc(x.built_at)}">` : ""}</td>` +
       `<td><b>${esc(x.name)}</b>${Object.keys(x.keys ?? {}).length ? `<div class="mu">${esc(Object.entries(x.keys).map(([k, v]) => `${k}=${v}`).join(" "))}</div>` : ""}</td>` +
       `<td>${esc(x.title)}</td><td class="mu">${esc(libType(x))}</td>` +
@@ -734,6 +840,7 @@ function libDraw() {
   });
   body.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => libOpenFiles([b.dataset.open]));
   body.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => libAdd([b.dataset.add]));
+  body.querySelectorAll("[data-atlas]").forEach((b) => b.onclick = () => { location.href = "/atlas/" + libPath(b.dataset.atlas).split("/").map(encodeURIComponent).join("/") + "/"; });
   body.querySelectorAll("[data-live]").forEach((b) => b.onclick = () => { location.href = "/live/" + libPath(b.dataset.live).split("/").map(encodeURIComponent).join("/") + "/"; });
   body.querySelectorAll("table.libtab tr").forEach((tr) => tr.addEventListener("click", (e) => {
     const box = tr.querySelector("input[data-pick]");
@@ -786,6 +893,890 @@ function libWire() {
 }
 
 </script>
+<!-- the atlas explorer: run after the viewer proper when the page holds an atlas (atlas.py) -->
+<script type="text/plain" id="atlas-main">
+(() => {
+"use strict";
+/* ---------- the atlas explorer: every version of an atlas at once (atlas.py, docs/atlas.md) ----------
+   The page holds the atlas's summary (ATLAS) and some versions in full (ATLAS_V). The explorer finds versions:
+   a graph of them and their relations, a matrix of pairs, the sets they are in, a query that highlights and then
+   filters, a shelf to collect them on. "Open as stack" puts the shelf's versions in lanes: the viewer as before. */
+const AX = {
+  mode: "graph", arrange: "tree", arrows: "prov", color: "obj", detail: "auto",
+  typed: "", applied: "", sel: null, focus: null, shelf: [], view: null, fold: true, expanded: new Set(),
+  draw: {step: true, alternatives: true, factorial: true, group: true, pair: false},
+  k: .6, tx: 40, ty: 40, mx: "score", suite: null, obj: null, laid: null,
+  opened: false,           // the lanes open are a stack (of the shelf, a relation or a pair): back in the atlas, they become the shelf
+};
+const AN = ATLAS.order, AVS = ATLAS.versions, ARELS = ATLAS.relations;
+const AREL = Object.fromEntries(ARELS.map((r) => [r.id, r]));
+const LIN = ATLAS.lineages, LINLABEL = Object.fromEntries(LIN.map((l) => [l.key, l.label]));
+const SEQ = ["#3d5a80", "#3b7ea1", "#3fa39a", "#8cc084", "#e0c25a"];
+const CAT = ["#5aa9e6", "#e08a4f", "#86bd86", "#c58ae0", "#d6b84a", "#e06f8b", "#59c7c0", "#a7a9e0", "#b0b38a", "#e0a1c0"];
+const shortName = (n) => n.length > 22 ? n.slice(0, 21) + "…" : n;
+
+function seqColor(t) {
+  if (t === null || t === undefined || Number.isNaN(t)) return "var(--border)";
+  t = Math.max(0, Math.min(1, t));
+  const x = t * (SEQ.length - 1), i = Math.min(SEQ.length - 2, Math.floor(x)), f = x - i;
+  const a = SEQ[i].match(/\w\w/g).map((h) => parseInt(h, 16)), b = SEQ[i + 1].match(/\w\w/g).map((h) => parseInt(h, 16));
+  return "#" + a.map((v, j) => Math.round(v + (b[j] - v) * f).toString(16).padStart(2, "0")).join("");
+}
+
+/* ---------- suites, objectives, scores ---------- */
+const suiteKeys = Object.keys(ATLAS.suites);
+function pickSuite() {
+  const v = ATLAS.views[AX.view] ?? {};
+  const counts = (s) => Object.keys(ATLAS.results[s] ?? {}).length;
+  AX.suite = (v.suites ?? []).find((s) => ATLAS.suites[s]) ?? suiteKeys.slice().sort((a, b) => counts(b) - counts(a))[0] ?? null;
+  AX.obj = ATLAS.suites[AX.suite]?.objectives[0]?.key ?? null;
+}
+pickSuite();
+const suiteMeta = () => ATLAS.suites[AX.suite];
+const objMeta = () => suiteMeta()?.objectives.find((o) => o.key === AX.obj);
+const rawScore = (n) => ATLAS.scores[AX.suite]?.[AX.obj]?.[n] ?? null;
+// a score oriented so that more is better: negated when fewer is better (a rank, a Pareto layer; lowerBetter is the viewer's)
+const gainOf = (n) => { const s = rawScore(n); return s === null ? null : lowerBetter(objMeta()) ? -s : s; };
+function scoreRange() {
+  const xs = AN.map(gainOf).filter((x) => x !== null);
+  return xs.length ? [Math.min(...xs), Math.max(...xs)] : [0, 1];
+}
+const resOf = (n) => ATLAS.results[AX.suite]?.[n] ?? null;
+// b's difference from a, as a function of a dataset and a metric: the viewer's pairedDiff (paired by replicate id
+// where both have them), with the intervals of the difference the relation between them holds (relresults)
+function pairOf(b, a) {
+  const rel = relBetween(a, b), rr = rel && ATLAS.relresults[rel.id]?.[AX.suite];
+  const withDiffs = (n) => {
+    const r = resOf(n), differences = {};
+    for (const x of rr?.differences ?? []) if (x.of[0] === n) differences[x.of[1]] = x.values;
+    return r && {...r, differences};
+  };
+  const B = withDiffs(b), A = withDiffs(a);
+  return (dk, mk) => pairedDiff(B, A, dk, mk, b, a);
+}
+// b against a on the objective: the change in its score (more is better), and whether every cell it uses agrees
+function objPair(b, a) {
+  const o = objMeta(), meta = suiteMeta();
+  if (!o || !meta) return null;
+  const gb = gainOf(b), ga = gainOf(a);
+  const better = Object.fromEntries(meta.metrics.map((m) => [m.key, m.better === "lower" ? -1 : 1]));
+  const cellsOf = [...new Set(objVoters(o, meta).flatMap(([, cs]) => cs.map(([dk, mk]) => dk + "|" + mk)))];
+  let all = true, any = false, sign = 0;
+  const pair = pairOf(b, a);
+  for (const [dk, mk] of cellsOf.map((c) => c.split("|"))) {
+    const p = pair(dk, mk);
+    if (!p) continue;
+    any = true;
+    const s = Math.sign(p.d) * better[mk];
+    if (!p.supported || s === 0 || (sign && s !== sign)) all = false;
+    sign = sign || s;
+  }
+  return {gain: gb !== null && ga !== null ? gb - ga : null, supported: any && all, sign};
+}
+
+/* ---------- structure ---------- */
+function relBetween(a, b) {
+  const rs = ARELS.filter((r) => (r.kind === "step" || r.kind === "pair") && r.members.length === 2 &&
+    new Set(r.members.map((m) => m.v)).size === 2 && r.members.some((m) => m.v === a) && r.members.some((m) => m.v === b));
+  return rs.find((r) => r.kind === "step") ?? rs[0] ?? null;
+}
+const steps = ARELS.filter((r) => r.kind === "step" && r.members.every((m) => AVS[m.v]));
+const parentsOf = (n) => steps.filter((r) => r.members[1].v === n).map((r) => r.members[0].v);
+const childrenOf = (n) => steps.filter((r) => r.members[0].v === n).map((r) => r.members[1].v);
+const stepInto = (n) => steps.find((r) => r.members[1].v === n) ?? null;
+const ADJ = Object.fromEntries(AN.map((n) => [n, new Set()]));
+for (const r of ARELS) {
+  const ms = r.members.map((m) => m.v).filter((v) => ADJ[v]);
+  if (r.kind === "step" || r.kind === "pair") { if (ms.length === 2) { ADJ[ms[0]].add(ms[1]); ADJ[ms[1]].add(ms[0]); } }
+  else { const base = r.members.find((m) => m.role === "base")?.v; if (base && ADJ[base]) for (const x of ms) if (x !== base) { ADJ[x].add(base); ADJ[base].add(x); } }
+}
+function bfs(from, max) {
+  const dist = {[from]: 0}, q = [from];
+  while (q.length) { const x = q.shift(); if (dist[x] >= max) continue; for (const y of ADJ[x] ?? []) if (!(y in dist)) { dist[y] = dist[x] + 1; q.push(y); } }
+  return dist;
+}
+function apath(a, b) {
+  if (!ADJ[a] || !ADJ[b]) return [];
+  const prev = {[a]: null}, q = [a];
+  while (q.length) { const x = q.shift(); if (x === b) break; for (const y of [...ADJ[x]].sort()) if (!(y in prev)) { prev[y] = x; q.push(y); } }
+  if (!(b in prev)) return [];
+  const out = []; for (let x = b; x !== null; x = prev[x]) out.unshift(x); return out;
+}
+// the steps (by lineage) that differ from a to b: [{lin, state: added | changed | removed}]
+function fpDiff(a, b) {
+  const A = AVS[a].ops, B = AVS[b].ops, out = [];
+  for (const l of LIN) {
+    const x = A[l.key], y = B[l.key];
+    if (x === y) continue;
+    out.push({lin: l.key, state: x === undefined ? "added" : y === undefined ? "removed" : "changed"});
+  }
+  return out;
+}
+const fpKey = (n) => JSON.stringify(Object.entries(AVS[n].ops).sort());
+
+/* ---------- query ---------- */
+function termSet(t) {
+  const lc = (s) => String(s ?? "").toLowerCase();
+  const m = t.match(/^(\w+)([:<>])(.*)$/);
+  if (m) {
+    const [, op, sep, arg] = m;
+    if (op === "key" && sep === ":") {
+      const [k, val] = arg.split("=");
+      return new Set(AN.filter((n) => k in AVS[n].keys && (val === undefined || lc(AVS[n].keys[k]) === lc(val))));
+    }
+    if (op === "near") { const [v, d] = arg.split("~"); return AVS[v] ? new Set(Object.keys(bfs(v, +(d || 1)))) : new Set(); }
+    if (op === "relation") return new Set(AREL[arg]?.members.map((x) => x.v) ?? []);
+    if (op === "kind") return new Set(ARELS.filter((r) => r.kind === arg).flatMap((r) => r.members.map((x) => x.v)));
+    if (op === "tag") return new Set(ARELS.filter((r) => (r.tags ?? []).includes(arg)).flatMap((r) => r.kind === "step" ? [r.members[1].v] : r.members.map((x) => x.v)));
+    if (op === "contains") return new Set(AN.filter((n) => Object.keys(AVS[n].ops).some((l) => l === arg || lc(LINLABEL[l]) === lc(arg))));
+    if (op === "changed") {
+      const hit = (l) => l === arg || lc(LINLABEL[l]) === lc(arg);
+      return new Set(steps.filter((r) => fpDiff(r.members[0].v, r.members[1].v).some((d) => hit(d.lin))).flatMap((r) => r.members.map((x) => x.v)));
+    }
+    if (op === "path") { const [a, b] = arg.split(".."); return new Set(apath(a, b)); }
+    if (op === "in") return new Set(arg.split(",").filter((x) => AVS[x]));
+    if (op === "score" && sep !== ":") { const x = parseFloat(arg); return new Set(AN.filter((n) => rawScore(n) !== null && (sep === ">" ? rawScore(n) > x : rawScore(n) < x))); }
+    if (op === "earlier") return new Set(AN.filter((n) => resOf(n)?.earlier));
+    if (op === "text") t = arg;
+  }
+  const w = lc(t);
+  return new Set(AN.filter((n) => {
+    const st = stepInto(n);
+    return lc(n).includes(w) || lc(AVS[n].desc).includes(w) || Object.entries(AVS[n].keys).some(([k, v]) => lc(`${k}=${v}`).includes(w)) ||
+      (st && lc(`${st.label ?? ""} ${st.why ?? ""} ${st.prediction ?? ""} ${st.outcome ?? ""}`).includes(w));
+  }));
+}
+function evalQuery(q) {
+  const terms = q.trim().split(/\s+/).filter(Boolean);
+  if (!terms.length) return null;
+  let set = new Set(AN);
+  for (const t of terms) {
+    const neg = t[0] === "-" && t.length > 1, ms = termSet(neg ? t.slice(1) : t);
+    set = new Set([...set].filter((n) => neg ? !ms.has(n) : ms.has(n)));
+  }
+  return set;
+}
+const shownSet = () => evalQuery(AX.applied) ?? new Set(AN);
+const litSet = () => AX.typed.trim() && AX.typed !== AX.applied ? evalQuery(AX.typed) : null;
+
+/* ---------- colour ---------- */
+const keyNames = [...new Set(AN.flatMap((n) => Object.keys(AVS[n].keys)))].sort();
+const keyValues = (k) => [...new Set(AN.map((n) => AVS[n].keys[k]).filter((v) => v !== undefined).map(String))].sort();
+const madeT = (n) => Date.parse(AVS[n].built_at) || 0;
+function colorOf(n) {
+  const c = AX.color;
+  if (c === "obj") { const [lo, hi] = scoreRange(), g = gainOf(n); return g === null ? "var(--border)" : seqColor(hi > lo ? (g - lo) / (hi - lo) : 1); }
+  if (c === "date") { const ts = AN.map(madeT), lo = Math.min(...ts), hi = Math.max(...ts); return seqColor(hi > lo ? (madeT(n) - lo) / (hi - lo) : 1); }
+  if (c === "dist") return AX.focus ? seqColor(1 - fpDiff(AX.focus, n).length / Math.max(6, LIN.length / 4)) : "var(--border)";
+  if (c === "earlier") return resOf(n)?.earlier ? "var(--setting)" : resOf(n) ? "var(--ok)" : "var(--border)";
+  if (c.startsWith("key:")) { const k = c.slice(4), vals = keyValues(k), v = AVS[n].keys[k]; return v === undefined ? "var(--border)" : CAT[vals.indexOf(String(v)) % CAT.length]; }
+  return "var(--border)";
+}
+function legendHTML() {
+  const grad = `linear-gradient(90deg, ${SEQ.join(",")})`, c = AX.color;
+  if (c === "obj") {
+    const [lo, hi] = scoreRange(), o = objMeta(), rank = lowerBetter(o);
+    return o ? `<span>${esc(o.name)} (${esc(AX.suite)})${rank ? `, ${esc(o.how)}: fewer is better` : ""}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>${fmt(rank ? -lo : lo)}</span><span>${fmt(rank ? -hi : hi)}</span></div>` : `<span>No objective: the atlas has no results with one</span>`;
+  }
+  if (c === "date") return `<span>Built</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>earliest</span><span>latest</span></div>`;
+  if (c === "dist") return AX.focus ? `<span>Steps that differ from the focus, ${esc(AX.focus)}</span><div class="bar" style="background:${grad}"></div><div class="ends"><span>many</span><span>none</span></div>` : `<span>Distance from the focus: select a version and press F</span>`;
+  if (c === "earlier") return `<div class="cats"><span style="--c:var(--ok)">results on this build</span><span style="--c:var(--setting)">on an earlier build</span><span style="--c:var(--border)">none</span></div>`;
+  const k = c.slice(4);
+  return `<span>Key ${esc(k)} (grey: not set)</span><div class="cats">${keyValues(k).map((v, i) => `<span style="--c:${CAT[i % CAT.length]}">${esc(v)}</span>`).join("")}</div>`;
+}
+
+/* ---------- layout ---------- */
+const CW = 170;
+const cardH = () => detailLevel() === "thumbs" ? 84 : 58;
+function detailLevel() { return AX.detail !== "auto" ? AX.detail : AX.k < .55 ? "dots" : AX.k < 1.15 ? "cards" : "thumbs"; }
+// versions folded together: three or more shown, of one structure (the same steps, the same code) and made from the
+// same versions, not steps of one another
+function folds(shown) {
+  if (!AX.fold) return [];
+  const by = new Map();
+  for (const n of shown) { const k = fpKey(n) + "|" + parentsOf(n).sort().join(","); by.set(k, [...(by.get(k) ?? []), n]); }
+  const out = [];
+  for (const ms of by.values()) {
+    if (ms.length < 3) continue;
+    const inside = new Set(ms);
+    if (steps.some((r) => inside.has(r.members[0].v) && inside.has(r.members[1].v))) continue;
+    const vary = keyNames.filter((k) => new Set(ms.map((n) => String(AVS[n].keys[k]))).size > 1);
+    out.push({id: "fold:" + ms[0], members: ms, vary});
+  }
+  return out;
+}
+async function layoutFor(shown) {
+  const fl = folds(shown), folded = new Map();
+  for (const f of fl) for (const n of f.members) folded.set(n, f);
+  const nodeOf = (n) => folded.has(n) ? folded.get(n).id : n;
+  const key = JSON.stringify([[...shown].sort(), fl.map((f) => f.id), [...AX.expanded].sort()]);
+  if (AX.laid?.key === key) return AX.laid;
+  const ids = [...new Set([...shown].map(nodeOf))];
+  const size = (id) => { const f = fl.find((x) => x.id === id); return f && AX.expanded.has(f.id) ? [CW + 40, 150] : [CW, 84]; };
+  const edges = [];
+  for (const r of steps) {
+    const [a, b] = r.members.map((m) => m.v);
+    if (!shown.has(a) || !shown.has(b)) continue;
+    const s = nodeOf(a), t = nodeOf(b);
+    if (s !== t && !edges.some((e) => e.sources[0] === s && e.targets[0] === t)) edges.push({id: "e" + edges.length, sources: [s], targets: [t]});
+  }
+  const g = await elk.layout({id: "root", layoutOptions: {"elk.algorithm": "layered", "elk.direction": "RIGHT", "elk.spacing.nodeNode": "28",
+      "elk.layered.spacing.nodeNodeBetweenLayers": "130", "elk.separateConnectedComponents": "true", "elk.spacing.componentComponent": "50"},
+    children: ids.map((id) => { const [w, h] = size(id); return {id, width: w, height: h}; }), edges});
+  const pos = {};
+  for (const c of g.children) pos[c.id] = [c.x + c.width / 2, c.y + c.height / 2];
+  AX.laid = {key, pos, folds: fl, folded, nodeOf, ids};
+  return AX.laid;
+}
+function worldPos(L) {
+  if (AX.arrange === "tree") return L.pos;
+  const [lo, hi] = scoreRange(), W = Math.max(900, L.ids.length * 90), out = {};
+  for (const id of L.ids) {
+    const f = L.folds.find((x) => x.id === id);
+    const gs = (f ? f.members : [id]).map(gainOf).filter((x) => x !== null);
+    const g = gs.length ? Math.max(...gs) : null;
+    out[id] = [g === null ? -220 : (hi > lo ? (g - lo) / (hi - lo) : 1) * W, L.pos[id][1]];
+  }
+  return out;
+}
+
+/* ---------- drawing the graph ---------- */
+const asvg = () => $("axsvg");
+function fpSVG(n, ref, x, y, width, only) {
+  const v = AVS[n].ops, r = ref ? AVS[ref].ops : null;
+  const lins = LIN.filter((l) => only.has(l.key));
+  if (!lins.length) return "";
+  const cols = Math.min(lins.length, 26), cell = Math.min(10, Math.max(3, Math.floor(width / cols) - 1));
+  return lins.map((l, i) => {
+    const has = l.key in v, rh = r ? l.key in r : has;
+    let fill = "none", stroke = "var(--border)", dash = "";
+    if (has) { fill = "var(--muted)"; stroke = "var(--muted)"; }
+    if (r) {
+      if (has && !rh) { fill = stroke = "var(--ok)"; }
+      else if (has && rh && v[l.key] !== r[l.key]) { fill = stroke = "var(--setting)"; }
+      else if (!has && rh) { stroke = "var(--bad)"; dash = ` stroke-dasharray="2 1.5"`; }
+    }
+    const cx = x + (i % cols) * (cell + 1), cy = y + Math.floor(i / cols) * (cell + 1);
+    return `<rect x="${cx}" y="${cy}" width="${cell}" height="${cell}" rx="1" fill="${fill}" stroke="${stroke}"${dash}><title>${esc(l.label)}${has ? "" : " (absent)"}</title></rect>`;
+  }).join("");
+}
+function bez(a, b) {
+  const dx = Math.max(30, Math.abs(b[0] - a[0]) / 2) * (b[0] >= a[0] ? 1 : -1);
+  const c1 = [a[0] + dx, a[1]], c2 = [b[0] - dx, b[1]];
+  const mid = [(a[0] + 3 * c1[0] + 3 * c2[0] + b[0]) / 8, (a[1] + 3 * c1[1] + 3 * c2[1] + b[1]) / 8];
+  const tan = [.75 * (c1[0] - a[0]) + 1.5 * (c2[0] - c1[0]) + .75 * (b[0] - c2[0]), .75 * (c1[1] - a[1]) + 1.5 * (c2[1] - c1[1]) + .75 * (b[1] - c2[1])];
+  return {d: `M${a} C${c1} ${c2} ${b}`, mid, tan};
+}
+function arrowAt(mid, tan, color) {
+  const L = Math.hypot(...tan) || 1, ux = tan[0] / L, uy = tan[1] / L, s = 6;
+  return `<path d="M${mid[0] + ux * s},${mid[1] + uy * s} L${mid[0] - ux * s - uy * s * .8},${mid[1] - uy * s + ux * s * .8} L${mid[0] - ux * s + uy * s * .8},${mid[1] - uy * s - ux * s * .8} Z" fill="${color}"/>`;
+}
+const KINDCOL = {alternatives: "var(--accent)", factorial: "var(--setting)", group: "var(--input)", pair: "var(--output)"};
+async function drawGraph() {
+  const shown = shownSet(), lit = litSet();
+  const L = await layoutFor(shown), W = worldPos(L), lvl = detailLevel(), H = cardH();
+  const sp = (id) => W[id] && [W[id][0] * AX.k + AX.tx, W[id][1] * AX.k + AX.ty];
+  const spv = (n) => sp(L.nodeOf(n));
+  const dim = (n) => lit && !lit.has(n);
+  const sel = AX.sel;
+  const onlyLins = new Set([...shown].flatMap((n) => Object.keys(AVS[n].ops)));
+  // labels: the steps', above the cards' row and drawn after them (cards can be closer than a label is wide)
+  let edges = "", body = "", labels = "", over = "";
+  if (AX.draw.step) for (const r of steps) {
+    const [a, b] = r.members.map((m) => m.v);
+    if (!shown.has(a) || !shown.has(b) || L.nodeOf(a) === L.nodeOf(b)) continue;
+    const pa = spv(a), pb = spv(b);
+    if (!pa || !pb) continue;
+    const g = bez(pa, pb), op = objPair(b, a);
+    const col = op?.supported ? (op.sign > 0 ? "var(--ok)" : "var(--bad)") : "var(--edge)";
+    const on = sel?.type === "rel" && sel.id === r.id;
+    const eop = dim(a) && dim(b) ? .2 : 1;
+    edges += `<g data-r="${esc(r.id)}" class="axhit" opacity="${eop}"><path d="${g.d}" stroke="transparent" stroke-width="14" fill="none"/><path d="${g.d}" stroke="${col}" stroke-width="${on ? 3.4 : 1.6}" fill="none"/>`;
+    if (AX.arrows === "prov") edges += arrowAt(g.mid, g.tan, col);
+    else if (AX.arrows === "obj" && op?.supported) edges += arrowAt(g.mid, op.sign > 0 ? g.tan : [-g.tan[0], -g.tan[1]], col);
+    if (lvl !== "dots") {
+      const dd = ATLAS.diffs[r.id], sum = dd ? [dd.added && "+" + dd.added, dd.changed && "Δ" + dd.changed, dd.removed && "−" + dd.removed].filter(Boolean).join(" ") || "=" : "";
+      const gain = op?.gain;
+      labels += `<g data-r="${esc(r.id)}" class="axhit" opacity="${eop}"><text x="${g.mid[0]}" y="${g.mid[1] - H / 2 - 6}" font-size="10" text-anchor="middle" fill="var(--muted)" paint-order="stroke" stroke="var(--bg)" stroke-width="4" stroke-linejoin="round">${sum}${gain !== null && gain !== undefined ? ` <tspan fill="${col}">${gain >= 0 ? "+" : "−"}${fmt(Math.abs(gain))}</tspan>` : ""}<title>${esc(r.label ?? r.id)}</title></text></g>`;
+    }
+    edges += "</g>";
+  }
+  const hubs = [];
+  for (const r of ARELS) {
+    if (r.kind === "step" || !AX.draw[r.kind]) continue;
+    const ms = r.members.filter((m) => shown.has(m.v));
+    if (ms.length < 2) continue;
+    const ps = [...new Set(ms.map((m) => L.nodeOf(m.v)))].map(sp).filter(Boolean);
+    if (ps.length < 2 && r.kind !== "group") continue;
+    const col = KINDCOL[r.kind] ?? "var(--muted)", on = sel?.type === "rel" && sel.id === r.id;
+    if (r.kind === "pair") {
+      const [pa, pb] = ps, my = Math.min(pa[1], pb[1]) - 50 - Math.abs(pa[0] - pb[0]) * .12;
+      over += `<g data-r="${esc(r.id)}" class="axhit"><path d="M${pa} Q${(pa[0] + pb[0]) / 2},${my} ${pb}" stroke="transparent" stroke-width="12" fill="none"/><path d="M${pa} Q${(pa[0] + pb[0]) / 2},${my} ${pb}" fill="none" stroke="${col}" stroke-opacity="${on ? 1 : .55}" stroke-dasharray="6 4" stroke-width="${on ? 2.6 : 1.3}"/></g>`;
+      continue;
+    }
+    const cx = ps.reduce((a, p) => a + p[0], 0) / ps.length;
+    let cy = Math.max(...ps.map((p) => p[1])) + (lvl === "dots" ? 30 : H / 2 + 26);
+    while (hubs.some(([x, y]) => Math.abs(x - cx) < 160 && Math.abs(y - cy) < 18)) cy += 22;      // squares apart
+    hubs.push([cx, cy]);
+    over += `<g data-r="${esc(r.id)}" class="axhit">${ps.map((p) => `<line x1="${cx}" y1="${cy}" x2="${p[0]}" y2="${p[1]}" stroke="${col}" stroke-opacity="${on ? .9 : .45}" stroke-dasharray="3 3"/>`).join("")}
+      <rect x="${cx - 7}" y="${cy - 7}" width="14" height="14" rx="2" fill="${on ? col : "var(--panel)"}" stroke="${col}" stroke-width="1.6"/>
+      ${lvl !== "dots" ? `<text x="${cx + 12}" y="${cy + 4}" font-size="10.5" fill="${col}">${esc(r.kind)}${r.label ? " · " + esc(shortName(r.label)) : ""}</text>` : ""}</g>`;
+  }
+  for (const id of L.ids) {
+    const p = sp(id);
+    if (!p) continue;
+    const f = L.folds.find((x) => x.id === id);
+    if (f) { body += foldSVG(f, p, lvl, dim, onlyLins); continue; }
+    body += nodeSVG(id, p, lvl, dim(id), onlyLins, H);
+  }
+  asvg().innerHTML = edges + body + labels + over;
+  $("axlegend").innerHTML = legendHTML();
+  axStatus();
+}
+// the range of the versions' means of a metric on a dataset, in the suite compared on (the results do not change)
+const RANGES = new Map();
+function meanRange(dk, mk) {
+  const k = JSON.stringify([AX.suite, dk, mk]);
+  if (!RANGES.has(k)) {
+    const all = AN.map((x) => resOf(x)?.values[dk]?.[mk]).filter((x) => x?.length).map(mean);
+    RANGES.set(k, [Math.min(...all), Math.max(...all)]);
+  }
+  return RANGES.get(k);
+}
+function nodeSVG(n, p, lvl, dimmed, only, H) {
+  const v = AVS[n], col = colorOf(n), sel = AX.sel;
+  const on = (sel?.type === "v" && sel.id === n) || (sel?.type === "cmp" && sel.ids.includes(n));
+  const foc = AX.focus === n, shelf = AX.shelf.includes(n), op = dimmed ? .22 : 1, s = rawScore(n);
+  if (lvl === "dots") {
+    return `<g data-v="${esc(n)}" class="axhit" opacity="${op}">${foc ? `<circle cx="${p[0]}" cy="${p[1]}" r="13" fill="none" stroke="var(--fg)" stroke-dasharray="3 2"/>` : ""}
+      <circle cx="${p[0]}" cy="${p[1]}" r="8" fill="${col}" stroke="${on ? "var(--fg)" : "var(--bg)"}" stroke-width="${on ? 2.5 : 1.5}"/>
+      ${shelf ? `<circle cx="${p[0] + 8}" cy="${p[1] - 8}" r="3" fill="var(--accent)"/>` : ""}
+      ${AX.k >= .3 ? `<text x="${p[0]}" y="${p[1] + 21}" font-size="10" text-anchor="middle" fill="var(--muted)">${esc(shortName(n))}</text>` : ""}<title>${esc(n)}${s !== null ? " · " + fmt(s) : ""}</title></g>`;
+  }
+  const x0 = p[0] - CW / 2, y0 = p[1] - H / 2, st = stepInto(n);
+  const keys = Object.entries(v.keys).map(([k, x]) => `${k}=${x}`).join(" ");
+  const sub = st?.label || keys || v.source?.describe || v.built_at.slice(0, 16).replace("T", " ");
+  const meta = suiteMeta(), o = objMeta(), r = resOf(n);
+  const ds = (o && meta ? objDatasets(o, meta) : meta?.datasets.filter((d) => !d.heldout).map((d) => d.key) ?? []).slice(0, 6);
+  const mk = o ? objVoters(o, meta).flatMap(([, cs]) => cs)[0]?.[1] : meta?.metrics[0]?.key;     // the objective's first metric
+  const mm = meta?.metrics.find((m) => m.key === mk);
+  const cells = r && mk ? ds.map((dk, i) => {
+    const vals = r.values[dk]?.[mk], m = vals?.length ? mean(vals) : null;
+    const [lo, hi] = meanRange(dk, mk);
+    let t = m === null ? null : hi > lo ? (m - lo) / (hi - lo) : 1;
+    if (t !== null && mm?.better === "lower") t = 1 - t;
+    const w = Math.floor((CW - 26) / Math.max(ds.length, 1)) - 2;
+    return `<rect x="${x0 + 13 + i * (w + 2)}" y="${y0 + 40}" width="${w}" height="8" rx="2" fill="${seqColor(t)}"><title>${esc(mm?.name ?? mk)} on ${esc(dk)}: ${m === null ? "not run" : fmt(m)}</title></rect>`;
+  }).join("") : `<text x="${x0 + 13}" y="${y0 + 47}" font-size="9.5" fill="var(--muted)">${AX.suite ? "no results on " + esc(shortName(AX.suite)) : "no results"}</text>`;
+  return `<g data-v="${esc(n)}" class="axhit" opacity="${op}">
+    ${foc ? `<rect x="${x0 - 5}" y="${y0 - 5}" width="${CW + 10}" height="${H + 10}" rx="10" fill="none" stroke="var(--fg)" stroke-dasharray="4 3"/>` : ""}
+    <rect x="${x0}" y="${y0}" width="${CW}" height="${H}" rx="7" fill="var(--panel)" stroke="${on ? "var(--fg)" : "var(--border)"}" stroke-width="${on ? 2 : 1}"/>
+    <rect x="${x0}" y="${y0}" width="5" height="${H}" rx="2" fill="${col}"/>
+    <text x="${x0 + 13}" y="${y0 + 17}" font-size="12.5" font-weight="600" fill="var(--fg)">${esc(shortName(n))}</text>
+    <text x="${x0 + CW - 9}" y="${y0 + 17}" font-size="12" text-anchor="end" fill="var(--fg)">${s === null ? "" : fmt(s)}</text>
+    <text x="${x0 + 13}" y="${y0 + 32}" font-size="10" fill="var(--muted)">${esc(sub.length > 25 ? sub.slice(0, 24) + "…" : sub)}<title>${esc(sub)}</title></text>
+    ${cells}${r?.earlier ? `<text x="${x0 + CW - 9}" y="${y0 + 32}" font-size="9" text-anchor="end" fill="var(--setting)">earlier build</text>` : ""}
+    ${shelf ? `<circle cx="${x0 + CW - 10}" cy="${y0 + H - 9}" r="3.5" fill="var(--accent)"><title>on the shelf</title></circle>` : ""}
+    ${lvl === "thumbs" ? fpSVG(n, AX.focus && AX.focus !== n ? AX.focus : parentsOf(n)[0], x0 + 13, y0 + 56, CW - 30, only) : ""}<title>${esc(n)}</title></g>`;
+}
+function foldSVG(f, p, lvl, dim, only) {
+  const on = AX.sel?.type === "fold" && AX.sel.id === f.id;
+  const best = f.members.reduce((a, n) => (gainOf(n) ?? -Infinity) > (gainOf(a) ?? -Infinity) ? n : a);
+  const op = f.members.every(dim) ? .25 : 1;
+  if (!AX.expanded.has(f.id)) {
+    if (lvl === "dots") return `<g data-fold="${esc(f.id)}" class="axhit" opacity="${op}"><rect x="${p[0] - 9}" y="${p[1] - 9}" width="18" height="18" rx="3" fill="${colorOf(best)}" stroke="${on ? "var(--fg)" : "var(--muted)"}" stroke-dasharray="3 2"/><text x="${p[0]}" y="${p[1] + 22}" font-size="10" text-anchor="middle" fill="var(--muted)">×${f.members.length}</text></g>`;
+    return `<g data-fold="${esc(f.id)}" class="axhit" opacity="${op}"><rect x="${p[0] - CW / 2}" y="${p[1] - 30}" width="${CW}" height="60" rx="7" fill="var(--panel)" stroke="${on ? "var(--fg)" : "var(--muted)"}" stroke-dasharray="4 3"/>
+      <rect x="${p[0] - CW / 2}" y="${p[1] - 30}" width="5" height="60" rx="2" fill="${colorOf(best)}"/>
+      <text x="${p[0] - CW / 2 + 13}" y="${p[1] - 12}" font-size="12" font-weight="600" fill="var(--fg)">${f.members.length} versions, one structure</text>
+      <text x="${p[0] - CW / 2 + 13}" y="${p[1] + 4}" font-size="10" fill="var(--muted)">${f.vary.length ? "differ in " + esc(f.vary.join(", ")) : "differ in settings"}</text>
+      <text x="${p[0] - CW / 2 + 13}" y="${p[1] + 20}" font-size="10" fill="var(--accent)" data-expand="${esc(f.id)}">▸ unfold · best ${esc(shortName(best))}</text></g>`;
+  }
+  const [k1, k2] = f.vary, v1 = k1 ? [...new Set(f.members.map((n) => String(AVS[n].keys[k1])))] : [""], v2 = k2 ? [...new Set(f.members.map((n) => String(AVS[n].keys[k2])))] : [""];
+  const c = Math.min(28, Math.floor((CW + 20) / Math.max(v2.length, 1)) - 2), gx = p[0] - v2.length * c / 2 + 14, gy = p[1] - v1.length * c / 2 + 12;
+  let cells = "";
+  if (k1) v1.forEach((a, i) => v2.forEach((b, j) => {
+    const n = f.members.find((x) => String(AVS[x].keys[k1]) === a && (!k2 || String(AVS[x].keys[k2]) === b));
+    if (!n) return;
+    const s = AX.sel?.type === "v" && AX.sel.id === n;
+    cells += `<rect data-v="${esc(n)}" class="axhit" x="${gx + j * c}" y="${gy + i * c}" width="${c - 3}" height="${c - 3}" rx="3" fill="${colorOf(n)}" stroke="${s ? "var(--fg)" : "none"}" stroke-width="2" opacity="${dim(n) ? .25 : 1}"><title>${esc(n)}${rawScore(n) !== null ? " · " + fmt(rawScore(n)) : ""}</title></rect>`;
+  }));
+  else f.members.forEach((n, i) => { cells += `<rect data-v="${esc(n)}" class="axhit" x="${p[0] - 70 + (i % 6) * 24}" y="${p[1] - 30 + Math.floor(i / 6) * 24}" width="21" height="21" rx="3" fill="${colorOf(n)}"><title>${esc(n)}</title></rect>`; });
+  return `<g><rect x="${p[0] - CW / 2 - 20}" y="${p[1] - 75}" width="${CW + 40}" height="150" rx="8" fill="var(--panel)" stroke="var(--muted)" stroke-dasharray="4 3"/>
+    <text x="${p[0] - CW / 2 - 10}" y="${p[1] - 58}" font-size="11" font-weight="600" fill="var(--fg)" data-fold="${esc(f.id)}" class="axhit">${f.members.length} versions${k1 ? ": " + esc(k1) + " ↓" + (k2 ? ", " + esc(k2) + " →" : "") : ""}</text>
+    <text x="${p[0] + CW / 2 + 10}" y="${p[1] - 58}" font-size="10.5" text-anchor="end" fill="var(--accent)" data-expand="${esc(f.id)}" class="axhit">▾ fold</text>
+    ${k2 ? v2.map((b, j) => `<text x="${gx + j * c + c / 2 - 1}" y="${gy - 4}" font-size="9" text-anchor="middle" fill="var(--muted)">${esc(b.slice(0, 6))}</text>`).join("") : ""}
+    ${k1 ? v1.map((a, i) => `<text x="${gx - 4}" y="${gy + i * c + c / 2 + 2}" font-size="9" text-anchor="end" fill="var(--muted)">${esc(a.slice(0, 7))}</text>`).join("") : ""}${cells}</g>`;
+}
+
+/* ---------- the other modes ---------- */
+function divColor(x, span) {
+  if (x === null) return "var(--border)";
+  const t = Math.max(-1, Math.min(1, x / (span || 1))), a = Math.abs(t);
+  return `color-mix(in srgb, ${t > 0 ? "var(--ok)" : "var(--bad)"} ${Math.round(a * 85 + 8)}%, var(--panel))`;
+}
+function drawMatrix() {
+  const ns = AN.filter((n) => shownSet().has(n)).slice(0, 120);
+  const gains = ns.map(gainOf).filter((x) => x !== null), span = gains.length ? Math.max(...gains) - Math.min(...gains) : 1;
+  let h = `<div class="axmxbar"><label class="ctl">Cells <select id="axmx"><option value="score"${AX.mx === "score" ? " selected" : ""}>${esc(objMeta()?.name ?? "objective")}: row − column (better is green)</option><option value="struct"${AX.mx === "struct" ? " selected" : ""}>steps that differ</option></select></label>
+    <span class="mu">${AX.mx === "score" ? "Faint: not every metric's paired difference supports it. " : ""}Click a cell to compare the two.${ns.length < shownSet().size ? ` The first ${ns.length} shown.` : ""}</span></div>
+    <div class="axscroll"><table class="axmx"><tr><th></th>${ns.map((n) => `<th class="col"><div>${esc(shortName(n))}</div></th>`).join("")}</tr>`;
+  for (const a of ns) {
+    h += `<tr class="${AX.shelf.includes(a) ? "hl" : ""}"><th>${esc(shortName(a))}</th>`;
+    for (const b of ns) {
+      if (a === b) { h += `<td class="self"></td>`; continue; }
+      if (AX.mx === "score") {
+        const op = objPair(a, b), g = op?.gain ?? null;
+        h += `<td data-cmp="${esc(b)}|${esc(a)}" style="background:${divColor(g, span)};opacity:${op?.supported ? 1 : .5}" title="${esc(a)} − ${esc(b)}: ${g === null ? "no score" : (g >= 0 ? "+" : "") + fmt(g)}${op?.supported ? "" : " (not supported by every paired difference)"}"></td>`;
+      } else {
+        const d = fpDiff(a, b).length;
+        h += `<td data-cmp="${esc(b)}|${esc(a)}" style="background:${seqColor(1 - d / Math.max(4, LIN.length / 3))}" title="${esc(a)} / ${esc(b)}: ${d} steps differ"></td>`;
+      }
+    }
+    h += "</tr>";
+  }
+  $("axpane").innerHTML = h + "</table></div>";
+  axStatus();
+}
+function drawSets() {
+  const rels = ARELS.filter((r) => r.kind !== "step"), shown = shownSet();
+  const cols = AN.filter((n) => shown.has(n) && rels.some((r) => r.members.some((m) => m.v === n)));
+  const best = (r) => Math.max(...r.members.map((m) => gainOf(m.v) ?? -Infinity));
+  rels.sort((a, b) => best(b) - best(a));
+  let h = `<p class="mu">Every relation but the steps, one row each; its members as dots, coloured as in the graph (a ring: the base). Rows by their best member. Click a row to inspect the relation.</p>`;
+  if (!rels.length) { $("axpane").innerHTML = h + `<p>No relations but steps yet. Make one with <code>headway relate ATLAS alternatives --base A B C D</code>, or a pair, a factorial, a group.</p>`; axStatus(); return; }
+  h += `<div class="axscroll"><table class="axmx axsets"><tr><th></th><th>best</th>${cols.map((n) => `<th class="col"><div>${esc(shortName(n))}</div></th>`).join("")}</tr>`;
+  for (const r of rels) {
+    const b = best(r);
+    h += `<tr><td class="rl" data-r="${esc(r.id)}"><b>${esc(r.kind)}</b> · ${esc(r.label ?? r.id)}</td><td class="mu">${b === -Infinity ? "" : fmt(lowerBetter(objMeta()) ? -b : b)}</td>`;
+    for (const n of cols) {
+      const m = r.members.find((x) => x.v === n);
+      h += `<td class="dotc">${m ? `<span class="d" data-v="${esc(n)}" style="background:${colorOf(n)};${m.role === "base" ? "outline:2px solid var(--fg);outline-offset:1px" : ""}" title="${esc(n)}${m.role ? " (" + esc(m.role) + ")" : ""}"></span>` : ""}</td>`;
+    }
+    h += "</tr>";
+  }
+  $("axpane").innerHTML = h + "</table></div>";
+  axStatus();
+}
+
+/* ---------- the inspector ---------- */
+const vLink = (n) => `<button class="linkish" data-v="${esc(n)}">${esc(n)}</button>`;
+const rLink = (r) => `<button class="linkish" data-r="${esc(r.id)}">${esc(r.kind)} · ${esc(r.label ?? r.id)}</button>`;
+function resultsTable(n, ref) {
+  const meta = suiteMeta(), r = resOf(n);
+  if (!meta) return `<p class="mu">No results in this atlas.</p>`;
+  if (!r) return `<p class="mu">No results on ${esc(AX.suite)}.</p>`;
+  const ds = meta.datasets.filter((d) => !d.heldout), pair = ref && pairOf(n, ref);
+  let h = `<table class="axres"><tr><th></th>${ds.map((d) => `<th>${esc(d.name ?? d.key)}</th>`).join("")}</tr>`;
+  for (const m of meta.metrics) {
+    h += `<tr><td>${esc(m.name ?? m.key)} <span class="mu">${m.better === "lower" ? "↓" : "↑"}</span></td>` + ds.map((d) => {
+      const v = r.values[d.key]?.[m.key];
+      if (!v?.length) return `<td class="mu">–</td>`;
+      const p = pair && pair(d.key, m.key);
+      return `<td>${fmt(mean(v))}${ref ? `<br>${p ? pairedHTML(p, m.better) : `<span class="mu">–</span>`}` : ""}</td>`;
+    }).join("") + "</tr>";
+  }
+  return h + `</table>${ref ? `<p class="mu">Under each value: the difference from ${esc(ref)}, paired by replicate (agreeing/paired); ● ◐ ○: the benchmark's intervals of the difference exclude 0 for all, some, none.</p>` : ""}`;
+}
+function changesList(a, b) {
+  const rel = relBetween(a, b), dd = rel && ATLAS.diffs[rel.id];
+  if (dd && rel.members[0].v === a && rel.members[1].v === b) {
+    return `<ul class="axdiff">${dd.items.map(([st, kind, key, label, what]) => `<li><span class="m ${st}">${{added: "+", removed: "−", changed: "Δ", split: "⋔", merged: "⋔"}[st]}</span>${esc(kind)} ${esc(label || key)}${what.length ? ` <span class="mu">${esc(what.join(", "))}</span>` : ""}</li>`).join("") || `<li class="mu">no change (but wording)</li>`}</ul>`;
+  }
+  const fd = fpDiff(a, b);
+  return `<ul class="axdiff">${fd.map((d) => `<li><span class="m ${d.state}">${{added: "+", removed: "−", changed: "Δ"}[d.state]}</span>step ${esc(LINLABEL[d.lin] ?? d.lin)}</li>`).join("") || `<li class="mu">the same steps</li>`}</ul><p class="mu">Steps only; open the two as a stack for every change, symbol by symbol.</p>`;
+}
+function fpBox(n, ref) {
+  const only = new Set([...Object.keys(AVS[n].ops), ...(ref ? Object.keys(AVS[ref].ops) : [])]);
+  const cnt = LIN.filter((l) => only.has(l.key)).length, w = Math.min(300, cnt * 12);
+  return `<svg width="${w}" height="${Math.ceil(cnt / 26) * 12 + 2}" style="max-width:100%">${fpSVG(n, ref, 1, 1, w - 2, only)}</svg>`;
+}
+function inspect() {
+  const el = $("axins"), s = AX.sel;
+  if (!s) {
+    el.innerHTML = `<div class="eyebrow">${esc(ATLAS.name)}</div><p>${AN.length} versions, ${ARELS.length} relations${suiteKeys.length ? `, results on ${suiteKeys.map(esc).join(", ")}` : ""}.</p>
+      <p class="mu">Click a version, a step (an edge) or a relation (a square) to see it here. Shift-click versions (or press S) to put them on the shelf, then open them as a stack: the viewer, each lane compared with the one before.</p>
+      <p class="mu">The query: <code>key:K=V</code> <code>near:NAME~2</code> <code>path:A..B</code> <code>changed:STEP</code> <code>contains:STEP</code> <code>relation:ID</code> <code>kind:alternatives</code> <code>tag:T</code> <code>score&gt;0.8</code> <code>earlier:</code>, or words; <code>-term</code> excludes. Typing highlights, Enter filters.</p>`;
+    return;
+  }
+  if (s.type === "v") {
+    const n = s.id, v = AVS[n], par = parentsOf(n)[0] ?? v.parents[0], st = stepInto(n);
+    const ranked = AN.filter((x) => shownSet().has(x) && gainOf(x) !== null).sort((a, b) => gainOf(b) - gainOf(a)), rk = ranked.indexOf(n) + 1;
+    const ref = AX.focus && AX.focus !== n ? AX.focus : AVS[par] ? par : null;
+    const rels = ARELS.filter((r) => r.kind !== "step" && r.members.some((m) => m.v === n));
+    el.innerHTML = `<div class="eyebrow">version</div><div class="axtitle">${esc(n)}</div>
+      <div class="axchips">${Object.entries(v.keys).map(([k, x]) => `<span class="axkv">${esc(k)}=${esc(x)}</span>`).join("")}</div>
+      <p class="mu">built ${esc(v.built_at.slice(0, 16).replace("T", " "))}${v.source?.describe ? " · " + esc(v.source.describe) : ""}${v.history?.length ? ` · rebuilt ${v.history.length}×` : ""}</p>
+      ${rawScore(n) !== null ? `<div class="axbig"><b>${fmt(rawScore(n))}</b><span>${esc(objMeta().name)}${rk ? ` · #${rk} of ${ranked.length} shown` : ""}</span></div>` : ""}
+      ${resOf(n)?.earlier ? `<p style="color:var(--setting)">These results were computed on an earlier build of ${esc(n)}.</p>` : ""}
+      ${resultsTable(n, AVS[par] ? par : null)}
+      <div class="axbox"><h4>Steps${ref ? `, against ${esc(ref)}${ref === AX.focus ? " (the focus)" : " (made from)"}` : ""}</h4>${fpBox(n, ref)}${ref ? changesList(ref, n) : `<p class="mu">${Object.keys(v.ops).length} steps</p>`}</div>
+      ${st ? `<div class="axbox"><h4>Made from ${vLink(st.members[0].v)}</h4>${st.label ? `<p><b>${esc(st.label)}</b></p>` : ""}
+        ${st.why ? `<p><em>why</em> ${esc(st.why)}</p>` : ""}${st.prediction ? `<p><em>prediction</em> ${esc(st.prediction)}</p>` : ""}<p><em>outcome</em> ${st.outcome ? esc(st.outcome) : `<span class="mu">not written yet (headway relate ATLAS update ${esc(st.id)} --outcome "…")</span>`}</p>
+        <button class="linkish" data-r="${esc(st.id)}">inspect the step</button></div>` : ""}
+      ${rels.length ? `<div class="axbox"><h4>Relations</h4>${rels.map((r) => `<div>${rLink(r)}</div>`).join("")}</div>` : ""}
+      ${v.desc ? `<div class="axbox"><h4>About</h4><p class="mu">${esc(v.desc)}</p></div>` : ""}
+      <div class="axbtns"><button data-act="shelf">${AX.shelf.includes(n) ? "Off the shelf" : "On the shelf"} (S)</button><button data-act="focus">${AX.focus === n ? "Unfocus" : "Focus"} (F)</button>
+        <button data-act="near">Neighbours</button><button data-act="alone" class="primary">Open</button></div>`;
+  } else if (s.type === "rel") {
+    const r = AREL[s.id];
+    if (!r) { AX.sel = null; inspect(); return; }
+    const ms = r.members.map((m) => m.v).filter((x) => AVS[x]);
+    let h = `<div class="eyebrow">${esc(r.kind)}</div><div class="axtitle">${esc(r.label ?? r.id)}</div><p class="mu">${esc(r.id)}${(r.tags ?? []).map((t) => ` <span class="axkv">${esc(t)}</span>`).join("")}</p>`;
+    if ((r.kind === "step" || r.kind === "pair") && ms.length === 2) {
+      const [a, b] = ms;
+      h += `<p>${vLink(a)} ${r.kind === "step" ? "→" : "·"} ${vLink(b)}</p><div class="axbox"><h4>What changed</h4>${changesList(a, b)}</div>
+        <div class="axbox"><h4>${esc(b)}'s results, against ${esc(a)}</h4>${resultsTable(b, a)}</div>
+        ${r.why || r.prediction || r.outcome || r.kind === "step" ? `<div class="axbox"><h4>Reasoning</h4>${r.why ? `<p><em>why</em> ${esc(r.why)}</p>` : ""}${r.prediction ? `<p><em>prediction</em> ${esc(r.prediction)}</p>` : ""}<p><em>outcome</em> ${r.outcome ? esc(r.outcome) : `<span class="mu">not written yet</span>`}</p></div>` : ""}`;
+    } else if (r.kind === "factorial" && (r.factors ?? []).length === 2) {
+      const [f1, f2] = r.factors, l1 = [...new Set(r.members.map((m) => String(m.levels?.[f1])))], l2 = [...new Set(r.members.map((m) => String(m.levels?.[f2])))];
+      h += `<p>Factors <span class="axkv">${esc(f1)}</span> × <span class="axkv">${esc(f2)}</span>; each cell a version.</p>
+        <div class="axgrid" style="grid-template-columns:auto ${l2.map(() => "1fr").join(" ")}"><div></div>${l2.map((b) => `<div class="ax">${esc(f2)}=${esc(b)}</div>`).join("")}
+        ${l1.map((a) => `<div class="ax">${esc(f1)}=${esc(a)}</div>` + l2.map((b) => { const m = r.members.find((x) => String(x.levels?.[f1]) === a && String(x.levels?.[f2]) === b); return m ? `<div class="cell" data-v="${esc(m.v)}" style="border-left:5px solid ${colorOf(m.v)}">${esc(shortName(m.v))}<br>${rawScore(m.v) === null ? "–" : fmt(rawScore(m.v))}</div>` : `<div class="cell mu">–</div>`; }).join("")).join("")}</div>`;
+    } else {
+      const sorted = ms.slice().sort((a, b) => (gainOf(b) ?? -Infinity) - (gainOf(a) ?? -Infinity));
+      const gs = sorted.map(gainOf).filter((x) => x !== null), lo = Math.min(...gs), hi = Math.max(...gs);
+      const base = r.members.find((m) => m.role === "base")?.v;
+      h += `<div class="axrank">${sorted.map((n) => `<span>${vLink(n)}${n === base ? " ◆" : ""}</span><div class="bar"><span style="width:${gainOf(n) === null ? 0 : 8 + 92 * (hi > lo ? (gainOf(n) - lo) / (hi - lo) : 1)}%;background:${colorOf(n)}"></span></div><span>${rawScore(n) === null ? "–" : fmt(rawScore(n))}</span>`).join("")}</div>
+        ${gs.length > 1 ? `<p class="mu">${base ? "◆ the base. " : ""}Spread of ${esc(objMeta()?.name ?? "the objective")}: ${fmt(hi - lo)} (from the stored values, by the viewer).</p>` : ""}`;
+    }
+    const rr = ATLAS.relresults[r.id]?.[AX.suite], decl = suiteMeta()?.contrasts ?? [];
+    for (const [ck, by] of Object.entries(rr?.contrasts ?? {})) {
+      const c = decl.find((x) => x.key === ck);
+      h += `<div class="axbox"><h4>${esc(c?.name ?? ck)} <span class="mu">from the benchmark</span></h4><table class="axres">${Object.entries(by).flatMap(([dk, bm]) => Object.entries(bm).map(([mk, vals]) => {
+        const xs = (Array.isArray(vals) ? vals : [vals]).map((x) => typeof x === "object" ? x : {value: x});
+        return `<tr><td>${esc(mk)} on ${esc(dk)}</td><td>${xs.map((x) => `${fmt(x.value)}${x.lo !== undefined ? ` [${fmt(x.lo)}, ${fmt(x.hi)}]` : ""}`).join(", ")}</td></tr>`;
+      })).join("")}</table>${c?.desc ? `<p class="mu">${esc(c.desc)}${c.interval ? ` Intervals: ${esc(c.interval)}.` : ""}</p>` : ""}</div>`;
+    }
+    h += `<div class="axbtns"><button data-act="relshelf">On the shelf</button><button data-act="relstack" class="primary">Open as stack</button></div>`;
+    el.innerHTML = h;
+  } else if (s.type === "fold") {
+    const f = AX.laid?.folds.find((x) => x.id === s.id);
+    if (!f) { AX.sel = null; inspect(); return; }
+    const sorted = f.members.slice().sort((a, b) => (gainOf(b) ?? -Infinity) - (gainOf(a) ?? -Infinity));
+    el.innerHTML = `<div class="eyebrow">folded</div><div class="axtitle">${f.members.length} versions, one structure</div>
+      <p class="mu">The same steps and code${f.vary.length ? "; they differ in " + f.vary.map(esc).join(", ") : ""}. Folded into one node; unfold it on the canvas, or turn folding off under Draw.</p>
+      <div class="axrank">${sorted.map((n) => `<span>${vLink(n)}</span><div class="bar"><span style="width:${gainOf(n) === null ? 0 : 50}%;background:${colorOf(n)}"></span></div><span>${rawScore(n) === null ? "–" : fmt(rawScore(n))}</span>`).join("")}</div>
+      <div class="axbtns"><button data-act="unfold">${AX.expanded.has(f.id) ? "Fold" : "Unfold"}</button><button data-act="foldshelf">On the shelf</button></div>`;
+  } else if (s.type === "cmp") {
+    const [a, b] = s.ids, pth = apath(a, b);
+    el.innerHTML = `<div class="eyebrow">two versions</div><div class="axtitle">${esc(a)} ↔ ${esc(b)}</div>
+      <div class="axbox"><h4>Steps that differ</h4>${fpBox(b, a)}${changesList(a, b)}</div>
+      <div class="axbox"><h4>${esc(b)}'s results, against ${esc(a)}</h4>${resultsTable(b, a)}</div>
+      <div class="axbox"><h4>Path${pth.length ? ` (${pth.length - 1} steps)` : ""}</h4><p>${pth.length ? pth.map(vLink).join(" › ") : `<span class="mu">no path through the relations</span>`}</p></div>
+      <div class="axbtns">${pth.length > 2 ? `<button data-act="cmppath">The path on the shelf</button>` : ""}<button data-act="cmpstack" class="primary">Open the two as a stack</button></div>`;
+  }
+}
+
+/* ---------- the shell ---------- */
+function drawLeft() {
+  const views = [["", "Everything", `${AN.length} versions`], ...Object.entries(ATLAS.views).map(([k, v]) => [k, k, v.kind === "stack" ? (v.path ?? []).join(" › ") : v.query ?? ""])];
+  $("axviews").innerHTML = views.map(([k, name, sub]) => `<button class="axview${(AX.view ?? "") === k ? " on" : ""}" data-view="${esc(k)}">${esc(name)}<small>${esc(sub.length > 60 ? sub.slice(0, 59) + "…" : sub)}</small></button>`).join("") +
+    `<button class="linkish" data-act="saveview" style="margin-top:4px">Save this view…</button>`;
+  const terms = AX.applied.split(/\s+/);
+  $("axkeys").innerHTML = keyNames.map((k) => `<div class="axfacet"><b>${esc(k)}</b><div class="axchips">${keyValues(k).map((v) => {
+    const t = `key:${k}=${v}`, c = AN.filter((n) => String(AVS[n].keys[k]) === v).length;
+    return `<button class="axchip${terms.includes(t) ? " on" : ""}" data-term="${esc(t)}">${esc(v)}<i>${c}</i></button>`;
+  }).join("")}</div></div>`).join("") || `<p class="mu">No keys (build with --key NAME=VALUE).</p>`;
+  const kinds = {}; ARELS.forEach((r) => kinds[r.kind] = (kinds[r.kind] ?? 0) + 1);
+  $("axkinds").innerHTML = Object.entries(kinds).map(([k, c]) => { const t = "kind:" + k; return `<button class="axchip${terms.includes(t) ? " on" : ""}" data-term="${t}">${esc(k)}<i>${c}</i></button>`; }).join("") || `<p class="mu">None yet.</p>`;
+  const tags = {}; ARELS.forEach((r) => (r.tags ?? []).forEach((t) => tags[t] = (tags[t] ?? 0) + 1));
+  $("axtags").innerHTML = Object.entries(tags).map(([k, c]) => { const t = "tag:" + k; return `<button class="axchip${terms.includes(t) ? " on" : ""}" data-term="${esc(t)}">${esc(k)}<i>${c}</i></button>`; }).join("") || `<p class="mu">None yet.</p>`;
+  $("axdraw").innerHTML = [["step", "steps (edges)"], ["pair", "pairs (arcs)"], ["alternatives", "alternatives"], ["factorial", "factorials"], ["group", "groups"]]
+    .map(([k, l]) => `<label class="axtoggle"><input type="checkbox" data-draw="${k}"${AX.draw[k] ? " checked" : ""}> ${l}</label>`).join("") +
+    `<label class="axtoggle"><input type="checkbox" id="axfold"${AX.fold ? " checked" : ""}> fold versions of one structure</label>`;
+  $("axsuite").innerHTML = suiteKeys.length ? suiteKeys.map((s) => `<option value="${esc(s)}"${s === AX.suite ? " selected" : ""}>${esc(s)}</option>`).join("") : `<option>no results</option>`;
+  $("axobj").innerHTML = (suiteMeta()?.objectives ?? []).map((o) => `<option value="${esc(o.key)}"${o.key === AX.obj ? " selected" : ""}>${esc(o.name)}</option>`).join("") || `<option>none</option>`;
+  $("axcolor").innerHTML = [["obj", "the objective"], ["date", "when built"], ["dist", "distance from the focus"], ["earlier", "results on an earlier build"],
+    ...keyNames.map((k) => ["key:" + k, "key " + k])].map(([v, l]) => `<option value="${esc(v)}"${AX.color === v ? " selected" : ""}>${esc(l)}</option>`).join("");
+}
+function drawShelf() {
+  $("axshelfitems").innerHTML = AX.shelf.length ? AX.shelf.map((n, i) => `${i ? `<span class="mu">›</span>` : ""}<span class="axschip"><button class="linkish" data-v="${esc(n)}">${esc(n)}</button><button data-unshelf="${esc(n)}" title="off the shelf">×</button></span>`).join("")
+    : `<span class="mu">Shift-click versions, or press S, to collect them here.</span>`;
+  $("axfill").disabled = AX.shelf.length < 2; $("axcmp").disabled = AX.shelf.length < 2;
+  $("axstack").disabled = !AX.shelf.length; $("axclear").disabled = !AX.shelf.length;
+}
+function axStatus() {
+  const shown = shownSet(), lit = litSet();
+  $("axstatus").innerHTML = [`${AN.length} versions`, `${shown.size} shown`, lit && `${lit.size} highlighted: Enter to filter`,
+    AX.mode === "graph" && `zoom ${AX.k.toFixed(2)} (${detailLevel()})`, AX.focus && `focus: ${AX.focus}`].filter(Boolean).map((x) => `<span>${esc(x)}</span>`).join("");
+  $("axqstate").textContent = lit ? `${lit.size} match · ⏎ filter` : AX.applied ? "filtered · Esc clears" : "";
+}
+function drawCanvas() {
+  const g = AX.mode === "graph";
+  asvg().style.display = g ? "" : "none";
+  $("axzoom").hidden = $("axlegend").hidden = $("axhint").hidden = !g;
+  $("axgctl").hidden = !g;
+  $("axpane").hidden = g;
+  document.querySelectorAll("#axmodes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === AX.mode));
+  if (g) return drawGraph().catch((e) => { console.error(e); asvg().innerHTML = `<text x="10" y="20" fill="var(--bad)">${esc(e)}</text>`; });
+  if (AX.mode === "matrix") drawMatrix(); else drawSets();
+}
+function drawAll() { drawLeft(); drawCanvas(); inspect(); drawShelf(); }
+async function fitAtlas() {
+  if (AX.mode !== "graph") return;
+  const L = await layoutFor(shownSet()), W = worldPos(L), pts = L.ids.map((id) => W[id]).filter(Boolean);
+  if (!pts.length) return;
+  const r = asvg().getBoundingClientRect();
+  // the nodes' centres scale with the zoom, the cards do not: room for a card's size (on screen) around them, and
+  // 40px more below for the relations' squares
+  const x0 = Math.min(...pts.map((p) => p[0])), x1 = Math.max(...pts.map((p) => p[0]));
+  const y0 = Math.min(...pts.map((p) => p[1])), y1 = Math.max(...pts.map((p) => p[1]));
+  const fit = (H) => Math.max(.15, Math.min(1.4, Math.min((r.width - 40 - CW) / (x1 - x0 || 1), (r.height - 100 - H) / (y1 - y0 || 1))));
+  // fitted for the cards, then again for the taller cards with steps if that zoom shows them
+  AX.k = fit(58);
+  if (cardH() > 58) AX.k = fit(cardH());
+  AX.tx = r.width / 2 - (x0 + x1) / 2 * AX.k; AX.ty = r.height / 2 - 20 - (y0 + y1) / 2 * AX.k;
+}
+async function centerOn(n) {
+  if (AX.mode !== "graph") return;
+  const L = await layoutFor(shownSet()), w = worldPos(L)[L.nodeOf(n)], r = asvg().getBoundingClientRect();
+  if (!w) return;
+  const x = w[0] * AX.k + AX.tx, y = w[1] * AX.k + AX.ty;
+  if (x < 100 || x > r.width - 100 || y < 60 || y > r.height - 60) { AX.tx = r.width / 2 - w[0] * AX.k; AX.ty = r.height / 2 - w[1] * AX.k; }
+}
+
+/* ---------- actions ---------- */
+function axSelect(sel) { AX.sel = sel; drawCanvas(); inspect(); }
+function toggleShelf(n) { AX.shelf = AX.shelf.includes(n) ? AX.shelf.filter((x) => x !== n) : [...AX.shelf, n]; drawShelf(); drawCanvas(); inspect(); }
+function setQuery(q) { AX.typed = AX.applied = q; $("axq").value = q; }
+async function applyQuery() { AX.applied = AX.typed; AX.view = null; await fitAtlas(); drawAll(); }
+// a saved view: its query or path, its arrows (orient: provenance, none, objective or objective:KEY, which also
+// picks that objective; baseline and manual, not drawn yet, as provenance), arrangement and suite (drawn unless
+// draw is false)
+function applyView(k, draw = true) {
+  AX.view = k || null;
+  const v = ATLAS.views[k] ?? {};
+  if (!k) setQuery("");
+  else if (v.kind === "stack") { setQuery(`in:${(v.path ?? []).join(",")}`); AX.shelf = (v.path ?? []).filter((n) => AVS[n]); }
+  else setQuery(v.query ?? "");
+  const orient = typeof v.orient === "string" ? v.orient : "", byObj = orient.split(":")[0] === "objective";
+  if (v.orient) AX.arrows = byObj ? "obj" : orient === "none" ? "none" : "prov";      // provenance, baseline, manual
+  if (v.arrange) AX.arrange = v.arrange;
+  $("axarrows").value = AX.arrows; $("axarrange").value = AX.arrange;
+  pickSuite();
+  const ok = byObj && orient.slice("objective:".length);
+  if (ok && suiteMeta()?.objectives.some((o) => o.key === ok)) AX.obj = ok;
+  if (draw) fitAtlas().then(drawAll);
+}
+// the baseline of the stack view shown, while it is on the shelf (else each version is compared with the one before)
+function viewBaseline() {
+  const v = ATLAS.views[AX.view];
+  return v?.kind === "stack" && AX.shelf.includes(v.baseline) ? v.baseline : null;
+}
+// the versions in full: carried by the page, or (under headway serve) fetched
+async function fullVersion(n) {
+  if (ATLAS_V[n]) return ATLAS_V[n];
+  if (location.protocol.startsWith("http")) {
+    try {
+      const r = await fetch(ATLAS_DIR + "atlas-version?name=" + encodeURIComponent(n), {cache: "no-store"});
+      if (r.ok) return ATLAS_V[n] = await r.json();
+    } catch {}
+  }
+  return null;
+}
+// the versions in lanes, in the viewer; a stack (stack true) comes back to the atlas as the shelf, a version opened
+// alone leaves the shelf as it was
+async function openStack(names, baseline = null, stack = false) {
+  const got = [];
+  for (const n of names) { const d = await fullVersion(n); if (d) got.push([n, d]); }
+  const missing = names.filter((n) => !got.some(([x]) => x === n));
+  if (!got.length) { note(`Not in this page: ${missing.join(", ")}. Write it with headway page --full, or open the atlas with headway serve.`); return; }
+  LANES.splice(0, LANES.length, ...got.map(([n, d]) => ({id: ++laneSeq, name: n, from: "atlas " + ATLAS.name, src: null, D: snapshot(JSON.parse(JSON.stringify(d)))})));
+  cmp.base = baseline ? LANES.find((l) => l.name === baseline)?.id ?? null : null;
+  active = LANES.at(-1); use(active); state.sel = null;
+  AX.opened = stack;
+  showAtlas(false);                                  // which also redraws the header
+  buildLegend(); buildGroupsMenu();
+  lanesChanged(true);
+  setView("graph");
+  note(`Opened ${got.map(([n]) => n).join(" › ")}${missing.length ? `; not in this page: ${missing.join(", ")}` : ""}`);
+}
+function showAtlas(on) {
+  document.body.classList.toggle("atlasview", on);
+  $("atlas").hidden = !on;
+  if (on) {
+    $("title").textContent = document.title = ATLAS.name;
+    $("meta").textContent = `an atlas of ${AN.length} version${AN.length === 1 ? "" : "s"}, ${ARELS.length} relation${ARELS.length === 1 ? "" : "s"}`;
+    $("desc").hidden = true;
+  } else header();
+  document.querySelectorAll("input[name=view]").forEach((r) => r.checked = on ? r.value === "atlas" : r.value === rs.view);
+  if (on) {
+    if (AX.opened) { AX.shelf = LANES.map((l) => l.name).filter((n) => AVS[n]); AX.opened = false; }     // back from a stack: its lanes are the shelf
+    fitAtlas().then(drawAll);
+  }
+}
+function saveViewDialog() {
+  const terms = AX.applied.trim();
+  // each term quoted for the shell where it needs it, after -- so that a -term is not taken for an option
+  const sh = (x) => /^[\w@%+=:,./-][\w@%+=:,./~-]*$/.test(x) ? x : `'${x.replaceAll("'", `'\\''`)}'`;
+  const args = (xs) => xs.length ? " -- " + xs.map(sh).join(" ") : "";
+  // a stack: the shelf, with no query or with the one a stack view set (its in:PATH); its baseline kept.
+  // The suite compared on goes in both forms
+  const stack = !!AX.shelf.length && (!terms || ATLAS.views[AX.view]?.kind === "stack");
+  const base = stack ? viewBaseline() : null;
+  const opts = (AX.suite ? " --suite " + sh(AX.suite) : "") + (base ? " --baseline " + sh(base) : "");
+  const cmd = stack ? `headway atlas view${opts} ATLAS "my view"${args(AX.shelf)}`
+    : `headway atlas view --graph${opts} ATLAS "my view"${args(terms ? terms.split(/\s+/) : [])}`;
+  const suites = AX.suite ? [AX.suite] : [];
+  promptBox("Save this view", `A view is kept in the atlas (atlas.json, "views"). From a terminal, or by your agent:`, cmd +
+    `\n\n# or add to atlas.json under "views":\n` + JSON.stringify({"my view": stack ? {kind: "stack", path: AX.shelf, ...(base ? {baseline: base} : {}), suites}
+      : {kind: "graph", query: terms, orient: {prov: "provenance", obj: AX.obj ? "objective:" + AX.obj : "objective", none: "none"}[AX.arrows], arrange: AX.arrange, suites}}, null, 1));
+}
+function promptBox(title, intro, text) {
+  const m = $("axmodal");
+  m.innerHTML = `<div class="box" role="dialog" aria-label="${esc(title)}"><div class="eyebrow">${esc(title)}</div><p>${esc(intro)}</p><pre id="axprompt">${esc(text)}</pre>
+    <div class="axbtns"><button class="primary" id="axcopy">Copy</button><button id="axclose">Close</button><span class="mu" id="axcopied"></span></div></div>`;
+  m.hidden = false;
+  $("axclose").onclick = () => m.hidden = true;
+  $("axcopy").onclick = () => navigator.clipboard.writeText(text).then(() => $("axcopied").textContent = "Copied", () => {
+    const r = document.createRange(); r.selectNodeContents($("axprompt")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); $("axcopied").textContent = "Selected: copy it";
+  });
+}
+function askAtlas() {
+  const s = AX.sel, shown = [...shownSet()];
+  const what = !s ? "nothing" : s.type === "v" ? `the version ${s.id}` : s.type === "rel" ? `the relation ${s.id} (${AREL[s.id]?.kind}${AREL[s.id]?.label ? ": " + AREL[s.id].label : ""})` : s.type === "cmp" ? `the two versions ${s.ids.join(" and ")}` : "a fold of versions";
+  promptBox("Ask AI about this view", "What you are looking at, for your agent. Add your question.",
+`I am exploring the headway atlas "${ATLAS.name}" (an atlas folder: atlas.json, versions/, results/, relations.jsonl; the format is in headway's docs/atlas.md, and \`headway guide\` explains headway).
+Query: ${AX.applied || "(none)"}; ${shown.length} of ${AN.length} versions shown${shown.length <= 30 ? ": " + shown.join(", ") : ""}.
+Compared on: ${AX.suite ?? "no suite"}${objMeta() ? `, objective ${objMeta().name}` : ""}.
+Selected: ${what}.${AX.focus ? `\nFocus: ${AX.focus}.` : ""}
+Shelf: ${AX.shelf.join(" › ") || "(empty)"}.
+
+You may answer from the atlas's files, or change the atlas: write an outcome (headway relate ATLAS update ID --outcome "..."), add a relation (headway relate ...), or save a view (headway atlas view ...).
+
+My question: `);
+}
+
+/* ---------- wiring ---------- */
+function wireAtlas() {
+  $("axq").addEventListener("input", () => { AX.typed = $("axq").value; drawCanvas(); });
+  $("axq").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") applyQuery();
+    if (e.key === "Escape") { setQuery(""); AX.view = null; fitAtlas().then(drawAll); $("axq").blur(); }
+  });
+  for (const id of ["arrange", "arrows", "color", "detail"]) $("ax" + id).addEventListener("change", (e) => {
+    AX[id] = e.target.value; if (id === "arrange") fitAtlas().then(drawCanvas); else drawCanvas();
+  });
+  $("axsuite").onchange = (e) => { AX.suite = e.target.value; AX.obj = suiteMeta()?.objectives[0]?.key ?? null; drawAll(); };
+  $("axobj").onchange = (e) => { AX.obj = e.target.value; drawAll(); };
+  $("atlas").addEventListener("change", (e) => {
+    if (e.target.dataset.draw) { AX.draw[e.target.dataset.draw] = e.target.checked; drawCanvas(); }
+    if (e.target.id === "axfold") { AX.fold = e.target.checked; fitAtlas().then(drawCanvas); }
+    if (e.target.id === "axmx") { AX.mx = e.target.value; drawMatrix(); }
+  });
+  $("atlas").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-mode],[data-view],[data-term],[data-act],[data-unshelf],[data-cmp],button.linkish[data-v],button.linkish[data-r],.cell[data-v],.axsets [data-v],.axsets [data-r]");
+    if (!t || t.closest("#axsvg")) return;
+    const d = t.dataset, s = AX.sel;
+    if (d.mode) { AX.mode = d.mode; drawCanvas(); fitAtlas().then(drawCanvas); return; }     // shown first: the fit measures the canvas
+    if (d.view !== undefined) { applyView(d.view); return; }
+    if (d.term) {
+      const terms = AX.applied.split(/\s+/).filter(Boolean), i = terms.indexOf(d.term);
+      if (i >= 0) terms.splice(i, 1); else terms.push(d.term);
+      setQuery(terms.join(" ")); AX.view = null; fitAtlas().then(drawAll); return;
+    }
+    if (d.unshelf) { toggleShelf(d.unshelf); return; }
+    if (d.cmp) { axSelect({type: "cmp", ids: d.cmp.split("|")}); return; }
+    if (d.v) { if (e.shiftKey) toggleShelf(d.v); else { axSelect({type: "v", id: d.v}); centerOn(d.v).then(drawCanvas); } return; }
+    if (d.r) { axSelect({type: "rel", id: d.r}); return; }
+    const a = d.act;
+    if (a === "saveview") saveViewDialog();
+    else if (a === "shelf") toggleShelf(s.id);
+    else if (a === "focus") { AX.focus = AX.focus === s.id ? null : s.id; drawCanvas(); inspect(); }
+    else if (a === "near") { setQuery(`near:${s.id}~1`); AX.view = null; fitAtlas().then(drawAll); }
+    else if (a === "alone") openStack([s.id]);
+    else if (a === "relshelf") { for (const m of AREL[s.id].members) if (AVS[m.v] && !AX.shelf.includes(m.v)) AX.shelf.push(m.v); drawShelf(); drawCanvas(); }
+    else if (a === "relstack") {
+      const r = AREL[s.id], base = r.members.find((m) => m.role === "base" || m.role === "from")?.v;
+      const rest = r.members.map((m) => m.v).filter((x) => x !== base && AVS[x]).sort((x, y) => (gainOf(x) ?? -Infinity) - (gainOf(y) ?? -Infinity));
+      openStack(base ? [base, ...rest] : rest, r.kind === "alternatives" || r.kind === "group" ? base : null, true);
+    }
+    else if (a === "unfold") { AX.expanded.has(s.id) ? AX.expanded.delete(s.id) : AX.expanded.add(s.id); drawCanvas(); inspect(); }
+    else if (a === "foldshelf") { const f = AX.laid?.folds.find((x) => x.id === s.id); for (const n of f?.members ?? []) if (!AX.shelf.includes(n)) AX.shelf.push(n); drawShelf(); drawCanvas(); }
+    else if (a === "cmppath") { AX.shelf = apath(...s.ids); drawShelf(); drawCanvas(); }
+    else if (a === "cmpstack") openStack(s.ids, null, true);
+  });
+  $("axfill").onclick = () => { const p = apath(AX.shelf[0], AX.shelf.at(-1)); if (p.length) AX.shelf = p; else note("No path between them through the relations"); drawShelf(); drawCanvas(); };
+  $("axcmp").onclick = () => axSelect({type: "cmp", ids: AX.shelf.slice(0, 2)});
+  $("axstack").onclick = () => openStack(AX.shelf, viewBaseline(), true);
+  $("axclear").onclick = () => { AX.shelf = []; drawShelf(); drawCanvas(); };
+  $("axask").onclick = askAtlas;
+  $("axmodal").addEventListener("click", (e) => { if (e.target.id === "axmodal") $("axmodal").hidden = true; });
+  // pan, zoom and clicks on the canvas
+  const svg = asvg();
+  let drag = null, lastUp = null;
+  svg.addEventListener("pointerdown", (e) => { drag = {x: e.clientX, y: e.clientY, tx: AX.tx, ty: AX.ty, moved: false}; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!drag.moved && Math.hypot(dx, dy) < 4) return;
+    drag.moved = true; svg.classList.add("panning");
+    AX.tx = drag.tx + dx; AX.ty = drag.ty + dy; drawGraph();
+  });
+  svg.addEventListener("pointerup", (e) => {
+    const was = drag; drag = null; svg.classList.remove("panning");
+    if (!was || was.moved) return;
+    const t = document.elementFromPoint(e.clientX, e.clientY)?.closest("[data-expand],[data-v],[data-r],[data-fold]");
+    if (!t) { axSelect(null); return; }
+    const d = t.dataset;
+    if (d.expand) { AX.expanded.has(d.expand) ? AX.expanded.delete(d.expand) : AX.expanded.add(d.expand); drawCanvas(); return; }
+    if (d.v) {
+      // a double click opens the version: told apart here, as the first click redraws the canvas, which removes the
+      // element pressed, and the browser then sends no click or dblclick
+      const dbl = !e.shiftKey && lastUp?.v === d.v && e.timeStamp - lastUp.t < 450;
+      lastUp = dbl || e.shiftKey ? null : {v: d.v, t: e.timeStamp};
+      if (dbl) openStack([d.v]); else if (e.shiftKey) toggleShelf(d.v); else axSelect({type: "v", id: d.v});
+    }
+    else if (d.r) axSelect({type: "rel", id: d.r});
+    else if (d.fold) axSelect({type: "fold", id: d.fold});
+  });
+  const zoomAt = (f, cx, cy) => { const k = Math.max(.12, Math.min(3, AX.k * f)); f = k / AX.k; AX.tx = cx - (cx - AX.tx) * f; AX.ty = cy - (cy - AX.ty) * f; AX.k = k; drawGraph(); };
+  svg.addEventListener("wheel", (e) => { e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(Math.exp(-e.deltaY * .0015), e.clientX - r.left, e.clientY - r.top); }, {passive: false});
+  $("axzin").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1.3, r.width / 2, r.height / 2); };
+  $("axzout").onclick = () => { const r = svg.getBoundingClientRect(); zoomAt(1 / 1.3, r.width / 2, r.height / 2); };
+  $("axfit").onclick = () => fitAtlas().then(drawGraph);
+  document.addEventListener("keydown", async (e) => {
+    if ($("atlas").hidden || !$("library").hidden || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === "Escape" && !$("axmodal").hidden) { $("axmodal").hidden = true; return; }
+    // not while a dialog is open, nor from a field or a button (whose own Enter or Space would act too)
+    if (!$("axmodal").hidden || e.target.closest("input, select, textarea, [contenteditable]")) return;
+    if (e.key === "Escape") { axSelect(null); return; }
+    if (e.target.closest("button")) return;
+    if (AX.sel?.type !== "v") return;
+    const n = AX.sel.id, shown = shownSet(), L = AX.laid, W = L ? worldPos(L) : {};
+    const ypos = (x) => W[L?.nodeOf(x)]?.[1] ?? 0;
+    let to = null;
+    if (e.key === "ArrowRight") { const ch = childrenOf(n).filter((x) => shown.has(x)).sort((a, b) => ypos(a) - ypos(b)); to = ch[Math.floor((ch.length - 1) / 2)]; }
+    else if (e.key === "ArrowLeft") to = parentsOf(n).find((x) => shown.has(x));
+    else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      const p = parentsOf(n)[0], sib = (p ? childrenOf(p) : AN.filter((x) => !parentsOf(x).length)).filter((x) => shown.has(x)).sort((a, b) => ypos(a) - ypos(b));
+      to = sib[sib.indexOf(n) + (e.key === "ArrowDown" ? 1 : -1)];
+    } else if (e.key === "s" || e.key === "S") { toggleShelf(n); return; }
+    else if (e.key === "f" || e.key === "F") { AX.focus = AX.focus === n ? null : n; drawCanvas(); inspect(); return; }
+    else if (e.key === "Enter") { openStack([n]); return; }
+    else return;
+    e.preventDefault();
+    if (to) { AX.sel = {type: "v", id: to}; await centerOn(to); drawCanvas(); inspect(); }
+  });
+  addEventListener("resize", () => { if (!$("atlas").hidden && AX.mode === "graph") drawGraph(); });
+  // the Atlas switch beside Graph and Results
+  $("atlasradio").hidden = false;
+  document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => {
+    if (r.value === "atlas") showAtlas(true);
+    else { showAtlas(false); setView(r.value); }
+  });
+}
+wireAtlas();
+leaveAtlas = () => { if (!$("atlas").hidden) { showAtlas(false); setView("graph"); } };
+if (ATLAS_VIEW) {
+  applyView(ATLAS_VIEW, false);                      // drawn by showAtlas below
+  const base = LANES.find((l) => l.name === viewBaseline());     // the view's versions are the lanes: its baseline too
+  if (base) { cmp.base = base.id; lanesChanged(false); }
+}
+showAtlas(true);
+
+})();
+</script>
 <!-- the viewer proper: run when there is a headway to show (the bottom script); with none, the library fills the page -->
 <script type="text/plain" id="viewer-main">
 const NS = "http://www.w3.org/2000/svg";
@@ -816,7 +1807,7 @@ async function copyImage(node, what, btn, prepare = null) {
   const copy = node.cloneNode(true);
   copy.removeAttribute("id");
   copy.querySelectorAll(".copyimg, .eye, .grip, .pen, .namesw").forEach((x) => x.remove());
-  copy.querySelectorAll(".sel").forEach((x) => { if (x.matches("td")) x.classList.remove("sel"); });
+  copy.querySelectorAll("td.sel").forEach((x) => x.classList.remove("sel"));
   box.append(copy);
   node.parentElement.append(box);
   const blob = (async () => {
@@ -1447,7 +2438,7 @@ $("findnext").addEventListener("click", () => findStep(1));
 $("findall").addEventListener("click", findAll);
 for (const id of ["findexact", "findtext"]) $(id).addEventListener("change", () => { findAt = -1; applyFind(); $("find").focus(); });
 document.addEventListener("keydown", (e) => {
-  if (e.key === "/" && !e.target.closest?.("input, textarea, [contenteditable]") && !document.body.classList.contains("resultsview")) {
+  if (e.key === "/" && !e.target.closest?.("input, textarea, [contenteditable]") && !document.body.classList.contains("resultsview") && !document.body.classList.contains("atlasview")) {
     e.preventDefault(); $("find").focus(); $("find").select();
   }
 });
@@ -1610,7 +2601,7 @@ function kbEntry(step) {
 }
 document.addEventListener("keydown", (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey || e.target.closest?.("input, textarea, select, [contenteditable]")) return;
-  if (document.body.classList.contains("resultsview") || !$("library").hidden || $("lightbox") || $("docview") || !current) return;
+  if (document.body.classList.contains("resultsview") || document.body.classList.contains("atlasview") || !$("library").hidden || $("lightbox") || $("docview") || !current) return;
   const right = state.dir === "RIGHT";
   const act = {ArrowRight: right ? "down" : "next", ArrowLeft: right ? "up" : "prev",
                ArrowDown: right ? "next" : "down", ArrowUp: right ? "prev" : "up"}[e.key];
@@ -1641,7 +2632,11 @@ const LOCATED = new Map();                              // docId -> a File chose
 const fileURL = (p) => "file://" + p.split("/").map(encodeURIComponent).join("/");
 function assetURL(path) {
   if (D.live && location.protocol.startsWith("http")) return "asset?path=" + encodeURIComponent(path);
-  if (LIB && D.opened) return `/api/asset?file=${encodeURIComponent(D.opened)}&path=${encodeURIComponent(path)}`;
+  // served from the library: by the version's file (the lane's src; the server sends only what that file shows)
+  if (LIB && active.src) return `/api/asset?file=${encodeURIComponent(active.src)}&path=${encodeURIComponent(path)}`;
+  // a version of a served atlas: the atlas's route, by the version's name (the lane's)
+  if (ATLAS?.versions[active.name] && location.protocol.startsWith("http"))
+    return `${ATLAS_DIR}asset?name=${encodeURIComponent(active.name)}&path=${encodeURIComponent(path)}`;
   return fileURL(path);
 }
 function docHref(doc, page) {
@@ -1955,7 +2950,6 @@ function changeLines(c, kind, ref) {
   }
   return L;
 }
-// which version a prompt is about, and where it came from
 // what changed in the whole spec, against the version the active one is compared with
 function summaryLines() {
   const ref = refOf(active);
@@ -1976,17 +2970,18 @@ function resultLines(lane, ref) {
   return [...L, ""];
 }
 function summaryLinesFor(lane, ref) {
-  const active = lane, ch = current?.changes.get(lane.id);
+  const ch = current?.changes.get(lane.id);
   if (!ref || !ch) return [];
   const name = {op: "step", sym: "symbol", group: "group"};
-  const label = (lane, kind, key) => { const o = lane.D[KIND[kind]].find((x) => kkey(kind, x) === key); return o?.label ?? o?.name ?? ""; };
+  const label = (l, kind, key) => { const o = l.D[KIND[kind]].find((x) => kkey(kind, x) === key); return o?.label ?? o?.name ?? ""; };
   const L = [...ch.map].filter(([, c]) => shown(c)).map(([k, c]) => {
     const [kind, key] = [k.slice(0, k.indexOf("|")), k.slice(k.indexOf("|") + 1)];
-    return `- ${name[kind]} \`${key}\` (${label(active, kind, key)}): ${statusText(c)}`;
+    return `- ${name[kind]} \`${key}\` (${label(lane, kind, key)}): ${statusText(c)}`;
   });
   ch.removed.forEach(([kind, key]) => L.push(`- ${name[kind]} \`${key}\` (${label(ref, kind, key)}): gone`));
-  return [`What changed from "${ref.name}" (${laneMeta(ref)}) to "${active.name}":`, ...(L.length ? L : ["- nothing"]), ""];
+  return [`What changed from "${ref.name}" (${laneMeta(ref)}) to "${lane.name}":`, ...(L.length ? L : ["- nothing"]), ""];
 }
+// which version a prompt is about, and where it came from
 function versionLines() {
   const L = [];
   const vis = visibleLanes();
@@ -2168,9 +3163,10 @@ const EXPLAIN_PLEASE = ["Please:",
   "- Say which reasons are documented (in the code, its comments or the documentation) and which are your own reading; do not present a guess as the authors' intent.",
   "- If the spec's equation or description disagrees with the code, point it out."];
 const formatText = () => (FORMATS.find((f) => f[0] === ask.format) ?? FORMATS[1])[3];
+// the spec's file: a step's declaration at the module's top level, else any step's
+const specFile = () => D.ops.find((o) => o.decl?.function === "<module>")?.decl ?? D.ops.find((o) => o.decl)?.decl;
 function explainSpecPrompt(question) {
-  const files = D.ops.map((o) => o.decl).filter((d) => d && d.function === "<module>");
-  const file = files[0] ?? D.ops.find((o) => o.decl)?.decl;
+  const file = specFile();
   const L = [`I want to understand the method "${D.title}" as a whole.`, "", "My question:", question || "<your question here>", "",
     "How to answer: " + formatText(), "", EXPLAIN_BACKGROUND, ""];
   L.push(`The spec: module \`${D.spec || "?"}\`${file ? `, ${file.relpath} (${file.file})` : ""}. It has every step's equation, inputs, outputs and references into the code; read it, and the code, as the question needs.`, "");
@@ -2183,8 +3179,7 @@ function explainSpecPrompt(question) {
   return [...L, "", ...EXPLAIN_PLEASE].join("\n");
 }
 function specPrompt(request) {
-  const files = D.ops.map((o) => o.decl).filter((d) => d && d.function === "<module>");
-  const file = files[0] ?? D.ops.find((o) => o.decl)?.decl;
+  const file = specFile();
   const unverified = D.ops.filter((o) => o.verified === null).map((o) => o.key);
   const L = [`I want to change the headway spec of "${D.title}" as a whole.`, "", "Requested change:", request || "<describe the change here>", "", BACKGROUND, ""];
   L.push(`The spec: module \`${D.spec || "?"}\`${file ? `, ${file.relpath} (${file.file})` : ""}. It declares ${D.indices.length} indices, ${D.symbols.length} symbols and settings, and ${D.ops.length} steps in ${D.groups.length} groups.`, "");
@@ -2299,12 +3294,13 @@ function buildGroupsMenu() {
 }
 
 /* ---------- lanes: versions side by side ----------
-   Each lane holds one built headway: this page's own, ones given with build --compare, ones opened with Compare….
+   Each lane holds one built headway: this page's own, ones given with build --compare, ones opened with Open….
    The panels and the legend show the active lane; D is its data. Lineages and changes follow diff.py. */
 const own = {id: 0, name: D.name ?? (D.live ? "live" : D.opened ? D.opened.split(/[\\/]/).pop().replace(/\.(json|html?)$/i, "") : "this build"), D, own: true, src: D.opened ?? null};
 // when a version was built (builds from before built_at have only the minute); lanes start in that order
 const madeAt = (d) => d.built_at ?? String(d.built ?? "").replace(" ", "T");
-const LANES = [...(D.lanes ?? []).map((l, n) => ({id: n + 1, name: l.name, from: l.from, src: l.from, D: snapshot(l.data)})), own]
+// (an atlas page's lanes come from the atlas, from no file of their own)
+const LANES = [...(D.lanes ?? []).map((l, n) => ({id: n + 1, name: l.name, from: l.from, src: ATLAS ? null : l.from, D: snapshot(l.data)})), own]
   .sort((a, b) => madeAt(a.D) < madeAt(b.D) ? -1 : madeAt(a.D) > madeAt(b.D) ? 1 : 0);
 delete D.lanes;
 let active = own, laneSeq = LANES.length;
@@ -2473,9 +3469,10 @@ function setActive(lane) {
   document.querySelectorAll("#vp .lane").forEach((el) => el.classList.toggle("on", +el.dataset.lane === lane.id));
   if (state.focus || cmp.solo) render(); else highlight();
 }
-// served from the library, the URL says what is open, so a reload or a link opens the same (home.py)
+// served from the library, the URL says what is open, so a reload or a link opens the same (home.py); an atlas
+// page's URL names the atlas instead, and stays
 function syncURL() {
-  if (!LIB || !history.replaceState) return;
+  if (!LIB || !history.replaceState || ATLAS) return;
   const order = [active, ...LANES.filter((l) => l !== active)];
   const liveOwn = own.D.live && LANES.includes(own);
   const srcs = order.filter((l) => !(liveOwn && l === own)).map((l) => l.src).filter(Boolean);
@@ -2498,7 +3495,6 @@ function lanesChanged(fit = true) {
   if (cmp.base !== null && !LANES.some((l) => l.id === cmp.base)) cmp.base = null;
   if (rs.focus?.kind === "lane" && !visibleLanes().some((l) => l.id === rs.focus.key)) rs.focus = null;
   laneBar();
-  viewSwitch();
   syncURL();
   render(fit).then(() => { if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel); });
 }
@@ -2558,6 +3554,7 @@ function wireEyes(el, itemSel) {
     });
   });
 }
+// the graph's hint (laneBar puts it in, or the lanes' markers with it as their title)
 const HINT = "click: select · double-click a group: collapse/expand · drag: pan · wheel: zoom · arrows: walk the graph · c: collapse/expand · g: the group and back · Tab: its legend entries";
 function laneBar() {
   const el = $("lanes");
@@ -2645,6 +3642,8 @@ function collapseUnchanged() {
 // the same version: one build, wherever it was saved, or two builds given the same --name (a rebuild of it)
 const sameBuild = (a, b) => a.title === b.title && (a.name && b.name ? a.name === b.name
   : madeAt(a) === madeAt(b) && (a.name ?? "") === (b.name ?? ""));
+// set by the atlas explorer (an atlas page): leaves its view for the lanes
+let leaveAtlas = null;
 async function addLanes(files) {
   const added = [], reloaded = [];
   for (const f of files) {
@@ -2671,6 +3670,7 @@ async function addLanes(files) {
     } catch (e) { note(`Could not open ${f.name}: ${e.message}`); }
   }
   if (added.length || reloaded.length) {      // (the page's own version is never replaced: it may be live)
+    leaveAtlas?.();                            // the lanes are shown, not the atlas behind them
     lanesChanged(!!added.length);
     if (active.D !== D) use(active);
     header(); buildLegend();
@@ -2801,30 +3801,136 @@ function sumScores(rows, o, meta) {
   return {scores, missing};
 }
 const objDatasets = (o, meta) => o.datasets ?? meta.datasets.filter((d) => !d.heldout).map((d) => d.key);
-// an objective for each row (null: incomplete), and what each incomplete row lacks
+// how each objective combines its voters, and whether fewer is better (bench.HOWS; keep the two in step)
+const HOWS = {
+  mean: ["higher", "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute: each version scored from its own values)"],
+  rank: ["lower", "a weighted mean rank (Borda), 1 is best; relative: showing or hiding a version can reorder two others"],
+  median: ["lower", "the weighted median rank, 1 is best: one metric far off does not move it (relative)"],
+  worst: ["lower", "the worst rank on any voter, 1 is best: a version is as good as its weakest metric (relative)"],
+  wins: ["higher", "Copeland: how many other versions it beats on more voters (by weight) than it loses, a tie counting a half (Condorcet-consistent; relative)"],
+  kemeny: ["lower", "the place in the Kemeny ranking: the order that disagrees least, summed over voters, with each voter's order (Condorcet-consistent; relative)"],
+  pareto: ["lower", "the Pareto layer: 1 if no other version is at least as good on every voter and better on one, 2 if only layer 1 is, and so on; versions in one layer are not ranked against each other"],
+  sum: ["higher", "your own: a sum of transforms of the metrics (kept in this browser)"],
+};
+const lowerBetter = (o) => (HOWS[o?.how] ?? ["higher"])[0] === "lower";
+// an objective's voters: [weight, [[dataset, metric, weight]...]]: each metric on each dataset, or each category
+function objVoters(o, meta) {
+  const ds = objDatasets(o, meta);
+  if (o.categories) {
+    const defs = Object.fromEntries((meta.categories ?? []).map((c) => [c.key, c]));
+    return Object.entries(o.categories).map(([ck, w]) => {
+      const c = defs[ck], cds = ds.filter((d) => !c?.datasets || c.datasets.includes(d));
+      return [w, Object.entries(c?.metrics ?? {}).flatMap(([mk, mw]) => cds.map((dk) => [dk, mk, mw]))];
+    });
+  }
+  return Object.entries(o.weights).flatMap(([mk, w]) => ds.map((dk) => [w, [[dk, mk, 1]]]));
+}
+// each row's weighted mean rank over the cells [[dataset, metric, weight]...], among the rows complete (null: not one)
+function meanRanks(rows, cells, meta, complete) {
+  const better = Object.fromEntries(meta.metrics.map((m) => [m.key, m.better === "higher" ? 1 : -1]));
+  const done = rows.map((_, n) => n).filter((n) => complete[n]), out = rows.map(() => null);
+  if (!done.length) return out;
+  const rk = cells.map(([dk, mk]) => ranksOf(done.map((n) => mean(rows[n].values[dk][mk]) * better[mk])));
+  const tot = cells.reduce((a, c) => a + c[2], 0);
+  done.forEach((n, i) => out[n] = cells.reduce((a, c, j) => a + c[2] * rk[j][i], 0) / tot);
+  return out;
+}
+const ranksOf = (vals) => vals.map((v) => 1 + vals.filter((o) => o > v).length + (vals.filter((o) => o === v).length - 1) / 2);
+function wmedian(xs, ws) {
+  const p = xs.map((x, i) => [x, ws[i]]).sort((a, b) => a[0] - b[0] || a[1] - b[1]), half = ws.reduce((a, b) => a + b, 0) / 2;
+  let acc = 0;
+  for (let i = 0; i < p.length; i++) {
+    acc += p[i][1];
+    if (Math.abs(acc - half) < 1e-12 && i + 1 < p.length) return (p[i][0] + p[i + 1][0]) / 2;
+    if (acc > half) return p[i][0];
+  }
+  return p.at(-1)[0];
+}
+function kemenyOrder(pref, borda) {
+  const k = pref.length;
+  if (k <= 12) {
+    const best = new Float64Array(1 << k).fill(-1), pick = new Int32Array(1 << k).fill(-1);
+    best[0] = 0;
+    for (let mask = 0; mask < 1 << k; mask++) {
+      if (best[mask] < 0) continue;
+      for (let x = 0; x < k; x++) {
+        if (mask >> x & 1) continue;
+        let gain = 0;
+        for (let y = 0; y < k; y++) if (y !== x && !(mask >> y & 1)) gain += pref[x][y];
+        const nm = mask | 1 << x;
+        if (best[mask] + gain > best[nm] + 1e-12) { best[nm] = best[mask] + gain; pick[nm] = x; }
+      }
+    }
+    const order = [];
+    for (let mask = (1 << k) - 1; mask;) { order.push(pick[mask]); mask &= ~(1 << pick[mask]); }
+    return order.reverse();
+  }
+  const order = [...Array(k).keys()].sort((a, b) => borda[a] - borda[b] || a - b);
+  for (let changed = true; changed;) {
+    changed = false;
+    for (let i = 0; i < k - 1; i++) {
+      const a = order[i], b = order[i + 1];
+      if (pref[b][a] > pref[a][b] + 1e-12) { order[i] = b; order[i + 1] = a; changed = true; }
+    }
+  }
+  return order;
+}
+function paretoLayers(value) {
+  const k = value[0].length, layer = new Array(k).fill(0);
+  const dom = (a, b) => value.every((v) => v[a] >= v[b]) && value.some((v) => v[a] > v[b]);
+  let left = new Set([...Array(k).keys()]);
+  for (let n = 1; left.size; n++) {
+    const front = [...left].filter((a) => ![...left].some((b) => b !== a && dom(b, a)));
+    for (const a of front) { layer[a] = n; left.delete(a); }
+  }
+  return layer;
+}
+// an objective for each row (null: incomplete), and what each incomplete row lacks (bench.scores: keep in step)
 function objScores(rows, o, meta) {
   if (o.how === "sum") return sumScores(rows, o, meta);
   const metrics = Object.fromEntries(meta.metrics.map((m) => [m.key, m]));
-  const cells = Object.entries(o.weights).flatMap(([mk, w]) => objDatasets(o, meta).map((dk) => [dk, mk, w]));
+  const vs = objVoters(o, meta);
+  const cells = [...new Map(vs.flatMap(([, cs]) => cs.map(([dk, mk]) => [dk + "|" + mk, [dk, mk]]))).values()];
   const means = rows.map((r) => new Map(cells.filter(([dk, mk]) => r?.values[dk]?.[mk]?.length).map(([dk, mk]) => [dk + "|" + mk, mean(r.values[dk][mk])])));
-  const complete = means.map((m) => m.size === cells.length);
   const missing = means.map((m) => cells.filter(([dk, mk]) => !m.has(dk + "|" + mk)).map(([dk, mk]) => `${mk} on ${dk}`));
-  const scores = means.map((m, n) => {
-    if (!complete[n]) return null;
-    let total = 0;
-    for (const [dk, mk, w] of cells) {
-      const spec = metrics[mk], v = m.get(dk + "|" + mk);
-      if (o.how === "mean") {
-        const [lo, hi] = spec.range, x = (v - lo) / (hi - lo);
-        total += w * (spec.better === "higher" ? x : 1 - x);
-      } else {                                            // rank among the complete rows, ties shared
-        const others = means.filter((_, j) => complete[j]).map((q) => q.get(dk + "|" + mk));
-        const better = others.filter((q) => spec.better === "higher" ? q > v : q < v).length;
-        total += w * (1 + better + (others.filter((q) => q === v).length - 1) / 2);
+  const done = means.map((m, n) => m.size === cells.length ? n : -1).filter((n) => n >= 0);
+  const scores = rows.map(() => null);
+  if (!done.length) return {scores, missing};
+  const good = (n, dk, mk) => means[n].get(dk + "|" + mk) * (metrics[mk].better === "higher" ? 1 : -1);
+  if (o.how === "mean") {
+    const W = vs.reduce((a, [w]) => a + w, 0);
+    for (const n of done) {
+      let total = 0;
+      for (const [w, cs] of vs) {
+        let part = 0;
+        for (const [dk, mk, mw] of cs) {
+          const [lo, hi] = metrics[mk].range, x = (means[n].get(dk + "|" + mk) - lo) / (hi - lo);
+          part += mw * (metrics[mk].better === "higher" ? x : 1 - x);
+        }
+        total += w * part / cs.reduce((a, c) => a + c[2], 0);
       }
+      scores[n] = total / W;
     }
-    return total / cells.reduce((a, c) => a + c[2], 0);
+    return {scores, missing};
+  }
+  const value = vs.map(([, cs]) => {
+    if (cs.length === 1) { const [dk, mk] = cs[0]; return done.map((n) => good(n, dk, mk)); }
+    const rk = cs.map(([dk, mk]) => ranksOf(done.map((n) => good(n, dk, mk)))), tot = cs.reduce((a, c) => a + c[2], 0);
+    return done.map((_, i) => -cs.reduce((a, c, j) => a + c[2] * rk[j][i], 0) / tot);
   });
+  const rank = value.map(ranksOf), ws = vs.map(([w]) => w), W = ws.reduce((a, b) => a + b, 0), k = done.length;
+  const idx = [...Array(k).keys()];
+  let res;
+  if (o.how === "rank") res = idx.map((i) => ws.reduce((a, w, j) => a + w * rank[j][i], 0) / W);
+  else if (o.how === "median") res = idx.map((i) => wmedian(rank.map((r) => r[i]), ws));
+  else if (o.how === "worst") res = idx.map((i) => Math.max(...rank.map((r) => r[i])));
+  else {
+    const pref = idx.map((a) => idx.map((b) => ws.reduce((s, w, j) => s + (value[j][a] > value[j][b] ? w : 0), 0)));
+    if (o.how === "wins") res = idx.map((a) => idx.reduce((s, b) => b === a ? s : s + (pref[a][b] > pref[b][a] ? 1 : pref[a][b] === pref[b][a] ? 0.5 : 0), 0));
+    else if (o.how === "kemeny") { const order = kemenyOrder(pref, idx.map((i) => ws.reduce((a, w, j) => a + w * rank[j][i], 0))); res = idx.map((i) => order.indexOf(i) + 1); }
+    else res = paretoLayers(value);
+  }
+  done.forEach((n, i) => scores[n] = res[i]);
   return {scores, missing};
 }
 // how good a value is, 0..1, for the color: among the values shown, or by the metric's range
@@ -2982,7 +4088,7 @@ function resultRows(sn) {
     const o = objectivesOf(sn).find((x) => x.key === rs.sort.key);
     if (!o) return rows;
     const {scores} = objScores(rows.map((x) => x.r), o, meta);
-    key = (n) => scores[n] === null ? Infinity : o.how === "rank" ? scores[n] : -scores[n];
+    key = (n) => scores[n] === null ? Infinity : lowerBetter(o) ? scores[n] : -scores[n];
   } else if (rs.sort.dataset) {
     const m = meta.metrics.find((x) => x.key === rs.sort.key);
     key = (n) => { const v = rows[n].r?.values[rs.sort.dataset]?.[rs.sort.key]; return !v?.length ? Infinity : m.better === "higher" ? -mean(v) : mean(v); };
@@ -3055,7 +4161,7 @@ function renderResults() {
     `<button id="copyresults" class="copybig" title="copy an image of the table (as shown) to the clipboard">${COPY_ICON} Copy image</button>` +
     `<span>click a column's header to sort by it (again: unsort) and for what it measures; a metric's header, by the mean place over the datasets shown; click a value for the values' spread · drag a version or a column's header to reorder</span></div>`;
   h += `<table class="heat"><thead><tr><th rowspan="2"></th>` +
-    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}"${dc("o", o.key)} title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${o.how === "rank" ? "rank ↓" : "↑"}</span></th>`).join("") +
+    objectives.map(({o}) => `<th rowspan="2" class="obj${sorted("objective", o.key)}" data-obj="${esc(o.key)}"${dc("o", o.key)} title="${esc(o.how === "sum" ? "your objective: a sum of transforms of the metrics (kept in this browser)" : o.desc)}">${esc(o.name)}<span class="dir">${lowerBetter(o) ? o.how + " ↓" : o.how === "mean" || o.how === "sum" ? "↑" : o.how + " ↑"}</span></th>`).join("") +
     `<th rowspan="2" class="gap"></th>` +
     groups.map((g) => g.fig ? `<th class="grp" colspan="${g.cols.length}" data-fig="${esc(g.head.key)}"${dc("f", g.head.key)} title="${esc(g.head.desc ?? "")}">${esc(g.head.name)}<span class="dir" title="a figure: to look at, not ranked">▣</span></th>`
       : `<th class="grp${rs.by === "metric" ? sorted("metric", g.head.key, null) : ""}" colspan="${g.cols.length}"${dc(rs.by === "metric" ? "m" : "d", g.head.key)} ${rs.by === "metric" ? `data-metric="${esc(g.head.key)}" title="${esc(title(g.head)?.desc ?? "")}${title(g.head)?.desc ? "&#10;" : ""}click: sort by the mean place over the datasets shown"` : `data-ds="${esc(g.head.key)}" title="${esc(g.head.desc ?? "")}"`}>${rs.by === "metric" ? `${tex(title(g.head)?.tex ?? g.head.key)} ${esc(title(g.head)?.name ?? "")}${dirMark(g.head)}` : esc(g.head.name) + (g.head.heldout ? " (held out)" : "")}</th>`).join("") +
@@ -3065,10 +4171,10 @@ function renderResults() {
     const rr = resultRef(rows, row);
     h += `<tr class="${row.lane === active ? "on" : ""}${row.r ? "" : " off"}"><th class="row" data-lane="${row.lane.id}" title="${esc(laneMeta(row.lane))}${keysText(row.lane.D.keys) ? " · " + esc(keysText(row.lane.D.keys)) : ""}${row.r ? "" : " · no results on this suite"}&#10;click: read this version · drag: reorder (the graph's lanes too)" draggable="true"><span class="grip">⠿</span>${eyeHTML(row.lane)}${esc(row.lane.name)}</th>`;
     for (const ob of objectives) {
-      const v = ob.scores[n], g = v === null ? null : ob.o.how === "sum" ? goodness(v, {better: "higher"}, ob.scores) : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : 1 - (v - 1) / Math.max(1, ob.scores.filter((x) => x !== null).length - 1);
+      const v = ob.scores[n], g = v === null ? null : ob.o.how === "mean" ? goodness(v, {range: [0, 1], better: "higher"}, ob.scores) : goodness(v, {better: lowerBetter(ob.o) ? "lower" : "higher"}, ob.scores);
       const rv = rr ? ob.scores[rows.indexOf(rr)] : null;
       h += v === null ? `<td class="cell obj missing" data-obj="${esc(ob.o.key)}" title="incomplete: no ${esc(ob.missing[n].join(", "))}">${row.r ? "incomplete" : "–"}</td>`
-        : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${placeHTML(v, ob.scores, ob.o.how === "rank" ? "lower" : "higher")}${rs.delta ? deltaHTML(v, rv, ob.o.how === "rank" ? "lower" : "higher") : ""}</td>`;
+        : `<td class="cell obj${focused("objective", ob.o.key) ? " sel" : ""}" data-obj="${esc(ob.o.key)}" style="${cellStyle(g)}">${fmt(v)}${placeHTML(v, ob.scores, lowerBetter(ob.o) ? "lower" : "higher")}${rs.delta ? deltaHTML(v, rv, lowerBetter(ob.o) ? "lower" : "higher") : ""}</td>`;
     }
     h += `<td class="gap"></td>`;
     for (const {m, f, d} of cols) {
@@ -3227,10 +4333,23 @@ function showResultDetail() {
     if (!o) { rs.focus = null; return showResultDetail(); }
     if (o.how === "sum") return mineEditor(o, sn, rows);
     const {scores, missing} = objScores(rows.map((x) => x.r), o, meta);
-    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${o.how === "mean" ? "a weighted mean of the metrics, each scaled by its range so that 1 is best (absolute)" : "a weighted mean rank, 1 is best (relative: it depends on which versions are compared, here the ones shown)"}</div>`;
+    h += `<h2>${esc(o.name)}</h2><div class="crumb">objective · ${esc(HOWS[o.how]?.[1] ?? o.how)}${o.how !== "mean" ? " · over the versions shown" : ""}</div>`;
     if (o.desc) h += `<p>${rich(o.desc)}</p>`;
     if (o.tex) h += `<div class="eq">${tex(o.tex, true)}</div>`;
-    h += `<h3>Metrics and weights</h3><table class="wts">${Object.entries(o.weights).map(([k, w]) => { const sy = suite.symbols.find((x) => x.key === k); return `<tr><td>${tex(sy?.tex ?? k)}</td><td>${esc(sy?.name ?? k)}</td><td>× ${w}</td></tr>`; }).join("")}</table>`;
+    const symRow = (k, w) => { const sy = suite.symbols.find((x) => x.key === k); return `<tr><td>${tex(sy?.tex ?? k)}</td><td>${esc(sy?.name ?? k)}</td><td>× ${w}</td></tr>`; };
+    if (o.categories) {
+      const scaled = o.how === "mean";
+      h += `<h3>Categories and weights</h3><p class="empty">Each category is one voter: ${scaled ? "the mean of its metrics, each scaled by its range so that 1 is best" : "it ranks the versions by its metrics' mean rank"}, so a category of many metrics counts no more than a category of one.</p>`;
+      const complete = missing.map((m) => !m.length);
+      for (const [ck, w] of Object.entries(o.categories)) {
+        const c = (meta.categories ?? []).find((x) => x.key === ck);
+        const cells = objVoters({categories: {[ck]: 1}, datasets: o.datasets}, meta)[0][1];
+        const cs = scaled ? objScores(rows.map((x) => x.r), {how: "mean", categories: {[ck]: 1}, datasets: o.datasets}, meta).scores
+          : meanRanks(rows.map((x) => x.r), cells, meta, complete);
+        h += `<h4>${esc(c?.name ?? ck)} × ${w}${c?.datasets ? ` <span class="empty">(on ${c.datasets.map(esc).join(", ")})</span>` : ""}</h4>${c?.desc ? `<p>${rich(c.desc)}</p>` : ""}<table class="wts">${Object.entries(c?.metrics ?? {}).map(([k, mw]) => symRow(k, mw)).join("")}</table>
+          <p class="empty">Its ${scaled ? "scaled mean (1 is best)" : "mean rank"}: ${rows.map(({lane}, n) => `${esc(lane.name)} ${cs[n] === null ? "incomplete" : fmt(cs[n])}`).join(" · ")}</p>`;
+      }
+    } else h += `<h3>Metrics and weights</h3><table class="wts">${Object.entries(o.weights).map(([k, w]) => symRow(k, w)).join("")}</table>`;
     h += `<p class="empty">Over ${objDatasets(o, meta).map((k) => esc(meta.datasets.find((d) => d.key === k)?.name ?? k)).join(", ")}, each metric's mean over its replicates.</p>`;
     h += `<h3>Versions</h3>` + objVersionsHTML(rows, scores, missing);
   } else {
@@ -3501,7 +4620,7 @@ function resultsPrompt(question) {
   for (const o of objectivesOf(sn)) {
     const {scores} = objScores(rows.map((x) => x.r), o, meta);
     const how = o.how === "sum" ? `my own: the sum over the metrics and the datasets shown of ${meta.metrics.filter((m) => compileExpr(o.f[m.key]).fn).map((m) => `${o.f[m.key].trim()} for ${m.key}`).join(", ")}, where x is the version's mean, higher is better`
-      : o.how === "mean" ? "a weighted mean of the range-scaled metrics, 1 is best" : "a weighted mean rank, 1 is best";
+      : HOWS[o.how]?.[1] ?? o.how;
     L.push(`- objective ${o.name} (${how}): ` + rows.map(({lane}, n) => `${lane.name} ${scores[n] === null ? "incomplete" : fmt(scores[n])}`).join("; "));
   }
   L.push("");
@@ -3524,12 +4643,9 @@ function setView(v) {
   saveRs();
   document.body.classList.toggle("resultsview", rs.view === "results");
   $("results").hidden = rs.view !== "results";
-  document.querySelectorAll("input[name=view]").forEach((r) => r.checked = r.value === rs.view);
+  if (!document.body.classList.contains("atlasview")) document.querySelectorAll("input[name=view]").forEach((r) => r.checked = r.value === rs.view);
   if (rs.view === "results") { renderResults(); showResultDetail(); }
   else showDetail(state.sel);
-}
-function viewSwitch() {
-  $("viewseg").hidden = false;           // with no results, the Results view says how to get them
 }
 document.querySelectorAll("input[name=view]").forEach((r) => r.onchange = () => setView(r.value));
 
@@ -3677,7 +4793,6 @@ function update(next) {
   header();
   buildLegend();
   buildGroupsMenu();
-  viewSwitch();
   if (rs.view === "results") { renderResults(); showResultDetail(); } else showDetail(state.sel);
   render(false, true, new Set([...changed].map((k) => k.replace(/^G:/, "g:"))));
   const parts = [changed.size && `${changed.size} changed`, added && `${added} added`, removed && `${removed} removed`].filter(Boolean);
@@ -3703,7 +4818,6 @@ header();
 buildLegend();
 buildGroupsMenu();
 laneBar();
-viewSwitch();
 showDetail(null);
 if (D.live && location.protocol.startsWith("http")) live();
 render(true).then(() => { if (rs.view === "results" && hasResults()) setView("results"); else if (LANES.length > 1) showDetail(state.sel); }).catch((e) => { console.error(e); $("vp").innerHTML = `<text x="10" y="20" fill="red">${esc(e)}</text>`; });
@@ -3711,8 +4825,21 @@ render(true).then(() => { if (rs.view === "results" && hasResults()) setView("re
 <script>
 wireTheme();
 libWire();
-if (D) { const main = document.createElement("script"); main.textContent = $("viewer-main").textContent; document.body.append(main); }
-else openLibrary(true);
+// an atlas page: the versions to open first (the view's, else the latest) become the page's own and its lanes
+// ATLAS_DIR: the folder of the page's URL, which the atlas's versions and their files are fetched from, served
+let ATLAS = null, ATLAS_V = {}, ATLAS_VIEW = null;
+const ATLAS_DIR = location.pathname.replace(/[^/]*$/, "");
+if (D && D.atlas) {
+  ATLAS = D.atlas; ATLAS_V = D.atlas_versions ?? {}; ATLAS_VIEW = D.atlas_view ?? null;
+  const path = (ATLAS.views[ATLAS_VIEW]?.path ?? []).filter((n) => ATLAS_V[n]);
+  const start = path.length ? path : ATLAS.order.filter((n) => ATLAS_V[n]).slice(-1);
+  const copy = (n) => JSON.parse(JSON.stringify(ATLAS_V[n]));
+  D = start.length ? Object.assign(copy(start.at(-1)), {lanes: start.slice(0, -1).map((n) => ({name: n, from: "atlas " + ATLAS.name, data: copy(n)}))}) : null;
+  if (!D) document.body.innerHTML = `<p style="padding:20px">The atlas ${esc(ATLAS.name)} has no versions yet: add one with headway build SPEC --atlas DIR --name NAME.</p>`;
+}
+const runScript = (id) => { const s = document.createElement("script"); s.textContent = $(id).textContent; document.body.append(s); };
+if (D) { runScript("viewer-main"); if (ATLAS) runScript("atlas-main"); }
+else if (!ATLAS) openLibrary(true);
 </script>
 </body>
 </html>

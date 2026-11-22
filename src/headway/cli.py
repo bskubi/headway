@@ -2,17 +2,29 @@
 headway build <spec module> -o out.html [--collapse GROUP] [--hide GROUP] [--json out.json] [--no-verify]
                                    [--offline] [--compare [NAME=]VERSION ...] [--results RESULTS.json ...]
                                    [--name NAME] [--key NAME=VALUE ...]
-headway serve [<spec module>] [--port 8765] [--open] [--collapse GROUP] [--hide GROUP] [--no-verify]
+headway serve [<spec module> | ATLAS] [--port 8765] [--open] [--collapse GROUP] [--hide GROUP] [--no-verify]
                                    [--compare [NAME=]VERSION ...]
                                    the library (recent headways, and the specs and built headways in any folder,
-                                   starting at this one), and with a spec, that spec served live: rebuilt as the
-                                   spec and the code change
+                                   starting at this one); with a spec, that spec served live: rebuilt as the spec
+                                   and the code change; with an atlas folder, its explorer
 headway diff VERSION VERSION [VERSION ...] [--wording]
                                    what changed from each version to the next
 headway attach VERSION RESULTS.json [-o OUT]
                                    put benchmark results (and their suite, built) into a built headway (JSON or page)
 headway results VERSION VERSION ... [--heldout]
                                    the methods' results on their common suite, with its objectives
+headway build <spec module> --atlas DIR --name NAME [--from VERSION ...] [--why TEXT] [--prediction TEXT]
+                                   [--keep-old NAME] [--drop-results]
+                                   add the version (with its results) to an atlas, made from the versions given
+headway attach ATLAS NAME RESULTS.json | ATLAS --relation ID RESULTS.json --suite SUITE
+headway relate ATLAS KIND VERSION ... [--base V] [--factors K,K] [--id ID] [--label] [--why] [--prediction]
+                                   [--outcome] [--tag T ...]
+                                   relate versions: step, pair, alternatives, factorial, group (update ID: change one)
+headway page ATLAS [-o atlas.html] [--view V] [--full]
+                                   the atlas's page: every version explored, any of them opened as a stack
+headway atlas init|import|scan|check|validate|list|rename|remove|extract|merge|view ...
+                                   make, check and reorganize atlases (docs/atlas.md); diff and results take an
+                                   atlas too: headway diff ATLAS A B, headway results ATLAS [TERMS]
 headway init <pkg.mod:func> [-o SPEC.py] [--depth 2] [--hints] [--clean]
                                    a first draft of a spec, read from the code: a step per call to the package's
                                    functions, starting at this one; the TeX and descriptions are left as TODOs
@@ -50,6 +62,7 @@ from pathlib import Path
 from typing import Any
 
 from headway import api, bench, diff, page
+from headway import atlas as atlas_mod
 from headway.check import check
 
 
@@ -77,7 +90,10 @@ def excerpt_command(p: argparse.ArgumentParser, a: argparse.Namespace) -> int:
         if a.panels:
             if a.page is None:
                 p.error("excerpt: --panels needs --page")
-            width, height, words = pdftext.pages(pdf)[a.page - 1]
+            pages = pdftext.pages(pdf)
+            if not 1 <= a.page <= len(pages):
+                p.error(f"excerpt: {pdf} has pages 1 to {len(pages)}")
+            width, height, words = pages[a.page - 1]
             for w in sorted(pdftext.labels(words), key=lambda w: (round(w.y0 / 12), w.x0)):
                 b = pdftext.panel(pdf, a.page, w.text)
                 print(f"{w.text}  box=({b[0] / width:.4f}, {b[1] / height:.4f}, {b[2] / width:.4f}, {b[3] / height:.4f})")
@@ -108,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--no-verify", action="store_true", help="skip the @verify functions")
     b = sub.add_parser("build", help="write the viewer")
     b.add_argument("spec")
-    b.add_argument("-o", "--out", default="headway.html")
+    b.add_argument("-o", "--out", help="the page to write (default headway.html; none with --atlas)")
     b.add_argument("--json", help="also write the graph as JSON")
     b.add_argument("--collapse", action="append", default=[], help="a group to show collapsed (repeatable)")
     b.add_argument("--hide", action="append", default=[], help="a group to leave out (repeatable)")
@@ -125,8 +141,18 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--key", action="append", default=[], metavar="NAME=VALUE",
                    help="a label of this version to group or pair versions by: a hyperparameter, a variant "
                         "(repeatable; numbers and true/false are read as such)")
+    b.add_argument("--atlas", metavar="DIR", help="add this version (with its results) to an atlas, made if need be; "
+                                                  "needs --name")
+    b.add_argument("--from", dest="parents", action="append", default=[], metavar="VERSION",
+                   help="with --atlas: a version this one was made from (repeatable); recorded, and a step")
+    b.add_argument("--why", default="", help="with --from: why this version was made")
+    b.add_argument("--prediction", default="", help="with --from: what was expected of it")
+    b.add_argument("--keep-old", metavar="NAME", help="with --atlas, rebuilding a name: keep the earlier build as NAME")
+    b.add_argument("--drop-results", action="store_true",
+                   help="with --atlas, rebuilding a name: remove the earlier build's results")
     s = sub.add_parser("serve", help="serve the viewer and rebuild it when the spec or the code changes")
-    s.add_argument("spec", nargs="?", help="a spec to serve live (the library is served either way)")
+    s.add_argument("spec", nargs="?", help="a spec to serve live, or an atlas folder to explore (the library is served "
+                                          "either way)")
     s.add_argument("--port", type=int, default=8765)
     s.add_argument("--open", action="store_true", help="open it in the browser")
     s.add_argument("--collapse", action="append", default=[], help="a group to show collapsed (repeatable)")
@@ -137,10 +163,71 @@ def main(argv: list[str] | None = None) -> int:
     df = sub.add_parser("diff", help="what changed between versions of a headway")
     df.add_argument("headways", nargs="+", metavar="VERSION")
     df.add_argument("--wording", action="store_true", help="also list changes to labels and descriptions")
-    at = sub.add_parser("attach", help="put benchmark results into a built headway")
-    at.add_argument("headway")
-    at.add_argument("results")
+    at = sub.add_parser("attach", help="put benchmark results into a built headway, or into an atlas")
+    at.add_argument("headway", metavar="VERSION|ATLAS")
+    at.add_argument("rest", nargs="+", metavar="ARG",
+                    help="RESULTS.json; for an atlas: NAME RESULTS.json, or --relation ID RESULTS.json --suite KEY")
     at.add_argument("-o", "--out", help="where to write it (default: the headway file itself)")
+    at.add_argument("--relation", help="atlas: the results are a relation's (differences, contrasts)")
+    at.add_argument("--suite", help="with --relation: the suite (as the atlas names it) the results are on")
+    rl = sub.add_parser("relate", help="relate versions in an atlas: a step, a pair, alternatives, a factorial, a group")
+    rl.add_argument("atlas")
+    rl.add_argument("kind", help="step, pair, alternatives, factorial, group; or update (then: the relation's id)")
+    rl.add_argument("members", nargs="+", metavar="VERSION")
+    rl.add_argument("--base", help="alternatives or group: the version the others are alternatives to")
+    rl.add_argument("--factors", default="", help="factorial: the keys its versions differ in, comma-separated")
+    rl.add_argument("--id", help="the relation's id (default: made from its kind and members)")
+    rl.add_argument("--label")
+    rl.add_argument("--why")
+    rl.add_argument("--prediction")
+    rl.add_argument("--outcome")
+    rl.add_argument("--tag", action="append", default=[])
+    pg = sub.add_parser("page", help="write the page of an atlas: the explorer, and the versions it opens")
+    pg.add_argument("atlas")
+    pg.add_argument("-o", "--out", default="atlas.html")
+    pg.add_argument("--view", help="a view of the atlas to open in (and whose versions to carry in full)")
+    pg.add_argument("--full", action="store_true", help="carry every version in full (default: up to 40)")
+    pg.add_argument("--offline", action="store_true", help="as for build")
+    al = sub.add_parser("atlas", help="make, check and reorganize atlases (see docs/atlas.md)")
+    alsub = al.add_subparsers(dest="atlas_command", required=True)
+    x = alsub.add_parser("init", help="make an atlas folder")
+    x.add_argument("atlas")
+    x.add_argument("--name")
+    x = alsub.add_parser("import", help="add built versions (JSON or pages, with a page's other versions)")
+    x.add_argument("atlas")
+    x.add_argument("files", nargs="+")
+    x = alsub.add_parser("scan", help="the manifest made again from versions/, and steps from their parents")
+    x.add_argument("atlas")
+    x = alsub.add_parser("check", help="results on earlier builds, provenance that differs, missing versions")
+    x.add_argument("atlas")
+    x = alsub.add_parser("validate", help="errors in the format (after editing the files by hand)")
+    x.add_argument("atlas")
+    x = alsub.add_parser("list", help="the versions, relations and views")
+    x.add_argument("atlas")
+    x = alsub.add_parser("rename", help="rename a version, with every reference to it")
+    x.add_argument("atlas")
+    x.add_argument("old")
+    x.add_argument("new")
+    x = alsub.add_parser("remove", help="remove a version, its results and its place in relations")
+    x.add_argument("atlas")
+    x.add_argument("name")
+    x = alsub.add_parser("extract", help="a new atlas with some of the versions (and what they need)")
+    x.add_argument("atlas")
+    x.add_argument("out")
+    x.add_argument("terms", nargs="+", metavar="TERM",
+                   help="versions, or near:NAME~N, path:A..B, key:K=V, relation:ID, kind:K, tag:T (-TERM excludes)")
+    x = alsub.add_parser("merge", help="a new atlas with both; the same name and model is one version")
+    x.add_argument("a")
+    x.add_argument("b")
+    x.add_argument("out")
+    x.add_argument("--prefix", help="rename b's versions whose name a has with a different model")
+    x = alsub.add_parser("view", help="save a view: a stack (a path of versions) or a graph (a query)")
+    x.add_argument("atlas")
+    x.add_argument("name")
+    x.add_argument("terms", nargs="*", metavar="TERM", help="as for extract; a stack's path, in this order if names")
+    x.add_argument("--graph", action="store_true", help="a graph view of the matching versions (default: a stack)")
+    x.add_argument("--baseline")
+    x.add_argument("--suite", action="append", default=[], help="the suites to compare on (default: all)")
     rs = sub.add_parser("results", help="compare methods on their benchmark results")
     rs.add_argument("headways", nargs="+", metavar="VERSION")
     rs.add_argument("--heldout", action="store_true", help="include the held-out datasets")
@@ -258,7 +345,10 @@ def main(argv: list[str] | None = None) -> int:
         from headway.lint import lint
         if os.getcwd() not in sys.path:
             sys.path.insert(0, os.getcwd())
-        linted = lint(a.module)
+        try:
+            linted = lint(a.module)
+        except (ValueError, SyntaxError, OSError) as e:          # no such module or file, or one that doesn't parse
+            p.error(f"lint: {e}")
         print(linted.text())
         return 1 if any(f.level == "error" for f in linted.findings) else 0
     if a.command == "trace":
@@ -320,7 +410,6 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.command == "tex":
         from headway import codetex
-        from headway.draft import axes_reader
         from headway.resolve import RefError, resolve
         names = {}
         for kv in a.name:
@@ -342,15 +431,17 @@ def main(argv: list[str] | None = None) -> int:
             p.error(f"tex: {a.ref} is {loc.lang}; only Python is written as math")
         out = codetex.transcribe(loc.source, names, imported=codetex.imports(loc.file), file=loc.file,
                                  first_line=loc.start,
-                                 hints=a.hints or bool(a.trace), where=where or None,
-                                 axes=axes_reader(loc.file) if a.hints else None)
+                                 hints=a.hints or bool(a.trace), where=where or None)
         if out is None:
             p.error(f"tex: nothing to write in {a.ref}")
         print(out)
         return 0
-    if a.command == "attach":
-        api.attach(a.headway, a.results, a.out, log=say)
-        return 0
+    if a.command in ("attach", "relate", "page", "atlas") or \
+            (a.command in ("results", "diff") and atlas_mod.is_atlas(a.headways[0])):
+        try:
+            return atlas_command(p, a)
+        except atlas_mod.AtlasError as e:
+            p.error(str(e))
     if a.command == "results":
         headways = [diff.load(t) for t in a.headways]
         print(bench.table(headways, [d.get("name") or t for d, t in zip(headways, a.headways)], a.heldout))
@@ -375,8 +466,8 @@ def main(argv: list[str] | None = None) -> int:
         from headway.home import Home
         build_args = [*(f"--collapse={c}" for c in a.collapse), *(f"--hide={h}" for h in a.hide),
                       *([f"--editor={a.editor}"] if a.editor else []), *(["--no-verify"] if a.no_verify else [])]
-        if a.spec is None and a.compare:
-            p.error("serve: --compare needs a spec (in the library, open versions side by side instead)")
+        if a.compare and (a.spec is None or atlas_mod.is_atlas(a.spec)):
+            p.error("serve: --compare needs a spec (in the library, or an atlas, open versions side by side instead)")
         Home(os.getcwd(), build_args).run(a.port, a.open, spec=a.spec, compare=compared)
         return 0
 
@@ -394,8 +485,130 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError:
             parsed = v
         keys[k] = parsed if isinstance(parsed, (int, float, bool)) else v
-    api.build(a.spec, a.out, json=a.json, name=a.name, results=a.results, compare=a.compare, collapse=a.collapse,
-              hide=a.hide, keys=keys, verify=not a.no_verify, offline=a.offline, editor=a.editor, log=say)
+    if a.atlas and not a.name:
+        p.error("build: --atlas needs --name (what the version is called in the atlas)")
+    if not a.atlas and (a.parents or a.keep_old or a.drop_results):
+        p.error("build: --from, --keep-old and --drop-results go with --atlas")
+    if (a.why or a.prediction) and not a.parents:
+        p.error("build: --why and --prediction go with --from (they are recorded on the step from each parent)")
+    out = a.out or (None if a.atlas else "headway.html")
+    try:
+        api.build(a.spec, out, json=a.json, name=a.name, results=a.results, compare=a.compare, collapse=a.collapse,
+                  hide=a.hide, keys=keys, verify=not a.no_verify, offline=a.offline, editor=a.editor, log=say,
+                  atlas=a.atlas, parents=a.parents, why=a.why, prediction=a.prediction, keep_old=a.keep_old,
+                  drop_results=a.drop_results)
+    except atlas_mod.AtlasError as e:
+        p.error(str(e))
+    return 0
+
+
+def atlas_command(p: argparse.ArgumentParser, a: argparse.Namespace) -> int:
+    """attach, relate, page and atlas; results and diff given an atlas."""
+    from headway.atlas import Atlas
+    if a.command == "attach":
+        if not atlas_mod.is_atlas(a.headway):
+            if len(a.rest) != 1:
+                p.error("attach VERSION RESULTS.json (an atlas: attach ATLAS NAME RESULTS.json)")
+            api.attach(a.headway, a.rest[0], a.out, log=say)
+            return 0
+        at = Atlas.open(a.headway)
+        if a.relation:
+            if len(a.rest) != 1 or not a.suite:
+                p.error("attach ATLAS --relation ID RESULTS.json --suite KEY")
+            notes = at.attach_relation(a.relation, json.loads(Path(a.rest[0]).read_text()), a.suite)
+        else:
+            if len(a.rest) != 2:
+                p.error("attach ATLAS NAME RESULTS.json")
+            notes = at.attach(a.rest[0], api.read_results(a.rest[1], say))
+        for n in notes:
+            say(n)
+        return 0
+    if a.command == "relate":
+        at = Atlas.open(a.atlas)
+        fields = {k: getattr(a, k) for k in ("label", "why", "prediction", "outcome")}
+        if a.kind == "update":
+            if len(a.members) != 1:
+                p.error("relate ATLAS update ID --outcome ... (one relation)")
+            r = at.update_relation(a.members[0], **fields, tags=a.tag or None)
+        else:
+            r = at.relate(a.kind, a.members, rid=a.id, base=a.base,
+                          factors=[f for f in a.factors.split(",") if f], **fields, tags=a.tag)
+        say(f"{r['id']}: {r['kind']} of {', '.join(m['v'] for m in r['members'])}")
+        return 0
+    if a.command == "page":
+        api.atlas_page(a.atlas, a.out, view=a.view, full=True if a.full else None, offline=a.offline, log=say)
+        return 0
+    if a.command in ("results", "diff"):
+        at = Atlas.open(a.headways[0])
+        given = a.headways[1:]
+        names = given if given and all(at.has(n) for n in given) else at.select(given) if given else at.names
+        if not names:
+            p.error(f"{a.command}: no version of the atlas matches {' '.join(given)}")
+        ds = [at.entry(n) for n in names]
+        if a.command == "results":
+            print(bench.table(ds, names, a.heldout))
+        else:
+            if len(ds) < 2:
+                p.error("diff needs two versions or more")
+            print(diff.text(ds, names, a.wording))
+        return 0
+    c = a.atlas_command
+    if c == "init":
+        at = Atlas.init(a.atlas, a.name)
+        say(f"made the atlas {at.meta['name']} in {a.atlas}")
+        return 0
+    if c == "merge":
+        out, notes = Atlas.merge(Atlas.open(a.a), Atlas.open(a.b), a.out, a.prefix)
+        for n in notes:
+            say(n)
+        say(f"wrote {a.out}: {len(out.names)} versions")
+        return 0
+    at = Atlas.open(a.atlas)
+    if c == "import":
+        for n in at.import_files(a.files):
+            say(n)
+    elif c == "scan":
+        for n in at.scan() or ["nothing to change"]:
+            say(n)
+    elif c == "check":
+        found = at.check()
+        print("\n".join(found) if found else "nothing to report")
+    elif c == "validate":
+        errs = at.validate()
+        print("\n".join(errs) if errs else "valid")
+        return 1 if errs else 0
+    elif c == "list":
+        print(f"{at.meta['name']}: {len(at.names)} versions, {len(at.relations)} relations")
+        for n in at.names:
+            v = at.meta["versions"][n]
+            res = ", ".join(r["suite"] for r in at.results(n))
+            print(f"  {n:24s} {v.get('built_at', '')[:16]:16s} {v['model'][7:15]}  {res}")
+        for r in at.relations:
+            print(f"  {r['id']}: {r['kind']} of {', '.join(m['v'] for m in r['members'])}"
+                  + (f" ({r['label']})" if r.get("label") else ""))
+        for vn, v in at.meta["views"].items():
+            print(f"  view {vn}: {v.get('kind')} {' › '.join(v.get('path', [])) or v.get('query', '')}")
+    elif c == "rename":
+        at.rename(a.old, a.new)
+        say(f"renamed {a.old} to {a.new}")
+    elif c == "remove":
+        at.remove(a.name)
+        say(f"removed {a.name}")
+    elif c == "extract":
+        names = at.select(a.terms)
+        at.extract(a.out, names)
+        say(f"wrote {a.out}: {len(names)} versions ({', '.join(names)})")
+    elif c == "view":
+        # a graph view's query is the viewer's to read (it knows terms the command line does not: contains:, ...)
+        names = [] if a.graph else list(a.terms) if all(at.has(t) for t in a.terms) else at.select(a.terms)
+        view: dict[str, Any] = {"kind": "graph", "query": " ".join(a.terms)} if a.graph else \
+            {"kind": "stack", "path": names}
+        if a.baseline:
+            view["baseline"] = a.baseline
+        if a.suite:
+            view["suites"] = a.suite
+        at.set_view(a.name, view)
+        say(f"view {a.name}: {view.get('query') or ' › '.join(names)}")
     return 0
 
 
@@ -432,8 +645,8 @@ def _traced_names(trace: str, ref: str, renames: list[str], names: dict[str, Any
     from headway.tracing import Trace, index_sets, signatures
     from headway.tracing.analyze import renamed
     t = Trace.read(trace)
-    function = ref.split("#")[0].replace(":", ".").rsplit(".", 1)
-    qual = f"{function[0]}:{function[1]}" if len(function) == 2 else ref
+    head = ref.split("#")[0]                    # pkg.mod:Cls.meth as the trace names it; pkg.mod.func -> pkg.mod:func
+    qual = head if ":" in head else ":".join(head.rsplit(".", 1))
     rename = dict(kv.split("=", 1) for kv in renames if "=" in kv)
     sets = renamed(index_sets(t, [qual]), rename)
     sigs = signatures(sets, qual)

@@ -32,7 +32,7 @@ only way to its interval (two methods' own intervals overlap even when their dif
 headway compares two methods on a metric by pairing their values by replicate id (`paired`): the mean of the
 per-replicate differences, their spread, how many agree in sign, and, where the benchmark gave the difference's
 intervals (in either method's results), how many of them exclude 0. A difference is "supported" when every
-interval excludes 0 or, without intervals, when every paired replicate agrees in sign.
+interval excludes 0 or, without intervals, when there are at least two paired replicates, all agreeing in sign.
 
 A figure is what is looked at rather than measured: an image the benchmark makes (samples, reconstructions, a
 diagnostic plot). The suite declares it like a metric (`B.figure`), and it is a column of the results beside the
@@ -45,8 +45,8 @@ that is a metric of its own, with its values in "values"; the judgment's image c
 
 or a list of them (one per replicate, say), the first shown in the table.
 
-which `headway build --results` or `headway attach` puts into the method's built headway, together with the
-built suite. Methods whose results are on the same suite (title and version) are compared: in the viewer's
+The results file is put into the method's built headway, together with the built suite, by `headway build
+--results` or `headway attach`. Methods whose results are on the same suite (title and version) are compared: in the viewer's
 Results view, or with `headway results`. The objectives are the one computation done here, from the stored
 values; the viewer computes them the same way (viewer.html, "results"), so keep the two in step.
 
@@ -54,6 +54,11 @@ values; the viewer computes them the same way (viewer.html, "results"), so keep 
                by its range and turned so that 1 is best; absolute (needs every metric's range)
   how="rank"   the weighted mean rank among the methods compared (1 is best); relative: it depends on which
                methods are compared
+  and other ways of combining the metrics' rankings without comparing their values across metrics (HOWS:
+  median, worst, wins, kemeny, pareto), each giving up a different one of the properties Arrow's theorem says no
+  rule has all of. An objective combines metrics (each metric on each dataset ranks the methods: one "voter"), or
+  categories of metrics (each category one voter, so a category of many metrics counts no more than a category
+  of one: it ranks the methods by its metrics' mean rank, or with how="mean" scores them by its metrics' mean).
 A method missing any value an objective needs gets no score for it ("incomplete").
 """
 from __future__ import annotations
@@ -101,14 +106,64 @@ class Figure:
 
 
 @dataclass
+class Category:
+    key: str
+    name: str
+    desc: str = ""
+    metrics: dict[str, float] = field(default_factory=dict)     # metric -> weight within the category
+    datasets: list[str] | None = None                           # only these datasets count for it (default: all)
+
+
+@dataclass
 class Objective:
     key: str
     name: str
     desc: str = ""
-    weights: dict[str, float] = field(default_factory=dict)     # metric -> weight
+    weights: dict[str, float] = field(default_factory=dict)     # metric -> weight; empty with categories
     how: str = "mean"
     datasets: list[str] | None = None                           # default: every dataset not held out
     tex: str = ""
+    categories: dict[str, float] | None = None                  # category -> weight: each category one voter
+
+
+# how an objective combines its voters (metrics on datasets, or categories), and whether fewer is better. Only "mean"
+# compares values across metrics (scaled by their ranges); the rest use only each voter's order of the methods.
+HOWS = {
+    "mean": ("higher", "the weighted mean of the metrics, each scaled by its range so that 1 is best (absolute: "
+             "each method scored from its own values; needs every metric's range)"),
+    "rank": ("lower", "the weighted mean rank (Borda), 1 is best; relative: adding or hiding a method can reorder "
+             "two others (it gives up independence of irrelevant alternatives)"),
+    "median": ("lower", "the weighted median rank, 1 is best: one metric far off does not move it (relative, like "
+               "the mean rank)"),
+    "worst": ("lower", "the worst rank on any voter, 1 is best: a method is as good as its weakest metric "
+              "(egalitarian; relative)"),
+    "wins": ("higher", "Copeland: how many other methods it beats on more voters (by weight) than it loses, a tie "
+             "counting a half; a method that beats every other has the most (Condorcet-consistent; relative)"),
+    "kemeny": ("lower", "the place in the Kemeny ranking: the order that disagrees least, summed over voters, with "
+               "each voter's order (Condorcet-consistent; exact for up to 12 methods, else a local search)"),
+    "pareto": ("lower", "the Pareto layer: 1 if no other method is at least as good on every voter and better on "
+               "one, 2 if only layer 1 is, and so on. Methods in one layer are not ranked against each other (it "
+               "gives up completeness, the price of avoiding Arrow's other compromises)"),
+}
+
+
+def lower_better(how: str) -> bool:
+    return HOWS.get(how, ("higher", ""))[0] == "lower"
+
+
+RELATION_KINDS = ("step", "pair", "alternatives", "factorial", "group")      # an atlas's relations (atlas.py)
+
+
+@dataclass
+class Contrast:
+    key: str
+    tex: str
+    name: str
+    desc: str = ""
+    over: list[str] = field(default_factory=list)              # the relation kinds it applies to (atlas.py)
+    equation: str = ""
+    metrics: list[str] = field(default_factory=list)
+    interval: str = ""
 
 
 class Suite(Headway):
@@ -122,6 +177,8 @@ class Suite(Headway):
         self.metrics: dict[str, Metric] = {}
         self.figures: dict[str, Figure] = {}
         self.objectives: dict[str, Objective] = {}
+        self.categories: dict[str, Category] = {}
+        self.contrasts: dict[str, Contrast] = {}
 
     def dataset(self, key: str, name: str, desc: str = "", *, source: str = "", heldout: bool = False,
                 values: Mapping[str, Any] | None = None, facts: Mapping[str, Any] | None = None,
@@ -139,15 +196,31 @@ class Suite(Headway):
     def metric(self, key: str, tex: str, name: str, desc: str = "", *, equation: str = "",
                inputs: Sequence[SymbolLike] = (), better: str, range: tuple[float, float] | None = None,
                unit: str = "", source: str = "", interval: str = "", code: str | Iterable[str] = (),
-               where: dict[str, str] | None = None, group: str = "metrics", was: str | Iterable[str] = ()) -> Symbol:
+               where: dict[str, str] | None = None, group: str = "metrics", was: str | Iterable[str] = (),
+               category: str | Iterable[str] = ()) -> Symbol:
         """A metric: the output symbol `key` and the step `key` that computes it, by `equation`, from `inputs`.
-        `interval` says what the intervals in its results are (results may give them only if it is set)."""
+        `interval` says what the intervals in its results are (results may give them only if it is set).
+        `category`: the categories it belongs to (made if not declared with B.category, named by their key)."""
         assert better in ("higher", "lower"), f"metric {key!r}: better={better!r}, not 'higher' or 'lower'"
         s = self.symbol(key, tex, name, desc, role="output", was=was)
         self.op(key, name, equation, desc, inputs=inputs, outputs=[s], code=code, group=group, where=where, was=was)
         self.metrics[key] = Metric(key, better, None if range is None else (float(range[0]), float(range[1])),
                                    unit, source, interval)
+        for c in [category] if isinstance(category, str) else category:
+            self.categories.setdefault(c, Category(c, c)).metrics[key] = 1.0
         return s
+
+    def category(self, key: str, name: str, desc: str = "", *, metrics: Mapping[str, float] | Sequence[str] = (),
+                 datasets: Sequence[str] | None = None) -> Category:
+        """A category of metrics (biological, technical, scalability, ...): metrics can be in several, a category
+        can count only some datasets, and its metrics can be weighted within it. An objective over categories
+        (`categories=`) takes each category as one voter: it ranks the methods by its metrics' mean rank (with
+        how="mean", it scores them by its metrics' weighted mean)."""
+        c = self.categories.setdefault(key, Category(key, name))
+        c.name, c.desc = name, desc
+        c.metrics.update(dict(metrics) if isinstance(metrics, Mapping) else {m: 1.0 for m in metrics})
+        c.datasets = None if datasets is None else list(datasets)
+        return c
 
     def figure(self, key: str, name: str, desc: str = "", *, source: str = "",
                code: str | Iterable[str] = ()) -> Figure:
@@ -158,12 +231,31 @@ class Suite(Headway):
         self.declared["figure:" + key] = _caller()
         return f
 
-    def objective(self, key: str, name: str, desc: str = "", *, metrics: Mapping[str, float] | Sequence[str],
-                  how: str = "mean", datasets: Sequence[str] | None = None, tex: str = "") -> Objective:
+    def objective(self, key: str, name: str, desc: str = "", *, metrics: Mapping[str, float] | Sequence[str] = (),
+                  categories: Mapping[str, float] | Sequence[str] | None = None, how: str = "mean",
+                  datasets: Sequence[str] | None = None, tex: str = "") -> Objective:
+        """One number per method from its metrics: `metrics` ({metric: weight} or a list), each metric on each
+        dataset a voter; or `categories` ({category: weight} or a list), each category a voter. `how` (HOWS):
+        mean, rank, median, worst, wins, kemeny, pareto."""
         weights = dict(metrics) if isinstance(metrics, Mapping) else {m: 1.0 for m in metrics}
+        cats = None if categories is None else dict(categories) if isinstance(categories, Mapping) else \
+            {c: 1.0 for c in categories}
         self.objectives[key] = o = Objective(key, name, desc, weights, how,
-                                             None if datasets is None else list(datasets), tex)
+                                             None if datasets is None else list(datasets), tex, cats)
         return o
+
+
+    def contrast(self, key: str, tex: str, name: str, desc: str = "", *, over: str | Sequence[str],
+                 equation: str = "", metrics: Sequence[str] = (), interval: str = "") -> Contrast:
+        """A number over a set of versions that only the benchmark can compute, because it needs the samples: an
+        interaction in a factorial with its own interval, say. `over` names the relation kinds of an atlas it
+        applies to (pair, step, alternatives, factorial, group); its values, given for a relation, have the shape
+        of a metric's. What can be worked out from the versions' own values (a spread, a best-minus-base) is left
+        to the viewer and needs no declaration."""
+        assert key not in self.contrasts, f"contrast {key!r} declared twice"
+        self.contrasts[key] = c = Contrast(key, tex, name, desc, [over] if isinstance(over, str) else list(over),
+                                           equation, list(metrics), interval)
+        return c
 
 
 def check_suite(s: Suite, errors: list[str], warnings: list[str]) -> None:
@@ -186,9 +278,43 @@ def check_suite(s: Suite, errors: list[str], warnings: list[str]) -> None:
         if lacking and s.symbols[k].value is None:
             warnings.append(f"setting {k}: no value for dataset{'s' if len(lacking) > 1 else ''} "
                             f"{', '.join(lacking)}, and no default")
+    for cat in s.categories.values():
+        for k in cat.metrics:
+            if k not in s.metrics:
+                errors.append(f"category {cat.key}: undeclared metric {k!r}")
+        for dk in cat.datasets or []:
+            if dk not in s.datasets:
+                errors.append(f"category {cat.key}: undeclared dataset {dk!r}")
+        if not cat.metrics:
+            errors.append(f"category {cat.key}: no metrics")
+        for k, w in cat.metrics.items():
+            if w <= 0:
+                errors.append(f"category {cat.key}: weight of {k} is {w}; weights are positive")
     for o in s.objectives.values():
-        if o.how not in ("mean", "rank"):
-            errors.append(f"objective {o.key}: how={o.how!r}, not 'mean' or 'rank'")
+        if o.how not in HOWS:
+            errors.append(f"objective {o.key}: how={o.how!r}, not one of {', '.join(HOWS)}")
+        if not o.datasets and s.datasets and all(d.heldout for d in s.datasets.values()):
+            errors.append(f"objective {o.key}: counts no dataset (every dataset is held out); give its datasets=")
+        if o.categories is not None:
+            if o.weights:
+                errors.append(f"objective {o.key}: metrics or categories, not both")
+            uses = o.datasets or [d.key for d in s.datasets.values() if not d.heldout]
+            for k, w in o.categories.items():
+                if k not in s.categories:
+                    errors.append(f"objective {o.key}: undeclared category {k!r}")
+                elif w <= 0:
+                    errors.append(f"objective {o.key}: weight of category {k} is {w}; weights are positive")
+                elif (only := s.categories[k].datasets) is not None and not set(only) & set(uses):
+                    errors.append(f"objective {o.key}: category {k} counts none of its datasets "
+                                  f"({', '.join(uses) or 'none'})")
+            if not o.categories:
+                errors.append(f"objective {o.key}: no categories")
+            elif o.how == "mean":
+                for k in {m for c in o.categories if c in s.categories for m in s.categories[c].metrics}:
+                    if k in s.metrics and s.metrics[k].range is None:
+                        errors.append(f"objective {o.key}: metric {k} has no range, which how='mean' needs to scale it")
+        elif not o.weights:
+            errors.append(f"objective {o.key}: no metrics (give metrics= or categories=)")
         for k, w in o.weights.items():
             if k not in s.metrics:
                 errors.append(f"objective {o.key}: undeclared metric {k!r}")
@@ -199,6 +325,13 @@ def check_suite(s: Suite, errors: list[str], warnings: list[str]) -> None:
         for dk in o.datasets or []:
             if dk not in s.datasets:
                 errors.append(f"objective {o.key}: undeclared dataset {dk!r}")
+    for c in s.contrasts.values():
+        for k in c.over:
+            if k not in RELATION_KINDS:
+                errors.append(f"contrast {c.key}: over={k!r}, not a kind of relation ({', '.join(RELATION_KINDS)})")
+        for k in c.metrics:
+            if k not in s.metrics:
+                errors.append(f"contrast {c.key}: undeclared metric {k!r}")
 
 
 def suite_data(s: Suite, code: Callable[[list[str]], list[dict[str, Any]]],
@@ -209,7 +342,17 @@ def suite_data(s: Suite, code: Callable[[list[str]], list[dict[str, Any]]],
                                     "decl": decl("dataset:" + d.key)} for d in s.datasets.values()],
             "metrics": [vars(m) | {"range": None if m.range is None else list(m.range)} for m in s.metrics.values()],
             "figures": [vars(f) | {"code": code(f.code), "decl": decl("figure:" + f.key)} for f in s.figures.values()],
-            "objectives": [vars(o) for o in s.objectives.values()]}
+            "objectives": [_objective_data(s, o) for o in s.objectives.values()],
+            "categories": [vars(c) for c in s.categories.values()],
+            "contrasts": [vars(c) for c in s.contrasts.values()]}
+
+
+def _objective_data(s: Suite, o: Objective) -> dict[str, Any]:
+    """An objective as built: one over categories also lists its metrics (weight 1), for what shows them."""
+    d = vars(o).copy()
+    if o.categories:
+        d["weights"] = {m: 1.0 for c in o.categories if c in s.categories for m in s.categories[c].metrics}
+    return d
 
 
 def suite_id(suite: Mapping[str, Any]) -> str:
@@ -365,8 +508,9 @@ def _figures(given: Mapping[str, Any], datasets: Mapping[str, Any], declared: se
             if fk not in declared:
                 warnings.append(f"figure {fk!r} is not in the suite; left out")
                 continue
-            for n, item in enumerate([items] if isinstance(items, Mapping) else items):
-                image = _image(item, f"figure {fk} on {dk}" + (f", image {n + 1}" if not isinstance(items, Mapping)
+            one = isinstance(items, (Mapping, str))        # one image (a string: left out with a warning), or a list
+            for n, item in enumerate([items] if one else items):
+                image = _image(item, f"figure {fk} on {dk}" + (f", image {n + 1}" if not one
                                                                  else ""), reps.get(dk), base, warnings)
                 if image:
                     out.setdefault(dk, {}).setdefault(fk, []).append(image)
@@ -415,36 +559,151 @@ def _mean(v: Sequence[float]) -> float:
     return sum(v) / len(v)
 
 
+def voters(objective: Mapping[str, Any], meta: Mapping[str, Any]) -> list[tuple[float, list[tuple[str, str, float]]]]:
+    """An objective's voters: (weight, its cells (dataset, metric, weight)). Without categories, each metric on each
+    dataset; with them, each category, over its metrics and the datasets it and the objective count. A category the
+    suite does not declare, or one that counts none of the objective's datasets (both check errors), is no voter."""
+    datasets = objective.get("datasets") or [d["key"] for d in meta["datasets"] if not d["heldout"]]
+    if objective.get("categories"):
+        defs = {c["key"]: c for c in meta.get("categories", [])}
+        out = []
+        for ck, w in objective["categories"].items():
+            c = defs.get(ck)
+            if c is None:
+                continue
+            ds = [d for d in datasets if not c.get("datasets") or d in c["datasets"]]
+            cells = [(dk, mk, mw) for mk, mw in c["metrics"].items() for dk in ds]
+            if cells:
+                out.append((w, cells))
+        return out
+    return [(w, [(dk, mk, 1.0)]) for mk, w in objective["weights"].items() for dk in datasets]
+
+
+def _ranks(vals: Sequence[float]) -> list[float]:
+    """1 + how many are larger, ties sharing (larger is better)."""
+    return [1 + sum(o > v for o in vals) + (sum(o == v for o in vals) - 1) / 2 for v in vals]
+
+
 def scores(entries: Sequence[Mapping[str, Any] | None], objective: Mapping[str, Any],
            suite: Mapping[str, Any]) -> list[float | None]:
-    """One objective for each method (None: incomplete); entries are the methods' results on one suite."""
+    """One objective for each method (None: incomplete); entries are the methods' results on one suite. The
+    viewer computes the same (viewer.html, objScores): keep the two in step."""
     meta = suite["suite"]
     metrics = {m["key"]: m for m in meta["metrics"]}
-    datasets = objective["datasets"] or [d["key"] for d in meta["datasets"] if not d["heldout"]]
-    cells = [(dk, mk, w) for mk, w in objective["weights"].items() for dk in datasets]
-    means = [{(dk, mk): _mean(e["values"][dk][mk]) for dk, mk, _ in cells
-              if e and mk in e["values"].get(dk, {})} for e in entries]
-    complete = [len(m) == len(cells) for m in means]
-    out: list[float | None] = []
-    for n, m in enumerate(means):
-        if not complete[n]:
-            out.append(None)
-            continue
-        total = 0.0
-        for dk, mk, w in cells:
-            spec = metrics[mk]
-            if objective["how"] == "mean":
-                lo, hi = spec["range"]
-                s = (m[(dk, mk)] - lo) / (hi - lo)
-                total += w * (s if spec["better"] == "higher" else 1 - s)
-            else:                                           # rank among the complete methods, ties shared
-                others = [means[j][(dk, mk)] for j in range(len(means)) if complete[j]]
-                v = m[(dk, mk)]
-                better = sum(o > v if spec["better"] == "higher" else o < v for o in others)
-                ties = sum(o == v for o in others) - 1
-                total += w * (1 + better + ties / 2)
-        out.append(total / sum(w for _, _, w in cells))
+    vs = voters(objective, meta)
+    cells = list(dict.fromkeys((dk, mk) for _, cs in vs for dk, mk, _ in cs))
+    means = [{(dk, mk): _mean(e["values"][dk][mk]) for dk, mk in cells
+              if e and e["values"].get(dk, {}).get(mk)} for e in entries]
+    done = [n for n, m in enumerate(means) if len(m) == len(cells)]
+    out: list[float | None] = [None] * len(entries)
+    if not done or not cells:                               # no cells: the objective counts no dataset
+        return out
+    how = objective["how"]
+    good = lambda n, dk, mk: means[n][(dk, mk)] * (1 if metrics[mk]["better"] == "higher" else -1)  # noqa: E731
+    if how == "mean":
+        for n in done:
+            total = 0.0
+            for w, cs in vs:
+                part = 0.0
+                for dk, mk, mw in cs:
+                    lo, hi = metrics[mk]["range"]
+                    x = (means[n][(dk, mk)] - lo) / (hi - lo)
+                    part += mw * (x if metrics[mk]["better"] == "higher" else 1 - x)
+                total += w * part / sum(mw for _, _, mw in cs)
+            out[n] = total / sum(w for w, _ in vs)
+        return out
+    # each voter's value of each complete method (larger is better): its metric, or minus its cells' mean rank
+    value: list[list[float]] = []
+    for _, cs in vs:
+        if len(cs) == 1:
+            dk, mk, _ = cs[0]
+            value.append([good(n, dk, mk) for n in done])
+        else:
+            rk = [_ranks([good(n, dk, mk) for n in done]) for dk, mk, _ in cs]
+            tot = sum(mw for _, _, mw in cs)
+            value.append([-sum(mw * rk[c][i] for c, (_, _, mw) in enumerate(cs)) / tot for i in range(len(done))])
+    rank = [_ranks(v) for v in value]                       # rank[voter][i]
+    ws = [w for w, _ in vs]
+    k = len(done)
+    if how == "rank":
+        res = [sum(w * rank[j][i] for j, w in enumerate(ws)) / sum(ws) for i in range(k)]
+    elif how == "median":
+        res = [_wmedian([rank[j][i] for j in range(len(ws))], ws) for i in range(k)]
+    elif how == "worst":
+        res = [max(rank[j][i] for j in range(len(ws))) for i in range(k)]
+    else:
+        pref = [[sum(w for j, w in enumerate(ws) if value[j][a] > value[j][b]) for b in range(k)] for a in range(k)]
+        if how == "wins":
+            res = [sum(1.0 if pref[a][b] > pref[b][a] else 0.5 if pref[a][b] == pref[b][a] else 0.0
+                       for b in range(k) if b != a) for a in range(k)]
+        elif how == "kemeny":
+            order = _kemeny(pref, [sum(w * rank[j][i] for j, w in enumerate(ws)) for i in range(k)])
+            res = [float(order.index(i) + 1) for i in range(k)]
+        else:                                               # pareto
+            res = [float(x) for x in _layers(value)]
+    for i, n in enumerate(done):
+        out[n] = res[i]
     return out
+
+
+def _wmedian(xs: Sequence[float], ws: Sequence[float]) -> float:
+    pairs = sorted(zip(xs, ws))
+    half, acc = sum(ws) / 2, 0.0
+    for i, (x, w) in enumerate(pairs):
+        acc += w
+        if abs(acc - half) < 1e-12 and i + 1 < len(pairs):
+            return (x + pairs[i + 1][0]) / 2
+        if acc > half:
+            return x
+    return pairs[-1][0]
+
+
+def _kemeny(pref: Sequence[Sequence[float]], borda: Sequence[float]) -> list[int]:
+    """The order (best first) maximizing the weight of the voters' pairwise preferences it agrees with: exact
+    (over subsets) for up to 12, else the mean-rank order improved by swapping neighbours while that helps."""
+    k = len(pref)
+    if k <= 12:
+        best = [-1.0] * (1 << k)
+        pick = [-1] * (1 << k)
+        best[0] = 0.0
+        for mask in range(1 << k):
+            if best[mask] < 0:
+                continue
+            for x in range(k):
+                if mask >> x & 1:
+                    continue
+                gain = sum(pref[x][y] for y in range(k) if y != x and not mask >> y & 1)
+                nm = mask | 1 << x
+                if best[mask] + gain > best[nm] + 1e-12:
+                    best[nm], pick[nm] = best[mask] + gain, x
+        order, mask = [], (1 << k) - 1
+        while mask:
+            order.append(pick[mask])
+            mask &= ~(1 << pick[mask])
+        return order[::-1]
+    order = sorted(range(k), key=lambda i: (borda[i], i))
+    changed = True
+    while changed:
+        changed = False
+        for i in range(k - 1):
+            a, b = order[i], order[i + 1]
+            if pref[b][a] > pref[a][b] + 1e-12:
+                order[i], order[i + 1], changed = b, a, True
+    return order
+
+
+def _layers(value: Sequence[Sequence[float]]) -> list[int]:
+    """Each method's Pareto layer over the voters' values (larger is better)."""
+    k = len(value[0])
+    dom = lambda a, b: all(v[a] >= v[b] for v in value) and any(v[a] > v[b] for v in value)  # noqa: E731
+    layer, left, n = [0] * k, set(range(k)), 1
+    while left:
+        front = {a for a in left if not any(dom(b, a) for b in left if b != a)}
+        for a in front:
+            layer[a] = n
+        left -= front
+        n += 1
+    return layer
 
 
 def paired(b: Mapping[str, Any], a: Mapping[str, Any], dk: str, mk: str, b_name: str, a_name: str) -> dict[str, Any] | None:

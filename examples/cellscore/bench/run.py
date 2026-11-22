@@ -29,6 +29,13 @@ VERSIONS = ("v1", "v2", "v3", "v4")
 KEYS = {"v1": {"centered": False, "weighted": False}, "v2": {"centered": True, "weighted": False},
         "v3": {"centered": True, "weighted": False}, "v4": {"centered": True, "weighted": True}}
 FIGS = HERE.parent / "results" / "figs"
+# why each version was made from the one before, and what was expected of it: kept in the atlas as its step
+WHY = {"v2": ("Center each gene before scoring, so that highly expressed genes do not dominate the module score.",
+              "No change: centering shifts every cell's score by the same amount."),
+       "v3": ("Normalize by size factors (median-relative) instead of a fixed scale, to remove depth from the score.",
+              "Better everywhere, most on uneven depth."),
+       "v4": ("Weight genes by 1 / spread, so that noisy genes count less.",
+              "Better on the noisy module; about the same elsewhere.")}
 
 SEEDS = range(5)
 SKIP = {("v1", "noisy"), ("v2", "heldout"), ("v3", "heldout")}
@@ -140,6 +147,9 @@ if __name__ == "__main__":
         results = run(v, scored, list(dict.fromkeys(VERSIONS[k] for k in (n - 1, 0) if 0 <= k < n)))
         (out / "results" / f"{v}.json").write_text(json.dumps(results, indent=1))
         # the version's headway, with its results; the suite given as the object, already imported
+        # and into the atlas (atlas/), made from the version before it: with its results, and why it was made
+        why, prediction = WHY.get(v, ("", ""))
         headway.build(version(v, "graphspec").G, out / "headways" / f"{v}.html", json=out / "headways" / f"{v}.json",
-                      name=v, keys=KEYS[v], results=[results | {"suite": suite.B}], strict=True)
-        print(f"{v}: wrote results/{v}.json, headways/{v}.html and .json", file=sys.stderr)
+                      name=v, keys=KEYS[v], results=[results | {"suite": suite.B}], strict=True,
+                      atlas=out / "atlas", parents=VERSIONS[n - 1:n], why=why, prediction=prediction)
+        print(f"{v}: wrote results/{v}.json, headways/{v}.html and .json, and added it to atlas/", file=sys.stderr)
